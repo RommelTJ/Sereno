@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.1.0**
+**v0.2.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -115,21 +115,22 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.1.0 — app shell. The app is navigable end-to-end: a persistent dark sidebar with
-the three nav groups (Track / Plan / Settings), a sticky header with page title and a
-net-worth readout slot, and client-side routes ([react-router](https://reactrouter.com/))
-for all eight views — Dashboard, Ledger entries, Safe-to-spend, Funds & goals,
-Guardrails, Withdrawal sourcing, Longevity forecast, and Settings & data — rendered as
-stub pages for now. Nav icons are [Lucide](https://lucide.dev/). The monorepo skeleton
-(FastAPI backend, Tailwind v4 design tokens, Docker Compose, CI) landed in earlier
-releases. Remaining work, roughly in this order:
+v0.2.0 — database layer. The append-only schema from
+[docs/design/schema.sql](docs/design/schema.sql) — 13 tables, indexes, and the
+`v_account_monthly` / `v_net_worth` / `v_budget_month` views — is applied by a
+numbered-migration runner at app startup, so the SQLite file in the `sereno-data`
+Docker volume is always current. A typed stdlib-`sqlite3` connection module
+(foreign keys on, rows addressable by column name) is exposed to FastAPI via
+dependency injection for the upcoming data endpoints. Liability balances are
+entered as positive numbers; `v_net_worth` subtracts them. The app shell (sidebar,
+header, and routed stub pages for all eight views) and the monorepo skeleton landed
+in earlier releases. Remaining work, roughly in this order:
 
-1. Database schema and seed data
-2. Dashboard reading from the DB
-3. Ledger entry and monthly net-worth views
-4. Safe-to-spend, envelopes, and spending/funding entry
-5. Funds & goals
-6. Guardrails → withdrawal sourcing engine → longevity forecast
+1. Dashboard reading from the DB
+2. Ledger entry and monthly net-worth views
+3. Safe-to-spend, envelopes, and spending/funding entry
+4. Funds & goals
+5. Guardrails → withdrawal sourcing engine → longevity forecast
 
 ## License
 

@@ -12,7 +12,7 @@
 -- ============================================================================
 
 -- Use TEXT ISO-8601 dates for SQLite portability; switch to DATE on Postgres.
-PRAGMA foreign_keys = ON;
+-- (PRAGMA foreign_keys is per-connection and set by sereno.db.connection.)
 
 -- ---------------------------------------------------------------------------
 -- DIMENSIONS — slowly-changing reference data
