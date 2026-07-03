@@ -258,3 +258,59 @@ class TestGetLedger:
         post_entry(client, mortgage_id, "2026-06-28", balance_usd=150000)
         (month,) = client.get("/api/ledger").json()
         assert month["net_worth"] == 200000
+
+
+class TestGetNetWorth:
+    def test_empty_database_returns_nulls_and_no_series(self, client):
+        response = client.get("/api/net-worth")
+        assert response.status_code == 200
+        assert response.json() == {"current": None, "yoy": None, "series": []}
+
+    def test_net_worth_is_the_sum_of_assets_minus_liabilities(self, client):
+        # The design-handoff formula with its illustrative 2026-06 values:
+        # ETH(qty×price) + funds + retirement + home + cash + car + mortgage(negative).
+        eth_id = insert_account("Ethereum", "eth", tax_treatment="LTCG", is_investable=1)
+        post_entry(client, eth_id, "2026-06-28", quantity=20, unit_price=3500)
+        usd_balances = [
+            ("VFIAX", "brokerage_fund", 0, 700000),
+            ("VTIAX", "brokerage_fund", 0, 250000),
+            ("VGSH", "brokerage_fund", 0, 130000),
+            ("Retirement", "401k", 0, 350000),
+            ("Home", "home", 0, 350000),
+            ("Chase checking", "cash", 0, 9000),
+            ("Vanguard Cash Plus", "cash_plus", 0, 20000),
+            ("Car", "car", 0, 15000),
+            ("Mortgage", "mortgage", 1, 150000),
+        ]
+        for name, kind, is_liability, balance in usd_balances:
+            account_id = insert_account(name, kind, is_liability=is_liability)
+            post_entry(client, account_id, "2026-06-28", balance_usd=balance)
+        body = client.get("/api/net-worth").json()
+        assert body["current"] == 1_744_000
+        assert body["series"] == [{"month": "2026-06", "net_worth": 1_744_000}]
+
+    def test_yoy_compares_against_the_same_month_a_year_earlier(self, client):
+        cash_id = insert_account("Chase checking", "cash")
+        post_entry(client, cash_id, "2025-06-28", balance_usd=100000)
+        post_entry(client, cash_id, "2026-06-28", balance_usd=110000)
+        body = client.get("/api/net-worth").json()
+        assert body["current"] == 110000
+        assert body["yoy"] == pytest.approx(0.10)
+
+    def test_yoy_is_null_without_a_baseline_month(self, client):
+        cash_id = insert_account("Chase checking", "cash")
+        post_entry(client, cash_id, "2025-07-28", balance_usd=100000)
+        post_entry(client, cash_id, "2026-06-28", balance_usd=110000)
+        body = client.get("/api/net-worth").json()
+        assert body["current"] == 110000
+        assert body["yoy"] is None
+
+    def test_series_is_the_last_twelve_months_ascending(self, client):
+        cash_id = insert_account("Chase checking", "cash")
+        months = [f"2025-{m:02d}" for m in range(6, 13)] + [f"2026-{m:02d}" for m in range(1, 7)]
+        for i, month in enumerate(months):  # 13 months: 2025-06 .. 2026-06
+            post_entry(client, cash_id, f"{month}-15", balance_usd=100000 + i * 1000)
+        body = client.get("/api/net-worth").json()
+        assert [point["month"] for point in body["series"]] == months[1:]
+        assert body["series"][0] == {"month": "2025-07", "net_worth": 101000}
+        assert body["series"][-1] == {"month": "2026-06", "net_worth": 112000}
