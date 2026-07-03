@@ -87,3 +87,28 @@ class TestSeedSatisfiesTheViews:
         assert rows
         for row in rows:
             assert row["balance_usd"] == row["quantity"] * row["unit_price"]
+
+
+def table_counts(db):
+    return {
+        table: db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: S608
+        for table in ALL_TABLES
+    }
+
+
+class TestSeedIsIdempotent:
+    def test_first_run_seeds_and_reports_it(self, db):
+        assert seed(db) is True
+
+    def test_second_run_is_a_noop(self, db):
+        seed(db)
+        counts = table_counts(db)
+        assert seed(db) is False
+        assert table_counts(db) == counts
+
+    def test_any_existing_account_blocks_seeding(self, db):
+        # Real deployments have real accounts; seeding must never touch them.
+        db.execute("INSERT INTO account (name, kind) VALUES ('My real checking', 'cash')")
+        db.commit()
+        assert seed(db) is False
+        assert table_counts(db) == {table: 0 for table in ALL_TABLES} | {"account": 1}
