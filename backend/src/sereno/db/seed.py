@@ -10,6 +10,9 @@ activity, funds, and a year of planning config.
 import json
 import sqlite3
 
+from sereno.db.connection import connect, db_path
+from sereno.db.migrations import migrate
+
 # (name, kind, tax_treatment, is_liability, is_investable,
 #  withdrawal_priority, access_age, penalty_rate)
 ACCOUNTS = [
@@ -258,3 +261,20 @@ def seed(conn: sqlite3.Connection) -> bool:
 
     conn.commit()
     return True
+
+
+def main() -> None:
+    """Migrate and seed the database at SERENO_DB_PATH (the Docker volume)."""
+    conn = connect()
+    try:
+        migrate(conn)
+        if seed(conn):
+            print(f"Seeded {db_path()} with the illustrative design-handoff data.")
+        else:
+            print(f"{db_path()} already has data; nothing seeded.")
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
+    main()
