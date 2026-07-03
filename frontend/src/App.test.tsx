@@ -7,13 +7,13 @@ describe('App', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
-        json: () => Promise.resolve({ status: 'ok', version: '0.0.2' }),
+        json: () => Promise.resolve({ status: 'ok', version: '0.0.3' }),
       }),
     )
 
     render(<App />)
 
     expect(screen.getByRole('heading', { name: 'Sereno' })).toBeInTheDocument()
-    expect(await screen.findByText('ok · v0.0.2')).toBeInTheDocument()
+    expect(await screen.findByText('ok · v0.0.3')).toBeInTheDocument()
   })
 })
