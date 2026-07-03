@@ -1,0 +1,44 @@
+@import 'tailwindcss';
+
+/* Design tokens from docs/design/design-handoff.md */
+@theme {
+  --font-sans: 'Hanken Grotesk', system-ui, sans-serif;
+
+  --color-paper: #efece5;
+  --color-header: #f6f3ee;
+  --color-card: #ffffff;
+  --color-card-border: #e9e4da;
+  --color-hairline: #f0ece3;
+  --color-ink: #1f2421;
+  --color-muted: #757a70;
+  --color-muted-2: #9aa093;
+  --color-faint: #bcb6a8;
+  --color-input-border: #ddd7ca;
+
+  --color-sidebar: #16241d;
+  --color-sidebar-text: #cdd6cf;
+  --color-sidebar-muted: #9fb3a8;
+
+  --color-accent: #2f8f6b;
+  --color-hero-green: #5cc79b;
+  --color-green-soft: #e8f2ec;
+
+  --color-amber: #c79049;
+  --color-amber-text: #a9772f;
+  --color-amber-soft: #f4ead5;
+
+  --color-red: #c1574d;
+  --color-red-text: #b5524a;
+  --color-red-soft: #f9ece9;
+
+  --color-ss-blue: #5f86ad;
+}
+
+/* All numeric values line up in columns (ledger, tables, hero numbers). */
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  @apply bg-paper font-sans text-ink antialiased;
+}
