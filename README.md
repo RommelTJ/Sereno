@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.0.2**
+**v0.0.3**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -115,9 +115,12 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.0.2 — scaffolding. The monorepo skeleton is in place: FastAPI backend with a typed
+v0.0.3 — design tokens. The monorepo skeleton is in place: FastAPI backend with a typed
 health endpoint, React/Tailwind frontend shell wired to it, Docker Compose for dev and
-tests, and CI. The data model and high-fidelity designs are complete (see
+tests, and CI. The full design-handoff token set (colors, Hanken Grotesk typography,
+radii, tabular numerals) is defined as a Tailwind v4 theme in
+[frontend/src/index.css](frontend/src/index.css) and demonstrated on the placeholder
+page. The data model and high-fidelity designs are complete (see
 [docs/design](docs/design)); implementation is next, roughly in this order:
 
 1. Database schema and seed data
