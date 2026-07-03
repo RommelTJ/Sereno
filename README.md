@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.0.3**
+**v0.1.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -115,16 +115,17 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.0.3 — design tokens. The monorepo skeleton is in place: FastAPI backend with a typed
-health endpoint, React/Tailwind frontend shell wired to it, Docker Compose for dev and
-tests, and CI. The full design-handoff token set (colors, Hanken Grotesk typography,
-radii, tabular numerals) is defined as a Tailwind v4 theme in
-[frontend/src/index.css](frontend/src/index.css) and demonstrated on the placeholder
-page. The data model and high-fidelity designs are complete (see
-[docs/design](docs/design)); implementation is next, roughly in this order:
+v0.1.0 — app shell. The app is navigable end-to-end: a persistent dark sidebar with
+the three nav groups (Track / Plan / Settings), a sticky header with page title and a
+net-worth readout slot, and client-side routes ([react-router](https://reactrouter.com/))
+for all eight views — Dashboard, Ledger entries, Safe-to-spend, Funds & goals,
+Guardrails, Withdrawal sourcing, Longevity forecast, and Settings & data — rendered as
+stub pages for now. Nav icons are [Lucide](https://lucide.dev/). The monorepo skeleton
+(FastAPI backend, Tailwind v4 design tokens, Docker Compose, CI) landed in earlier
+releases. Remaining work, roughly in this order:
 
 1. Database schema and seed data
-2. App shell, navigation, and dashboard
+2. Dashboard reading from the DB
 3. Ledger entry and monthly net-worth views
 4. Safe-to-spend, envelopes, and spending/funding entry
 5. Funds & goals
