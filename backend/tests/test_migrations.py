@@ -1,6 +1,7 @@
 import sqlite3
 
 import pytest
+
 from sereno.db.migrations import migrate
 
 
