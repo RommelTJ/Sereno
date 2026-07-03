@@ -63,6 +63,17 @@ class LedgerMonth(BaseModel):
     balances: list[LedgerBalance]
 
 
+class NetWorthPoint(BaseModel):
+    month: str
+    net_worth: float
+
+
+class NetWorth(BaseModel):
+    current: float | None
+    yoy: float | None
+    series: list[NetWorthPoint]
+
+
 class BalanceEntry(BaseModel):
     id: int
     account_id: int
@@ -107,6 +118,21 @@ def ledger(db: Db) -> list[LedgerMonth]:
         LedgerMonth(month=month, net_worth=net_worth[month], balances=balances)
         for month, balances in months.items()
     ]
+
+
+@router.get("/net-worth")
+def net_worth(db: Db) -> NetWorth:
+    points = [
+        NetWorthPoint(month=row["month"], net_worth=row["net_worth"])
+        for row in db.execute("SELECT month, net_worth FROM v_net_worth ORDER BY month")
+    ]
+    if not points:
+        return NetWorth(current=None, yoy=None, series=[])
+    current = points[-1]
+    baseline_month = f"{int(current.month[:4]) - 1}{current.month[4:]}"
+    baseline = next((p.net_worth for p in points if p.month == baseline_month), None)
+    yoy = current.net_worth / baseline - 1 if baseline else None
+    return NetWorth(current=current.net_worth, yoy=yoy, series=points[-12:])
 
 
 @router.post("/balance-entries", status_code=201)
