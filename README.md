@@ -111,6 +111,23 @@ finances. The command is a no-op on any database that already has data, so it
 can't clobber a real deployment; to re-seed from scratch, remove the volume
 first with `docker compose down -v`.
 
+### API endpoints
+
+The balances vertical slice (interactive docs at <http://localhost:8000/docs>):
+
+- `GET /api/accounts` — the account dimension rows (name, kind, liability and
+  investable flags).
+- `POST /api/balance-entries` — appends a dated balance row for an account.
+  Send `balance_usd` for USD accounts, or `quantity` + `unit_price` for
+  ETH-style holdings (USD is derived as quantity × price). Rows are never
+  updated — history is kept.
+- `GET /api/ledger` — one group per month, newest first, with the canonical
+  per-account balances (latest entry in a month wins) and that month's net
+  worth.
+- `GET /api/net-worth` — current net worth, year-over-year change vs. the same
+  month a year earlier (`null` until 12 months of history exist), and the
+  last-12-months series for the sparkline.
+
 ### Tests, linters, and type checkers
 
 Backend (ruff, ty, pytest):
