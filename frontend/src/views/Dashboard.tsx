@@ -16,7 +16,10 @@ function Dashboard() {
   }, [])
 
   return (
-    <div className="rounded-card border border-card-border bg-card p-7">
+    <div
+      className="rounded-card border border-card-border bg-card p-7"
+      data-testid="view-dashboard"
+    >
       <p className="text-sm text-muted">
         At-a-glance overview — the net worth hero, safe-to-spend card, and plan
         cards land here next.
