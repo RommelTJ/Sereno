@@ -94,6 +94,23 @@ docker compose up --build
 Both containers hot-reload when you edit source files. Stop with `Ctrl-C` or
 `docker compose down`.
 
+### Seeding sample data
+
+For development, populate the database with the sanitized, illustrative values
+from the design handoff — twelve months of balances, June 2026 envelopes and
+activity, funds, and a year of planning config:
+
+```sh
+docker compose run --rm backend uv run python -m sereno.db.seed
+```
+
+Seeding is **opt-in**: `docker compose up` alone always starts with an empty,
+migrated database. Every seeded number is a placeholder from
+[docs/design/design-handoff.md](docs/design/design-handoff.md) — never real
+finances. The command is a no-op on any database that already has data, so it
+can't clobber a real deployment; to re-seed from scratch, remove the volume
+first with `docker compose down -v`.
+
 ### Tests, linters, and type checkers
 
 Backend (ruff, ty, pytest):
