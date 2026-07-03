@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.2.0**
+**v0.3.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -94,6 +94,23 @@ docker compose up --build
 Both containers hot-reload when you edit source files. Stop with `Ctrl-C` or
 `docker compose down`.
 
+### Seeding sample data
+
+For development, populate the database with the sanitized, illustrative values
+from the design handoff — twelve months of balances, June 2026 envelopes and
+activity, funds, and a year of planning config:
+
+```sh
+docker compose run --rm backend uv run python -m sereno.db.seed
+```
+
+Seeding is **opt-in**: `docker compose up` alone always starts with an empty,
+migrated database. Every seeded number is a placeholder from
+[docs/design/design-handoff.md](docs/design/design-handoff.md) — never real
+finances. The command is a no-op on any database that already has data, so it
+can't clobber a real deployment; to re-seed from scratch, remove the volume
+first with `docker compose down -v`.
+
 ### Tests, linters, and type checkers
 
 Backend (ruff, ty, pytest):
@@ -115,16 +132,18 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.2.0 — database layer. The append-only schema from
-[docs/design/schema.sql](docs/design/schema.sql) — 13 tables, indexes, and the
-`v_account_monthly` / `v_net_worth` / `v_budget_month` views — is applied by a
-numbered-migration runner at app startup, so the SQLite file in the `sereno-data`
-Docker volume is always current. A typed stdlib-`sqlite3` connection module
-(foreign keys on, rows addressable by column name) is exposed to FastAPI via
-dependency injection for the upcoming data endpoints. Liability balances are
-entered as positive numbers; `v_net_worth` subtracts them. The app shell (sidebar,
-header, and routed stub pages for all eight views) and the monorepo skeleton landed
-in earlier releases. Remaining work, roughly in this order:
+v0.3.0 — seed data. An opt-in, idempotent seed module
+(`python -m sereno.db.seed`, wired into Docker Compose — see
+[Seeding sample data](#seeding-sample-data)) fills a fresh database with the
+sanitized illustrative values from the design handoff: ten accounts, twelve
+months of balance history for the sparkline, budget categories with planned
+amounts (new effective-dated `category_plan` table, migration 0002), June 2026
+expenses and paychecks on the prepay model, five funds/goals, and a year of
+assumptions, spend plan, Social Security, and tax parameters — so every
+upcoming screen can be built against realistic numbers. Seeding refuses to
+touch a database that already has data. The append-only schema (migrations at
+startup), the typed SQLite connection module, and the app shell with routed
+stub pages landed in earlier releases. Remaining work, roughly in this order:
 
 1. Dashboard reading from the DB
 2. Ledger entry and monthly net-worth views
