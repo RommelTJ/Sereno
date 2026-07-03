@@ -7,6 +7,7 @@ point ``SERENO_DB_PATH`` at a temporary file instead.
 
 import os
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 
 DEFAULT_DB_PATH = Path("/app/data/sereno.db")
@@ -23,3 +24,12 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def get_db() -> Iterator[sqlite3.Connection]:
+    """FastAPI dependency: one connection per request, closed afterwards."""
+    conn = connect()
+    try:
+        yield conn
+    finally:
+        conn.close()
