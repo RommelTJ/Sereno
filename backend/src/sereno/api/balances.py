@@ -49,6 +49,20 @@ class BalanceEntryCreate(BaseModel):
         return self
 
 
+class LedgerBalance(BaseModel):
+    account_id: int
+    as_of_date: date
+    balance_usd: float
+    quantity: float | None
+    unit_price: float | None
+
+
+class LedgerMonth(BaseModel):
+    month: str
+    net_worth: float
+    balances: list[LedgerBalance]
+
+
 class BalanceEntry(BaseModel):
     id: int
     account_id: int
@@ -66,6 +80,33 @@ def list_accounts(db: Db) -> list[Account]:
         " FROM account ORDER BY id"
     )
     return [Account(**dict(row)) for row in rows]
+
+
+@router.get("/ledger")
+def ledger(db: Db) -> list[LedgerMonth]:
+    net_worth = {
+        row["month"]: row["net_worth"]
+        for row in db.execute("SELECT month, net_worth FROM v_net_worth")
+    }
+    months: dict[str, list[LedgerBalance]] = {}
+    rows = db.execute(
+        "SELECT month, account_id, as_of_date, balance_usd, quantity, unit_price"
+        " FROM v_account_monthly ORDER BY month DESC, account_id"
+    )
+    for row in rows:
+        months.setdefault(row["month"], []).append(
+            LedgerBalance(
+                account_id=row["account_id"],
+                as_of_date=row["as_of_date"],
+                balance_usd=row["balance_usd"],
+                quantity=row["quantity"],
+                unit_price=row["unit_price"],
+            )
+        )
+    return [
+        LedgerMonth(month=month, net_worth=net_worth[month], balances=balances)
+        for month, balances in months.items()
+    ]
 
 
 @router.post("/balance-entries", status_code=201)
