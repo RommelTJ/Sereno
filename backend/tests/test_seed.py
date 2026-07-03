@@ -2,7 +2,7 @@ import pytest
 
 from sereno.db.connection import connect
 from sereno.db.migrations import migrate
-from sereno.db.seed import seed
+from sereno.db.seed import main, seed
 
 ALL_TABLES = [
     "account",
@@ -112,3 +112,24 @@ class TestSeedIsIdempotent:
         db.commit()
         assert seed(db) is False
         assert table_counts(db) == {table: 0 for table in ALL_TABLES} | {"account": 1}
+
+
+class TestMain:
+    def test_migrates_and_seeds_a_fresh_database(self, monkeypatch, tmp_path, capsys):
+        db_file = tmp_path / "sereno.db"
+        monkeypatch.setenv("SERENO_DB_PATH", str(db_file))
+        main()
+        assert db_file.exists()
+        assert "seeded" in capsys.readouterr().out.lower()
+        conn = connect(db_file)
+        try:
+            assert conn.execute("SELECT COUNT(*) FROM account").fetchone()[0] == 10
+        finally:
+            conn.close()
+
+    def test_second_run_is_a_noop(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("SERENO_DB_PATH", str(tmp_path / "sereno.db"))
+        main()
+        capsys.readouterr()
+        main()
+        assert "already has data" in capsys.readouterr().out
