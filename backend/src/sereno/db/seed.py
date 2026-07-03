@@ -117,7 +117,14 @@ def _ids_by_name(conn: sqlite3.Connection, table: str) -> dict[str, int]:
 
 
 def seed(conn: sqlite3.Connection) -> bool:
-    """Populate a migrated database with the illustrative data; return True."""
+    """Populate an empty, migrated database with the illustrative data.
+
+    Returns True after seeding. Any existing account makes this a no-op
+    returning False, so re-runs — and databases holding real finances —
+    are never touched.
+    """
+    if conn.execute("SELECT COUNT(*) FROM account").fetchone()[0] > 0:
+        return False
     conn.executemany(
         "INSERT INTO account (name, kind, tax_treatment, owner, is_liability,"
         " is_investable, withdrawal_priority, access_age, penalty_rate)"
