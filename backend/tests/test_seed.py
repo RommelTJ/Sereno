@@ -1,8 +1,8 @@
 import pytest
-from sereno.db.seed import seed
 
 from sereno.db.connection import connect
 from sereno.db.migrations import migrate
+from sereno.db.seed import seed
 
 ALL_TABLES = [
     "account",
