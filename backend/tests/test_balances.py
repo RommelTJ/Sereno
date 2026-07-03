@@ -167,3 +167,94 @@ class TestPostBalanceEntries:
             account_id,
         )
         assert [row["balance_usd"] for row in monthly] == [9000]
+
+
+def post_entry(client, account_id, as_of_date, **fields):
+    response = client.post(
+        "/api/balance-entries",
+        json={"account_id": account_id, "as_of_date": as_of_date, **fields},
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+class TestGetLedger:
+    def test_empty_database_returns_no_months(self, client):
+        response = client.get("/api/ledger")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_groups_balances_by_month_newest_first(self, client):
+        eth_id = insert_account("Ethereum", "eth", tax_treatment="LTCG", is_investable=1)
+        cash_id = insert_account("Chase checking", "cash")
+        post_entry(client, eth_id, "2026-05-28", quantity=20, unit_price=3400)
+        post_entry(client, cash_id, "2026-05-28", balance_usd=7000)
+        post_entry(client, eth_id, "2026-06-28", quantity=20, unit_price=3500)
+        post_entry(client, cash_id, "2026-06-28", balance_usd=9000)
+        response = client.get("/api/ledger")
+        assert response.status_code == 200
+        assert response.json() == [
+            {
+                "month": "2026-06",
+                "net_worth": 79000,
+                "balances": [
+                    {
+                        "account_id": eth_id,
+                        "as_of_date": "2026-06-28",
+                        "balance_usd": 70000,
+                        "quantity": 20,
+                        "unit_price": 3500,
+                    },
+                    {
+                        "account_id": cash_id,
+                        "as_of_date": "2026-06-28",
+                        "balance_usd": 9000,
+                        "quantity": None,
+                        "unit_price": None,
+                    },
+                ],
+            },
+            {
+                "month": "2026-05",
+                "net_worth": 75000,
+                "balances": [
+                    {
+                        "account_id": eth_id,
+                        "as_of_date": "2026-05-28",
+                        "balance_usd": 68000,
+                        "quantity": 20,
+                        "unit_price": 3400,
+                    },
+                    {
+                        "account_id": cash_id,
+                        "as_of_date": "2026-05-28",
+                        "balance_usd": 7000,
+                        "quantity": None,
+                        "unit_price": None,
+                    },
+                ],
+            },
+        ]
+
+    def test_latest_entry_in_a_month_wins(self, client):
+        cash_id = insert_account("Chase checking", "cash")
+        post_entry(client, cash_id, "2026-06-26", balance_usd=8000)
+        post_entry(client, cash_id, "2026-06-28", balance_usd=9000)
+        (month,) = client.get("/api/ledger").json()
+        assert month["balances"] == [
+            {
+                "account_id": cash_id,
+                "as_of_date": "2026-06-28",
+                "balance_usd": 9000,
+                "quantity": None,
+                "unit_price": None,
+            }
+        ]
+
+    def test_liabilities_subtract_from_the_month_net_worth(self, client):
+        home_id = insert_account("Home", "home")
+        mortgage_id = insert_account("Mortgage", "mortgage", is_liability=1)
+        post_entry(client, home_id, "2026-06-28", balance_usd=350000)
+        post_entry(client, mortgage_id, "2026-06-28", balance_usd=150000)
+        (month,) = client.get("/api/ledger").json()
+        assert month["net_worth"] == 200000
