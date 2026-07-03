@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.3.0**
+**v0.4.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -111,6 +111,23 @@ finances. The command is a no-op on any database that already has data, so it
 can't clobber a real deployment; to re-seed from scratch, remove the volume
 first with `docker compose down -v`.
 
+### API endpoints
+
+The balances vertical slice (interactive docs at <http://localhost:8000/docs>):
+
+- `GET /api/accounts` — the account dimension rows (name, kind, liability and
+  investable flags).
+- `POST /api/balance-entries` — appends a dated balance row for an account.
+  Send `balance_usd` for USD accounts, or `quantity` + `unit_price` for
+  ETH-style holdings (USD is derived as quantity × price). Rows are never
+  updated — history is kept.
+- `GET /api/ledger` — one group per month, newest first, with the canonical
+  per-account balances (latest entry in a month wins) and that month's net
+  worth.
+- `GET /api/net-worth` — current net worth, year-over-year change vs. the same
+  month a year earlier (`null` until 12 months of history exist), and the
+  last-12-months series for the sparkline.
+
 ### Tests, linters, and type checkers
 
 Backend (ruff, ty, pytest):
@@ -132,24 +149,22 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.3.0 — seed data. An opt-in, idempotent seed module
-(`python -m sereno.db.seed`, wired into Docker Compose — see
-[Seeding sample data](#seeding-sample-data)) fills a fresh database with the
-sanitized illustrative values from the design handoff: ten accounts, twelve
-months of balance history for the sparkline, budget categories with planned
-amounts (new effective-dated `category_plan` table, migration 0002), June 2026
-expenses and paychecks on the prepay model, five funds/goals, and a year of
-assumptions, spend plan, Social Security, and tax parameters — so every
-upcoming screen can be built against realistic numbers. Seeding refuses to
-touch a database that already has data. The append-only schema (migrations at
-startup), the typed SQLite connection module, and the app shell with routed
-stub pages landed in earlier releases. Remaining work, roughly in this order:
+v0.4.0 — balances and net worth API. The first vertical-slice backend: typed
+FastAPI endpoints for the account dimension, append-only balance entries
+(USD sent directly or derived from ETH quantity × price; rows are never
+updated), the monthly ledger grouped by month with net worth per row, and
+the net-worth summary (current, year-over-year vs. the same month a year
+earlier, last-12-months sparkline series) — see
+[API endpoints](#api-endpoints). All reads go through the schema's SQL views,
+so "latest entry in a month wins" lives in one place. Seed data, the
+append-only schema (migrations at startup), the typed SQLite connection
+module, and the app shell with routed stub pages landed in earlier releases.
+Remaining work, roughly in this order:
 
-1. Dashboard reading from the DB
-2. Ledger entry and monthly net-worth views
-3. Safe-to-spend, envelopes, and spending/funding entry
-4. Funds & goals
-5. Guardrails → withdrawal sourcing engine → longevity forecast
+1. Dashboard and Ledger screens reading from these endpoints
+2. Safe-to-spend, envelopes, and spending/funding entry
+3. Funds & goals
+4. Guardrails → withdrawal sourcing engine → longevity forecast
 
 ## License
 
