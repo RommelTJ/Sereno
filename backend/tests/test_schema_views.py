@@ -130,6 +130,41 @@ class TestBudgetMonth:
         assert row["safe_to_spend"] == 3550
 
 
+class TestCategoryPlan:
+    def add_category(self, db, name):
+        cursor = db.execute("INSERT INTO category (name) VALUES (?)", (name,))
+        return cursor.lastrowid
+
+    def test_planned_amounts_are_effective_dated_per_category(self, db):
+        groceries = self.add_category(db, "Groceries")
+        db.execute(
+            "INSERT INTO category_plan (category_id, effective_month, planned)"
+            " VALUES (?, '2026-01', 500)",
+            (groceries,),
+        )
+        db.execute(
+            "INSERT INTO category_plan (category_id, effective_month, planned)"
+            " VALUES (?, '2026-06', 550)",
+            (groceries,),
+        )
+        rows = db.execute(
+            "SELECT effective_month, planned FROM category_plan"
+            " WHERE category_id = ? ORDER BY effective_month",
+            (groceries,),
+        ).fetchall()
+        assert [(r["effective_month"], r["planned"]) for r in rows] == [
+            ("2026-01", 500),
+            ("2026-06", 550),
+        ]
+
+    def test_category_plan_requires_an_existing_category(self, db):
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute(
+                "INSERT INTO category_plan (category_id, effective_month, planned)"
+                " VALUES (999, '2026-01', 500)"
+            )
+
+
 def test_foreign_keys_are_enforced(db):
     with pytest.raises(sqlite3.IntegrityError):
         add_balance(db, 999, "2026-06-28", 100)
