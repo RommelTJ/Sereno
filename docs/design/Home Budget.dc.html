@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Hanken Grotesk',system-ui,sans-serif; color:#1f2421; background:#efece5; -webkit-font-smoothing:antialiased; }
+  .num{ font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; }
+  input{ font-family:inherit; }
+  input[type=range]{ accent-color:#2f8f6b; }
+  ::-webkit-scrollbar{ width:10px;height:10px; }
+  ::-webkit-scrollbar-thumb{ background:#d9d4c9; border-radius:6px; }
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;width:100%;background:#efece5">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside style="width:248px;flex-shrink:0;background:#16241d;color:#cdd6cf;padding:26px 16px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 8px 8px">
+      <div style="width:30px;height:30px;border-radius:9px;background:#2f8f6b;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px">H</div>
+      <div style="font-weight:700;font-size:16px;color:#fff;letter-spacing:-0.2px">Home Budget</div>
+    </div>
+
+    <div style="font-size:10.5px;letter-spacing:1.4px;color:#5f7268;margin:14px 8px 6px;font-weight:600">TRACK</div>
+    <sc-for list="{{ navTrack }}" as="item" hint-placeholder-count="4">
+      <div onClick="{{ item.onClick }}" style="{{ item.style }}">
+        <span style="width:18px;text-align:center">{{ item.icon }}</span><span>{{ item.label }}</span>
+      </div>
+    </sc-for>
+
+    <div style="font-size:10.5px;letter-spacing:1.4px;color:#5f7268;margin:14px 8px 6px;font-weight:600">PLAN</div>
+    <sc-for list="{{ navPlan }}" as="item" hint-placeholder-count="3">
+      <div onClick="{{ item.onClick }}" style="{{ item.style }}">
+        <span style="width:18px;text-align:center">{{ item.icon }}</span><span>{{ item.label }}</span>
+      </div>
+    </sc-for>
+
+    <div style="font-size:10.5px;letter-spacing:1.4px;color:#5f7268;margin:14px 8px 6px;font-weight:600">SETTINGS</div>
+    <sc-for list="{{ navSettings }}" as="item" hint-placeholder-count="1">
+      <div onClick="{{ item.onClick }}" style="{{ item.style }}">
+        <span style="width:18px;text-align:center">{{ item.icon }}</span><span>{{ item.label }}</span>
+      </div>
+    </sc-for>
+
+    <div style="margin-top:auto;padding:12px 10px;background:#1d3026;border-radius:12px;font-size:11.5px;color:#8aa094;line-height:1.5">
+      <b style="color:#cdd6cf">June 2026</b><br>Funding July's budget · prepay
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <header style="display:flex;align-items:center;justify-content:space-between;padding:20px 36px;border-bottom:1px solid #e3ded4;background:#f6f3ee;position:sticky;top:0;z-index:5">
+      <div>
+        <div style="font-size:21px;font-weight:700;letter-spacing:-0.4px">{{ pageTitle }}</div>
+        <div style="font-size:12.5px;color:#757a70;margin-top:1px">{{ pageSub }}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="text-align:right">
+          <div style="font-size:10.5px;letter-spacing:1px;color:#9aa093;font-weight:600">NET WORTH</div>
+          <div class="num" style="font-size:18px;font-weight:700">{{ netWorth }}</div>
+        </div>
+        <div style="width:40px;height:40px;border-radius:11px;background:#e6e1d6;display:flex;align-items:center;justify-content:center;font-size:15px">🏡</div>
+      </div>
+    </header>
+
+    <div style="flex:1;padding:30px 36px 60px;max-width:1180px;width:100%">
+
+      <!-- ====================== DASHBOARD ====================== -->
+      <sc-if value="{{ vDashboard }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:20px">
+          <!-- net worth hero -->
+          <div style="background:#16241d;color:#fff;border-radius:20px;padding:28px;position:relative;overflow:hidden">
+            <div style="font-size:11px;letter-spacing:1.4px;color:#7e948a;font-weight:600">NET WORTH</div>
+            <div class="num" style="font-size:52px;font-weight:800;letter-spacing:-1.5px;margin-top:6px">{{ netWorth }}</div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+              <span style="background:#2f8f6b;color:#fff;padding:3px 10px;border-radius:20px;font-size:13px;font-weight:700">{{ yoyLabel }}</span>
+              <span style="font-size:13px;color:#9fb3a8">since Jan 1 · {{ janLabel }}</span>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:24px;align-items:flex-end;height:70px">
+              <sc-for list="{{ nwSpark }}" as="b" hint-placeholder-count="12">
+                <div style="{{ b.style }}"></div>
+              </sc-for>
+            </div>
+          </div>
+          <!-- safe to spend -->
+          <div onClick="{{ goSafe }}" style="background:#fff;border:1px solid #e9e4da;border-radius:20px;padding:26px;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between">
+            <div>
+              <div style="font-size:11px;letter-spacing:1.2px;color:#9aa093;font-weight:600">SAFE-TO-SPEND</div>
+              <div class="num" style="font-size:44px;font-weight:800;color:{{ accent }};letter-spacing:-1px;margin-top:6px">{{ safeToSpend }}</div>
+              <div style="font-size:12.5px;color:#757a70;margin-top:2px">free after bills &amp; funds</div>
+            </div>
+            <div style="margin-top:18px;height:8px;background:#eef0ea;border-radius:5px;overflow:hidden">
+              <div style="{{ stsBarStyle }}"></div>
+            </div>
+            <div style="font-size:12px;color:#9aa093;margin-top:8px">{{ stsHint }} →</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-top:20px">
+          <!-- guardrail -->
+          <div onClick="{{ goGuard }}" style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:22px;cursor:pointer">
+            <div style="font-size:11px;letter-spacing:1.2px;color:#9aa093;font-weight:600">SPEND GUARDRAIL</div>
+            <div class="num" style="font-size:30px;font-weight:800;margin-top:6px">{{ gRate }}</div>
+            <div style="font-size:12px;color:#757a70">withdrawal rate</div>
+            <div style="height:9px;border-radius:6px;margin-top:14px;position:relative;display:flex;overflow:hidden;border:1px solid #e9e4da">
+              <div style="flex:1;background:#f0ddd8"></div><div style="flex:2;background:#e3efe8"></div><div style="flex:1;background:#f4ead5"></div>
+              <div style="{{ gMarkerStyle }}"></div>
+            </div>
+            <div style="font-size:13px;font-weight:700;color:{{ gColor }};margin-top:12px">{{ gStatus }}</div>
+          </div>
+          <!-- forecast -->
+          <div onClick="{{ goForecast }}" style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:22px;cursor:pointer">
+            <div style="font-size:11px;letter-spacing:1.2px;color:#9aa093;font-weight:600">LONGEVITY</div>
+            <div style="font-size:22px;font-weight:800;margin-top:6px;color:{{ runColor }};line-height:1.1">{{ runHeadline }}</div>
+            <div style="font-size:12.5px;color:#757a70;margin-top:8px">at {{ spendLabel }}/yr</div>
+            <div class="num" style="font-size:13px;color:#1f2421;margin-top:10px">~{{ balAt90 }} <span style="color:#9aa093">projected at age 90</span></div>
+          </div>
+          <!-- funds -->
+          <div onClick="{{ goFunds }}" style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:22px;cursor:pointer">
+            <div style="font-size:11px;letter-spacing:1.2px;color:#9aa093;font-weight:600">FUNDS &amp; GOALS</div>
+            <div class="num" style="font-size:30px;font-weight:800;margin-top:6px">{{ fundsTotal }}</div>
+            <div style="font-size:12px;color:#757a70">parked across {{ fundsCount }} funds</div>
+            <div style="display:flex;flex-direction:column;gap:7px;margin-top:14px">
+              <sc-for list="{{ fundsMini }}" as="f" hint-placeholder-count="3">
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#5b6058">{{ f.name }}</span><span class="num" style="color:#9aa093">{{ f.pctLabel }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- recent activity -->
+        <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:8px 24px;margin-top:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 10px;border-bottom:1px solid #f0ece3">
+            <div style="font-size:14px;font-weight:700">Recent activity</div>
+            <div onClick="{{ goSafe }}" style="font-size:12.5px;color:{{ accent }};font-weight:600;cursor:pointer">Add an item →</div>
+          </div>
+          <sc-for list="{{ activity }}" as="a" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #f4f1e9">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div style="width:34px;height:34px;border-radius:10px;background:{{ a.iconBg }};display:flex;align-items:center;justify-content:center;font-size:15px">{{ a.icon }}</div>
+                <div><div style="font-size:13.5px;font-weight:600">{{ a.title }}</div><div style="font-size:11.5px;color:#9aa093">{{ a.sub }}</div></div>
+              </div>
+              <div class="num" style="font-size:14px;font-weight:700;color:{{ a.amtColor }}">{{ a.amount }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ====================== LEDGER ====================== -->
+      <sc-if value="{{ vLedger }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:20px;align-items:start">
+          <!-- table -->
+          <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;overflow:hidden">
+            <div style="padding:18px 22px;border-bottom:1px solid #f0ece3;font-size:14px;font-weight:700">Monthly balance entries <span style="color:#9aa093;font-weight:500">· one row per month</span></div>
+            <div style="overflow-x:auto">
+              <table class="num" style="width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap">
+                <thead><tr style="background:#faf8f3;color:#9aa093;text-align:right">
+                  <th style="text-align:left;padding:10px 14px;font-weight:600">Date</th><th style="padding:10px 14px;font-weight:600">ETH</th><th style="padding:10px 14px;font-weight:600">VFIAX</th><th style="padding:10px 14px;font-weight:600">VTIAX</th><th style="padding:10px 14px;font-weight:600">VGSH</th><th style="padding:10px 14px;font-weight:600">Retire</th><th style="padding:10px 14px;font-weight:600">Home</th><th style="padding:10px 14px;font-weight:600">Cash</th><th style="padding:10px 14px;font-weight:600">Mortgage</th><th style="padding:10px 14px;font-weight:700;color:#1f2421">Net worth</th>
+                </tr></thead>
+                <tbody>
+                  <sc-for list="{{ ledgerRows }}" as="r" hint-placeholder-count="6">
+                    <tr style="{{ r.rowStyle }}">
+                      <td style="text-align:left;padding:11px 14px;font-weight:600">{{ r.date }}</td><td style="text-align:right;padding:11px 14px">{{ r.eth }}</td><td style="text-align:right;padding:11px 14px">{{ r.vfiax }}</td><td style="text-align:right;padding:11px 14px">{{ r.vtiax }}</td><td style="text-align:right;padding:11px 14px">{{ r.vgsh }}</td><td style="text-align:right;padding:11px 14px">{{ r.retire }}</td><td style="text-align:right;padding:11px 14px">{{ r.home }}</td><td style="text-align:right;padding:11px 14px">{{ r.cash }}</td><td style="text-align:right;padding:11px 14px;color:#c1574d">{{ r.mortgage }}</td><td style="text-align:right;padding:11px 14px;font-weight:700">{{ r.networth }}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- entry form -->
+          <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:22px">
+            <div style="font-size:14px;font-weight:700">Update this month's balances</div>
+            <div style="font-size:11.5px;color:#9aa093;margin-top:3px">Latest entry in a month wins · earlier rows kept as history.</div>
+
+            <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+              <div>
+                <span style="font-size:11px;color:#9aa093;font-weight:600">TAXABLE BROKERAGE · per fund</span>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:4px">
+                  <label style="display:block"><span style="font-size:10px;color:#bcb6a8;font-weight:600">VFIAX</span>
+                    <input class="num" value="{{ eVfiax }}" onInput="{{ onVfiax }}" style="width:100%;margin-top:3px;border:1px solid #ddd7ca;border-radius:10px;padding:10px 11px;font-size:13.5px"></label>
+                  <label style="display:block"><span style="font-size:10px;color:#bcb6a8;font-weight:600">VTIAX</span>
+                    <input class="num" value="{{ eVtiax }}" onInput="{{ onVtiax }}" style="width:100%;margin-top:3px;border:1px solid #ddd7ca;border-radius:10px;padding:10px 11px;font-size:13.5px"></label>
+                  <label style="display:block"><span style="font-size:10px;color:#bcb6a8;font-weight:600">VGSH</span>
+                    <input class="num" value="{{ eVgsh }}" onInput="{{ onVgsh }}" style="width:100%;margin-top:3px;border:1px solid #ddd7ca;border-radius:10px;padding:10px 11px;font-size:13.5px"></label>
+                </div>
+              </div>
+              <label style="display:block"><span style="font-size:11px;color:#9aa093;font-weight:600">RETIREMENT (401k · HSA, total)</span>
+                <input class="num" value="{{ eRetire }}" onInput="{{ onRetire }}" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:10px;padding:11px 12px;font-size:14px"></label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <label style="display:block"><span style="font-size:11px;color:#9aa093;font-weight:600">ETH HELD</span>
+                  <input class="num" value="{{ eEthQty }}" onInput="{{ onEthQty }}" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:10px;padding:11px 12px;font-size:14px"></label>
+                <label style="display:block"><span style="font-size:11px;color:#9aa093;font-weight:600">$ / ETH</span>
+                  <input class="num" value="{{ eEthPrice }}" onInput="{{ onEthPrice }}" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:10px;padding:11px 12px;font-size:14px"></label>
+              </div>
+              <div style="background:#f3f6f3;border-radius:10px;padding:11px 13px;font-size:12.5px;color:#3a473f">ETH value <b class="num">{{ ethUsd }}</b> <span style="color:#9aa093">= {{ eEthQty }} × {{ eEthPriceLabel }}</span></div>
+            </div>
+
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding-top:16px;border-top:1px solid #f0ece3">
+              <div><div style="font-size:11px;color:#9aa093;font-weight:600">NET WORTH (live)</div><div class="num" style="font-size:22px;font-weight:800">{{ netWorth }}</div></div>
+              <div style="background:#16241d;color:#fff;border-radius:11px;padding:11px 20px;font-weight:700;font-size:13px;cursor:default">Saved ✓</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ====================== SAFE TO SPEND ====================== -->
+      <sc-if value="{{ vSafe }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+        <!-- left: the number + envelopes -->
+        <div style="display:flex;flex-direction:column;gap:20px">
+          <div style="background:#16241d;color:#fff;border-radius:20px;padding:26px;text-align:center">
+            <div style="font-size:11px;letter-spacing:1.4px;color:#7e948a;font-weight:600">SAFE-TO-SPEND</div>
+            <div class="num" style="font-size:56px;font-weight:800;color:#5cc79b;letter-spacing:-1.5px;margin-top:4px">{{ safeToSpend }}</div>
+            <div style="display:inline-block;margin-top:10px;border:1px solid #34473d;border-radius:20px;padding:5px 14px;font-size:11.5px;color:#9fb3a8">total cash − bills due − money in funds</div>
+          </div>
+          <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:22px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div style="font-size:14px;font-weight:700">July envelopes</div>
+              <div style="font-size:11.5px;color:#9aa093">over is OK — trims safe-to-spend</div>
+            </div>
+            <sc-for list="{{ envelopes }}" as="e" hint-placeholder-count="5">
+              <div style="padding:11px 0;border-bottom:1px solid #f4f1e9">
+                <div style="display:flex;justify-content:space-between;font-size:13px"><span>{{ e.emoji }} {{ e.name }}</span><span class="num" style="color:{{ e.rightColor }};font-weight:600">{{ e.right }}</span></div>
+                <div style="height:7px;background:#eef0ea;border-radius:5px;margin-top:6px;overflow:hidden"><div style="{{ e.barStyle }}"></div></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- right: forms -->
+        <div style="display:flex;flex-direction:column;gap:20px">
+          <!-- add spending -->
+          <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:22px">
+            <div style="font-size:14px;font-weight:700">Add a spending item</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:14px">
+              <label><span style="font-size:11px;color:#9aa093;font-weight:600">AMOUNT</span>
+                <input class="num" value="{{ sAmt }}" onInput="{{ onSAmt }}" placeholder="$ 0.00" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:10px;padding:10px 12px;font-size:14px"></label>
+              <label><span style="font-size:11px;color:#9aa093;font-weight:600">CATEGORY</span>
+                <select value="{{ sCat }}" onChange="{{ onSCat }}" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff">
+                  <sc-for list="{{ catOptions }}" as="c" hint-placeholder-count="5"><option value="{{ c.key }}">{{ c.label }}</option></sc-for>
+                </select></label>
+            </div>
+            <label style="display:block;margin-top:11px"><span style="font-size:11px;color:#9aa093;font-weight:600">FUNDED FROM</span>
+              <select value="{{ sFund }}" onChange="{{ onSFund }}" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff">
+                <option value="discretionary">July budget · discretionary</option>
+                <option value="fund">A long-term fund (→ Cash Plus withdrawal)</option>
+              </select></label>
+            <sc-if value="{{ sFundIsFund }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:9px;font-size:11.5px;color:#a9772f;background:#f8efdc;border-radius:9px;padding:9px 11px">↳ Log a matching withdrawal from Vanguard Cash Plus so the fund and cash draw down together.</div>
+            </sc-if>
+            <button onClick="{{ addSpend }}" style="width:100%;margin-top:14px;background:#16241d;color:#fff;border:none;border-radius:11px;padding:12px;font-weight:700;font-size:13.5px;cursor:pointer">+ Add spending row</button>
+          </div>
+
+          <!-- add funding -->
+          <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:22px">
+            <div style="font-size:14px;font-weight:700">Add a funding item</div>
+            <div style="font-size:11.5px;color:#9aa093;margin-top:2px">A credit tagged to the month it funds.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:14px">
+              <label><span style="font-size:11px;color:#9aa093;font-weight:600">AMOUNT</span>
+                <input class="num" value="{{ iAmt }}" onInput="{{ onIAmt }}" placeholder="$ 0.00" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:10px;padding:10px 12px;font-size:14px"></label>
+              <label><span style="font-size:11px;color:#9aa093;font-weight:600">FUNDS MONTH</span>
+                <select value="{{ iMonth }}" onChange="{{ onIMonth }}" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff">
+                  <option>Jul 2026</option><option>Aug 2026</option><option>Sep 2026</option></select></label>
+            </div>
+            <label style="display:block;margin-top:11px"><span style="font-size:11px;color:#9aa093;font-weight:600">SOURCE</span>
+              <select value="{{ iSrc }}" onChange="{{ onISrc }}" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:10px;padding:10px 12px;font-size:14px;background:#fff">
+                <option>💵 Spouse paycheck</option><option>💵 Your paycheck</option><option>🏦 Brokerage withdrawal</option><option>Ξ ETH harvest</option><option>🏠 Cash Plus transfer</option></select></label>
+            <button onClick="{{ addFunding }}" style="width:100%;margin-top:14px;background:{{ accent }};color:#fff;border:none;border-radius:11px;padding:12px;font-weight:700;font-size:13.5px;cursor:pointer">+ Add funding row</button>
+            <div style="margin-top:14px;background:#f3f6f3;border-radius:10px;padding:12px;font-size:12px;color:#3a473f"><b>Rollover</b> — June left <b class="num">+$500</b> → July has <b class="num">$9,948</b> to budget. Lean months treat you later.</div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ====================== FUNDS ====================== -->
+      <sc-if value="{{ vFunds }}" hint-placeholder-val="{{ true }}">
+      <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:26px;max-width:760px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><span style="font-size:13px;color:#9aa093">Total parked </span><span class="num" style="font-size:20px;font-weight:800">{{ fundsTotal }}</span></div>
+          <div style="font-size:12.5px;color:#9aa093">notes auto-calculate from target, saved &amp; date</div>
+        </div>
+        <div style="margin-top:16px;border:1px dashed #d4cdbf;border-radius:14px;padding:18px;background:#faf8f3">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px">+ New fund or goal</div>
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:11px">
+            <label><span style="font-size:11px;color:#9aa093;font-weight:600">NAME</span>
+              <input value="{{ fName }}" onInput="{{ onFName }}" placeholder="e.g. Vacation" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:9px;padding:9px 11px;font-size:13.5px"></label>
+            <label><span style="font-size:11px;color:#9aa093;font-weight:600">TARGET $</span>
+              <input class="num" value="{{ fTarget }}" onInput="{{ onFTarget }}" placeholder="0" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:9px;padding:9px 11px;font-size:13.5px"></label>
+            <label><span style="font-size:11px;color:#9aa093;font-weight:600">SAVED $</span>
+              <input class="num" value="{{ fBal }}" onInput="{{ onFBal }}" placeholder="0" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:9px;padding:9px 11px;font-size:13.5px"></label>
+          </div>
+          <div style="display:grid;grid-template-columns:1.4fr 1fr auto;gap:11px;margin-top:11px;align-items:end">
+            <label><span style="font-size:11px;color:#9aa093;font-weight:600">TARGET DATE <span style="color:#bcb6a8">· blank = sinking fund</span></span>
+              <input value="{{ fDate }}" onInput="{{ onFDate }}" placeholder="Aug 2027" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:9px;padding:9px 11px;font-size:13.5px"></label>
+            <label><span style="font-size:11px;color:#9aa093;font-weight:600">$ / MONTH</span>
+              <input class="num" value="{{ fMonthly }}" onInput="{{ onFMonthly }}" placeholder="0" style="width:100%;margin-top:4px;border:1px solid #ddd7ca;border-radius:9px;padding:9px 11px;font-size:13.5px"></label>
+            <button onClick="{{ addFund }}" style="background:{{ accent }};color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13.5px;cursor:pointer;height:39px">+ Add</button>
+          </div>
+        </div>
+        <div style="margin-top:18px;display:flex;flex-direction:column;gap:20px">
+          <sc-for list="{{ funds }}" as="f" hint-placeholder-count="5">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline">
+                <div style="font-size:14.5px;font-weight:700">{{ f.name }} <span style="font-size:11.5px;font-weight:500;color:#9aa093">· {{ f.meta }}</span></div>
+                <div class="num" style="font-size:13.5px;font-weight:600">{{ f.amount }}</div>
+              </div>
+              <div style="height:9px;background:#eef0ea;border-radius:6px;margin-top:8px;overflow:hidden"><div style="{{ f.barStyle }}"></div></div>
+              <div style="font-size:11.5px;color:{{ f.noteColor }};margin-top:5px">{{ f.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ====================== GUARDRAILS ====================== -->
+      <sc-if value="{{ vGuard }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:860px">
+        <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:26px">
+          <div style="display:flex;gap:24px;flex-wrap:wrap">
+            <div><div style="font-size:11px;color:#9aa093;font-weight:600">INVESTABLE PORTFOLIO</div><div class="num" style="font-size:26px;font-weight:800">{{ gPortfolio }}</div></div>
+            <div><div style="font-size:11px;color:#9aa093;font-weight:600">PLANNED SPEND</div><div class="num" style="font-size:26px;font-weight:800">{{ spendLabel }}</div></div>
+            <div><div style="font-size:11px;color:#9aa093;font-weight:600">WITHDRAWAL RATE</div><div class="num" style="font-size:26px;font-weight:800;color:{{ gColor }}">{{ gRate }}</div></div>
+            <div style="margin-left:auto;align-self:center;font-size:11.5px;color:#9aa093;text-align:right">Guyton-Klinger ±20%<br>4% ceiling {{ ceiling }}</div>
+          </div>
+
+          <div style="margin-top:26px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#9aa093;font-weight:600"><span>CUT 10%</span><span>HOLD</span><span>RAISE 10%</span></div>
+            <div style="height:30px;border-radius:9px;margin-top:7px;display:flex;overflow:hidden;position:relative;border:1px solid #e9e4da">
+              <div style="flex:1;background:#f0ddd8;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#b5524a">&gt;{{ gUpper }}</div>
+              <div style="flex:2;background:#e3efe8"></div>
+              <div style="flex:1;background:#f4ead5;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#a9772f">&lt;{{ gLower }}</div>
+              <div style="{{ gMarkerBigStyle }}"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#9aa093;margin-top:5px"><span>upper guardrail {{ gUpper }}</span><span>lower guardrail {{ gLower }}</span></div>
+          </div>
+
+          <div style="margin-top:22px;border:1px solid {{ gColor }};background:{{ gSoft }};border-radius:13px;padding:18px">
+            <div style="font-size:18px;font-weight:800;color:{{ gColor }}">{{ gBigMsg }}</div>
+            <div style="font-size:12.5px;color:#3a473f;margin-top:5px">{{ gBigSub }}</div>
+          </div>
+
+          <div style="margin-top:20px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#757a70"><span>Drag to test a spend level</span><span class="num" style="font-weight:700;color:#1f2421">{{ spendLabel }}/yr</span></div>
+            <input type="range" min="55000" max="160000" step="1000" value="{{ spendRaw }}" onInput="{{ onSpend }}" style="width:100%;margin-top:8px">
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;font-size:12.5px">
+            <div style="background:#f4ead5;border-radius:11px;padding:13px"><b>Raise trigger</b><br>If portfolio rises to <b class="num">{{ raiseLevel }}</b> → raise spend ~10%.</div>
+            <div style="background:#f0ddd8;border-radius:11px;padding:13px"><b>Cut trigger</b><br>If portfolio falls to <b class="num">{{ cutLevel }}</b> → cut spend ~10%.</div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ====================== SOURCING ====================== -->
+      <sc-if value="{{ vSource }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:980px;display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+        <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:24px">
+          <div style="font-size:14px;font-weight:700">Sequencing — solve for net delivered</div>
+          <div style="display:flex;flex-direction:column;gap:9px;margin-top:14px;font-size:13px">
+            <div style="border:1px solid #e9e4da;border-radius:11px;padding:13px;display:flex;justify-content:space-between"><span>1 · Target net spend</span><b class="num">{{ spendLabel }}</b></div>
+            <div style="border:1px solid #e9e4da;border-radius:11px;padding:13px;display:flex;justify-content:space-between;color:#b5524a"><span>2 · − Non-portfolio income</span><b class="num">−$8,000</b></div>
+            <div style="background:#f6f3ee;border-radius:11px;padding:13px;display:flex;justify-content:space-between"><span>3 · = Gap from portfolio</span><b class="num">{{ srcGap }}</b></div>
+            <div style="border:1px solid #2f8f6b;background:#e8f2ec;border-radius:11px;padding:13px"><div style="display:flex;justify-content:space-between"><span>① ETH — harvest at 0% LTCG</span><b class="num">sell {{ srcEthSell }}</b></div><div style="font-size:11.5px;color:#3a473f;margin-top:5px">within {{ ethHeadroom }} headroom · grossed up for CA</div></div>
+            <div style="border:1px solid #e9e4da;border-radius:11px;padding:11px 13px;display:flex;justify-content:space-between;color:#9aa093"><span>② Brokerage</span><b>$0 this yr</b></div>
+            <div style="border:1px solid #e9e4da;border-radius:11px;padding:11px 13px;display:flex;justify-content:space-between;color:#9aa093"><span>③ 401(k) · 59½ gate</span><b>$0 this yr</b></div>
+            <div style="background:#16241d;color:#fff;border-radius:11px;padding:13px;display:flex;justify-content:space-between"><span>✓ Net delivered</span><b class="num">{{ spendLabel }}</b></div>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:24px">
+          <div style="font-size:14px;font-weight:700">Bucket rules</div>
+          <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px;font-size:12.5px">
+            <div style="border:1px solid #e9e4da;border-radius:11px;padding:13px"><div style="display:flex;justify-content:space-between;font-weight:700"><span>① ETH</span><span style="color:#9aa093;font-weight:500">LTCG · basis ~$7/coin</span></div><div style="color:#5b6058;margin-top:4px">Harvest up to the 0% LTCG ceiling. Drawn first to unwind concentration.</div></div>
+            <div style="border:1px solid #e9e4da;border-radius:11px;padding:13px"><div style="display:flex;justify-content:space-between;font-weight:700"><span>② Brokerage</span><span style="color:#9aa093;font-weight:500">LTCG on gain only</span></div><div style="color:#5b6058;margin-top:4px">Lot-level basis. Throws off dividends/VGSH interest taxed yearly.</div></div>
+            <div style="border:1px solid #e9e4da;border-radius:11px;padding:13px"><div style="display:flex;justify-content:space-between;font-weight:700"><span>③ 401(k) / Roth</span><span style="color:#9aa093;font-weight:500">ordinary / tax-free</span></div><div style="color:#5b6058;margin-top:4px">Under 59½ → 10% penalty unless Roth-ladder / 72(t). Drawn last.</div></div>
+          </div>
+          <div style="margin-top:14px;border:1px dashed #c1574d;background:#f9ece9;border-radius:11px;padding:12px;font-size:12px;color:#b5524a"><b>Engine rule:</b> never 0.04 × balance per bucket. Solve for net spendable; gross varies by tax cost.</div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ====================== FORECAST ====================== -->
+      <sc-if value="{{ vForecast }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:1000px">
+        <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px">
+          <div style="border:1px solid {{ runColor }};background:{{ runSoft }};border-radius:18px;padding:24px">
+            <div style="font-size:11px;letter-spacing:1.2px;color:#9aa093;font-weight:600">AT {{ spendLabel }} / YEAR</div>
+            <div style="font-size:34px;font-weight:800;color:{{ runColor }};margin-top:4px;line-height:1.05">{{ runHeadline }}</div>
+            <div class="num" style="font-size:13.5px;color:#3a473f;margin-top:8px">Projected <b>{{ balAt90 }}</b> at age 90 <span style="color:#9aa093">(today's dollars)</span></div>
+          </div>
+          <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:24px;display:flex;flex-direction:column;justify-content:center">
+            <div style="font-size:11px;color:#9aa093;font-weight:600">BRIDGE TO 401(k) @ 59½</div>
+            <div style="font-size:13.5px;margin-top:7px">Need to cover <b>21.5 yrs</b></div>
+            <div style="font-size:13.5px;color:{{ bridgeColor }}">Taxable buckets last <b>{{ bridgeYears }}</b> {{ bridgeMark }}</div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:24px;margin-top:20px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:26px">Balance by bucket · age 38 → 95</div>
+          <div style="position:relative;height:200px;border-bottom:1px solid #d9d4c9;display:flex;gap:8px;align-items:flex-end">
+            <sc-for list="{{ chartCols }}" as="c" hint-placeholder-count="12">
+              <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:0">
+                <div style="{{ c.ethStyle }}"></div><div style="{{ c.brkStyle }}"></div><div style="{{ c.retStyle }}"></div><div style="{{ c.ssStyle }}"></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <sc-for list="{{ chartCols }}" as="c" hint-placeholder-count="12"><div style="flex:1;text-align:center;font-size:10px;color:#9aa093">{{ c.age }}</div></sc-for>
+          </div>
+          <div style="display:flex;gap:18px;margin-top:14px;font-size:11.5px;color:#5b6058">
+            <span><span style="display:inline-block;width:11px;height:11px;background:#2f8f6b;border-radius:2px;vertical-align:-1px"></span> ETH (first)</span>
+            <span><span style="display:inline-block;width:11px;height:11px;background:#16241d;border-radius:2px;vertical-align:-1px"></span> Taxable brokerage</span>
+            <span><span style="display:inline-block;width:11px;height:11px;background:#c79049;border-radius:2px;vertical-align:-1px"></span> 401(k) · locked to 59½</span>
+            <span><span style="display:inline-block;width:11px;height:11px;background:#5f86ad;border-radius:2px;vertical-align:-1px"></span> Soc. Security · spent first from 67</span>
+          </div>
+          <div style="font-size:10.5px;color:#bcb6a8;margin-top:6px">Social Security is income, not a balance — its sliver is enlarged to stay visible.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:20px;margin-top:20px;align-items:start">
+          <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;overflow:hidden">
+            <div style="padding:16px 20px;font-size:14px;font-weight:700;border-bottom:1px solid #f0ece3">How much could we spend?</div>
+            <sc-for list="{{ sensitivity }}" as="s" hint-placeholder-count="4">
+              <div style="{{ s.rowStyle }}">
+                <div class="num" style="font-weight:700;width:90px">{{ s.spend }}</div>
+                <div class="num" style="flex:1;color:#5b6058">{{ s.lasts }}</div>
+                <div style="font-size:12.5px;color:{{ s.color }};font-weight:600">{{ s.outcome }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:22px">
+            <div style="font-size:13px;font-weight:700">Assumptions</div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#757a70;margin-top:14px"><span>Spend / yr</span><span class="num" style="font-weight:700;color:#1f2421">{{ spendLabel }}</span></div>
+            <input type="range" min="55000" max="160000" step="1000" value="{{ spendRaw }}" onInput="{{ onSpend }}" style="width:100%;margin-top:6px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#757a70;margin-top:14px"><span>Return</span><span class="num" style="font-weight:700;color:#1f2421">{{ retLabel }}</span></div>
+            <input type="range" min="3" max="11" step="0.5" value="{{ retRaw }}" onInput="{{ onRet }}" style="width:100%;margin-top:6px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#757a70;margin-top:14px"><span>Inflation</span><span class="num" style="font-weight:700;color:#1f2421">{{ inflLabel }}</span></div>
+            <input type="range" min="1" max="6" step="0.5" value="{{ inflRaw }}" onInput="{{ onInfl }}" style="width:100%;margin-top:6px">
+            <div style="margin-top:16px;padding-top:14px;border-top:1px solid #f0ece3">
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:#757a70"><span>Social Security <span style="color:#bcb6a8">· today's $</span></span><span class="num" style="font-weight:700;color:{{ accent }}">{{ ssAnnualLabel }}/yr</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">
+                <label><span style="font-size:10px;color:#9aa093;font-weight:600">YOU $/MO</span>
+                  <input class="num" value="{{ ssYouV }}" onInput="{{ onSsYou }}" style="width:100%;margin-top:3px;border:1px solid #ddd7ca;border-radius:8px;padding:8px 9px;font-size:13px"></label>
+                <label><span style="font-size:10px;color:#9aa093;font-weight:600">LIZA $/MO</span>
+                  <input class="num" value="{{ ssWifeV }}" onInput="{{ onSsWife }}" style="width:100%;margin-top:3px;border:1px solid #ddd7ca;border-radius:8px;padding:8px 9px;font-size:13px"></label>
+                <label><span style="font-size:10px;color:#9aa093;font-weight:600">FROM AGE</span>
+                  <input class="num" value="{{ ssStartV }}" onInput="{{ onSsStart }}" style="width:100%;margin-top:3px;border:1px solid #ddd7ca;border-radius:8px;padding:8px 9px;font-size:13px"></label>
+              </div>
+            </div>
+            <div style="font-size:11px;color:#9aa093;margin-top:14px">Real return {{ realLabel }} · ETH spent first · SS {{ ssAnnualLabel }}/yr cuts the portfolio draw from age {{ ssStartV }}.</div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ====================== SETTINGS ====================== -->
+      <sc-if value="{{ vSettings }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:880px;display:flex;flex-direction:column;gap:20px">
+        <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:24px">
+          <div style="font-size:14px;font-weight:700">Accounts &amp; buckets</div>
+          <div style="margin-top:14px;display:flex;flex-direction:column">
+            <sc-for list="{{ accountsList }}" as="a" hint-placeholder-count="8">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #f4f1e9;font-size:13px">
+                <div><span style="font-weight:600">{{ a.name }}</span> <span style="color:#9aa093;font-size:11.5px">· {{ a.tag }}</span></div>
+                <div class="num" style="font-weight:700;color:{{ a.color }}">{{ a.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:22px">
+            <div style="font-size:13px;font-weight:700">Assumptions</div>
+            <div style="font-size:12.5px;color:#5b6058;margin-top:12px;line-height:2">Return <b class="num">{{ retLabel }}</b><br>Inflation <b class="num">{{ inflLabel }}</b><br>ETH growth <b class="num">7.0%</b> <span style="color:#9aa093">· refined from tracking</span></div>
+          </div>
+          <div style="background:#fff;border:1px solid #e9e4da;border-radius:18px;padding:22px">
+            <div style="font-size:13px;font-weight:700">Social Security <span style="color:#9aa093;font-weight:500;font-size:11.5px">· editable, dated</span></div>
+            <div style="font-size:12.5px;color:#5b6058;margin-top:12px;line-height:2">You — from {{ ssStartV }} · <b class="num">{{ ssYouLabel }}/mo</b><br>Spouse — from {{ ssStartV }} · <b class="num">{{ ssWifeLabel }}/mo</b><br><span style="color:#9aa093">edit on the Forecast screen</span></div>
+          </div>
+        </div>
+        <div style="background:#16241d;color:#cdd6cf;border-radius:18px;padding:22px">
+          <div style="font-size:13px;font-weight:700;color:#fff">Data model · append-only</div>
+          <div style="font-size:12px;color:#9fb3a8;margin-top:8px;line-height:1.6">Never UPDATE a balance — INSERT a dated row. Every fact is effective-dated; reports use the latest row per month. The full <b style="color:#cdd6cf">schema.sql</b> ships alongside this prototype for your LAN database &amp; AI agent.</div>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1180,&quot;height&quot;:820},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#2f8f6b&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;}}">
+class Component extends DCLogic {
+  state = {
+    view: 'dashboard',
+    spend: 45000, ret: 7, infl: 3,
+    ethQty: 20, ethPrice: 3500,
+    vfiax: 700000, vtiax: 250000, vgsh: 130000, retire: 350000,
+    home: 350000, chase: 9000, cashPlus: 20000, car: 15000, mortgage: -150000,
+    janNW: 1650000,
+    ssYou: 1500, ssWife: 1400, ssStart: 67,
+    cats: [
+      {key:'groceries', emoji:'🛒', name:'Groceries', planned:500, spent:387},
+      {key:'gas', emoji:'🛢️', name:'Gas', planned:100, spent:64},
+      {key:'ent', emoji:'🤪', name:'Entertainment', planned:500, spent:528},
+      {key:'vices', emoji:'🍻', name:'Vices', planned:250, spent:96},
+      {key:'consum', emoji:'💵', name:'Consumerism', planned:800, spent:455},
+      {key:'travel', emoji:'✈️', name:'Travel', planned:100, spent:0},
+    ],
+    funds: [
+      {name:'Emergency fund',   kind:'sinking', date:null,       target:30000, bal:10000, monthly:500},
+      {name:'House maintenance',kind:'sinking', date:null,       target:30000, bal:15000, monthly:180},
+      {name:'1st-year fund',    kind:'sinking', date:null,       target:26000, bal:26000, monthly:2166},
+      {name:'Pool fund',        kind:'goal',    date:'Aug 2027', target:14000, bal:5000,  monthly:0},
+      {name:'Bike fund',        kind:'goal',    date:'Jul 2026', target:10000, bal:10000, monthly:0},
+    ],
+    activity: [
+      {icon:'🍣', iconBg:'#f6e3df', title:'Poke — treat yourself', sub:'Entertainment · Jun 26', amount:'−$28.40', amtColor:'#c1574d'},
+      {icon:'💵', iconBg:'#e8f2ec', title:'Spouse paycheck', sub:'Funds July · Jun 27', amount:'+$2,400', amtColor:'#2f8f6b'},
+      {icon:'🛒', iconBg:'#f3efe6', title:'Costco', sub:'Groceries · Jun 24', amount:'−$132.18', amtColor:'#1f2421'},
+      {icon:'⚡', iconBg:'#f3efe6', title:'Electric — PG&E', sub:'Fixed bill · Jun 22', amount:'−$118.21', amtColor:'#1f2421'},
+    ],
+    // forms
+    sAmt:'', sCat:'groceries', sFund:'discretionary',
+    iAmt:'', iSrc:'💵 Spouse paycheck', iMonth:'Jul 2026',
+    fName:'', fTarget:'', fBal:'', fDate:'', fMonthly:'',
+  };
+
+  get accent(){ return this.props.accent || '#2f8f6b'; }
+  fmt(n){ return '$' + Math.round(n).toLocaleString('en-US'); }
+  fmtM(n){ const m = n/1000000; return '$' + (m>=10 ? m.toFixed(1) : m.toFixed(2)) + 'M'; }
+
+  ethUsdVal(){ return this.state.ethQty * this.state.ethPrice; }
+  brokerageTotal(){ const s=this.state; return s.vfiax + s.vtiax + s.vgsh; }
+  investable(){ const s=this.state; return this.ethUsdVal() + this.brokerageTotal() + s.retire; }
+  netWorthVal(){ const s=this.state; return this.ethUsdVal()+this.brokerageTotal()+s.retire+s.home+s.chase+s.cashPlus+s.car+s.mortgage; }
+
+  // ---- longevity simulation (today's dollars) ----
+  simulate(spend, ret, infl){
+    const real = (ret - infl)/100;
+    let eth=this.ethUsdVal(), brk=this.brokerageTotal(), r401=this.state.retire;
+    const series=[]; let runout=null;
+    for(let age=38; age<=95; age++){
+      eth*=1+real; brk*=1+real; r401*=1+real;
+      if(eth<0)eth=0; if(brk<0)brk=0; if(r401<0)r401=0;
+      series.push({age, eth, brk, ret:r401});
+      const ss = age>=this.state.ssStart ? (this.state.ssYou + this.state.ssWife)*12 : 0;
+      const staking = eth>50000 ? 3000 : 0;
+      let need = spend - ss - staking; if(need<0) need=0;
+      let t=Math.min(eth,need); eth-=t; need-=t;
+      if(need>0){ t=Math.min(brk,need); brk-=t; need-=t; }
+      if(need>0 && age>=60){ t=Math.min(r401,need); r401-=t; need-=t; }
+      if(need>0 && runout===null) runout=age;
+    }
+    const at90 = series.find(p=>p.age===90);
+    const bal90 = at90 ? at90.eth+at90.brk+at90.ret : 0;
+    return {series, runout, bal90};
+  }
+
+  renderVals(){
+    const s=this.state, A=this.accent;
+    const setV = v => () => this.setState({view:v});
+    const navStyle = (v) => {
+      const on = s.view===v;
+      return `display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:10px;font-size:13.5px;cursor:pointer;font-weight:${on?'600':'500'};color:${on?'#fff':'#9fb3a8'};background:${on?'#26433461':'transparent'};border-left:3px solid ${on?A:'transparent'}`;
+    };
+    const N = (v,icon,label) => ({onClick:setV(v), style:navStyle(v), icon, label});
+
+    // net worth + yoy
+    const nw = this.netWorthVal();
+    const yoy = (nw/s.janNW - 1)*100;
+
+    // safe to spend
+    // Fixed discretionary baseline = $2,438 free + seed spent (387+64+528+96+455+0 = 1530).
+    // Must NOT be recomputed from live s.cats or it cancels and STS never moves.
+    const DISC_BASE = 3968;
+    const s0 = s.cats.reduce((a,c)=>a+c.spent,0);
+    const sts = DISC_BASE - s0;
+    const stsPct = Math.max(0, Math.min(100, sts/DISC_BASE*100));
+
+    // guardrails
+    const port = this.investable();
+    const rate = s.spend/port;
+    const initRate = 0.0294;
+    const upper = initRate*1.2, lower = initRate*0.8;
+    let gColor, gSoft, gStatus, gBigMsg, gBigSub;
+    if(rate>upper){ gColor='#c1574d'; gSoft='#f9ece9'; gStatus='Cut ~10%'; gBigMsg='Trim spending ~10%'; gBigSub='Your rate is above the upper guardrail — the capital-preservation rule kicks in.'; }
+    else if(rate<lower){ gColor=A; gSoft='#e8f2ec'; gStatus='Room to raise'; gBigMsg='You can raise spending ~10%'; gBigSub='Your rate is below the lower guardrail — the prosperity rule says you have room.'; }
+    else { gColor=A; gSoft='#e8f2ec'; gStatus='Hold steady'; gBigMsg='Hold steady — keep spending '+this.fmt(s.spend); gBigSub="You're inside both guardrails. No change recommended."; }
+    const scaleLo=0.020, scaleHi=0.045;
+    const markerPct = Math.max(2, Math.min(98, (rate-scaleLo)/(scaleHi-scaleLo)*100));
+
+    // sim
+    const sim = this.simulate(s.spend, s.ret, s.infl);
+    const real = (s.ret - s.infl);
+    const runHeadline = sim.runout ? ('Lasts to age '+(sim.runout-1)) : "You don't run out.";
+    const runColor = sim.runout && sim.runout<90 ? '#c1574d' : A;
+    const runSoft = sim.runout && sim.runout<90 ? '#f9ece9' : '#e8f2ec';
+
+    // chart
+    const ages=[38,43,48,53,58,63,68,73,78,83,88,93];
+    let maxT=0;
+    const picks = ages.map(a=>{ const p=sim.series.find(x=>x.age===a)||{eth:0,brk:0,ret:0}; const tot=p.eth+p.brk+p.ret; if(tot>maxT)maxT=tot; return {a,p,tot}; });
+    if(maxT<=0)maxT=1;
+    const H=190;
+    const ssAnnual = (s.ssYou + s.ssWife)*12;
+    const chartCols = picks.map(({a,p})=>({
+      age:a,
+      ethStyle:`width:72%;height:${p.eth/maxT*H}px;background:#2f8f6b`,
+      brkStyle:`width:72%;height:${p.brk/maxT*H}px;background:#16241d`,
+      retStyle:`width:72%;height:${p.ret/maxT*H}px;background:#c79049`,
+      // SS income floor from start age — drawn before the portfolio. Enlarged to a
+      // visible sliver (true $25k against a multi-$M balance would be <1px).
+      ssStyle: a>=s.ssStart ? `width:72%;height:${Math.max(7, ssAnnual/maxT*H)}px;background:#5f86ad` : `width:72%;height:0px`,
+    }));
+
+    // sensitivity
+    const sens = [45000,60000,80000,100000].map((sp,i)=>{
+      const r=this.simulate(sp, s.ret, s.infl);
+      let lasts, color, outcome;
+      if(!r.runout){ lasts='never runs out'; color=A; outcome='✓ '+this.fmtM(r.bal90)+' @ 90'; }
+      else if(r.runout>=90){ lasts='to age '+(r.runout-1); color='#a9772f'; outcome='tight'; }
+      else { lasts='to age '+(r.runout-1); color='#c1574d'; outcome='⚠ runs out'; }
+      const cur = sp===s.spend;
+      return {spend:this.fmt(sp), lasts, color, outcome,
+        rowStyle:`display:flex;align-items:center;gap:14px;padding:13px 20px;border-bottom:1px solid #f4f1e9;${cur?'background:#f3f6f3':''}`};
+    });
+
+    // bridge
+    const bridgeSim = this.simulate(s.spend, s.ret, s.infl);
+    let bridgeBroke=null;
+    for(const p of bridgeSim.series){ if(p.age<60 && (p.eth+p.brk)<=0){ bridgeBroke=p.age; break; } }
+    const bridgeYears = bridgeBroke ? (bridgeBroke-38)+' yrs' : '31+ yrs';
+    const bridgeOk = !bridgeBroke;
+
+    // funds
+    const fundsTotalN = s.funds.reduce((a,f)=>a+f.bal,0);
+    // Description is DERIVED from the fund's own numbers — never a hand-typed string.
+    const monthIdx = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+    const fundNote = (f) => {
+      const remaining = Math.max(0, f.target - f.bal);
+      if(remaining<=0) return '✓ fully funded — ready to spend';
+      if(f.kind==='goal' && f.date){
+        const mk=String(f.date).toLowerCase().slice(0,3);
+        const yr=parseInt(String(f.date).replace(/[^0-9]/g,''))||2026;
+        const ml=(monthIdx[mk]!==undefined)?((yr-2026)*12+(monthIdx[mk]-5)):0;
+        if(ml>0) return 'needs '+this.fmt(remaining/ml)+' / mo to finish by '+f.date;
+        return this.fmt(remaining)+' left · '+f.date;
+      }
+      if(f.monthly>0){
+        const yrs=remaining/f.monthly/12;
+        const lab=yrs>=1?('~'+yrs.toFixed(1)+' yrs'):('~'+Math.ceil(remaining/f.monthly)+' mo');
+        return this.fmt(f.monthly)+' / mo · '+lab+' to target';
+      }
+      return this.fmt(remaining)+' to target · add a monthly plan';
+    };
+    const funds = s.funds.map(f=>{
+      const done = f.bal>=f.target;
+      const pct=Math.min(100, f.bal/f.target*100);
+      const meta = f.kind==='goal' ? ('goal · '+(f.date||'—')) : 'sinking · no date';
+      const col = done ? A : '#16241d';
+      return {name:f.name, meta, amount:this.fmt(f.bal)+' / '+this.fmt(f.target),
+        barStyle:`width:${pct}%;height:100%;background:${col};border-radius:6px`,
+        note:fundNote(f), noteColor:done?A:'#9aa093'};
+    });
+    const fundsMini = s.funds.slice(0,3).map(f=>({name:f.name, pctLabel:Math.round(f.bal/f.target*100)+'%'}));
+
+    // envelopes
+    const envelopes = s.cats.map(c=>{
+      const over=c.spent>c.planned;
+      const pct=Math.min(100, c.spent/c.planned*100);
+      const left=c.planned-c.spent;
+      return {emoji:c.emoji, name:c.name,
+        right: over ? ('$'+Math.abs(left).toFixed(0)+' over') : ('$'+c.spent.toFixed(0)+' · $'+left.toFixed(0)+' left'),
+        rightColor: over?'#c1574d':'#5b6058',
+        barStyle:`width:${pct}%;height:100%;background:${over?'#c1574d':A};border-radius:5px`};
+    });
+    const catOptions = s.cats.map(c=>({key:c.key, label:c.emoji+' '+c.name}));
+
+    // ledger rows (sample history, current row from live state)
+    const liveRow = {date:'Jun 1, 2026', eth:this.fmt(this.ethUsdVal()), vfiax:this.fmt(s.vfiax), vtiax:this.fmt(s.vtiax), vgsh:this.fmt(s.vgsh), retire:this.fmt(s.retire), home:this.fmt(s.home), cash:this.fmt(s.chase+s.cashPlus), mortgage:this.fmt(s.mortgage), networth:this.fmt(nw), rowStyle:'background:#f3f6f3;border-bottom:1px solid #f0ece3;font-weight:600'};
+    const hist = [
+      ['May 1, 2026',68000,690000,246000,128000,345000,349000,27000,-150700],
+      ['Apr 1, 2026',66000,682000,243000,127000,341000,348000,29000,-151400],
+      ['Mar 1, 2026',64000,675000,240000,126000,337000,347000,26000,-152100],
+      ['Feb 1, 2026',62000,666000,236000,125000,333000,346000,28000,-152800],
+      ['Jan 1, 2026',60000,655000,232000,124000,329000,345000,26500,-153500],
+    ].map(r=>{ const n=r[1]+r[2]+r[3]+r[4]+r[5]+r[6]+r[7]+r[8]; return {date:r[0],eth:this.fmt(r[1]),vfiax:this.fmt(r[2]),vtiax:this.fmt(r[3]),vgsh:this.fmt(r[4]),retire:this.fmt(r[5]),home:this.fmt(r[6]),cash:this.fmt(r[7]),mortgage:this.fmt(r[8]),networth:this.fmt(n),rowStyle:'border-bottom:1px solid #f4f1e9;color:#5b6058'};});
+    const ledgerRows=[liveRow,...hist];
+
+    // sparkline
+    const spk=[688,700,712,724,731,744,756,763,790,815,3326/3.6*100/100*0,0];
+    const sparkVals=[2.98,3.01,3.05,3.09,3.12,3.18,3.20,3.24,3.27,3.30,3.31,nw/1000000];
+    const smax=Math.max(...sparkVals);
+    const nwSpark=sparkVals.map(v=>({style:`flex:1;height:${v/smax*100}%;background:#2f8f6b66;border-radius:3px 3px 0 0`}));
+
+    // accounts list (settings)
+    const accountsList=[
+      {name:'Ethereum', tag:'eth · priority 1', value:this.fmt(this.ethUsdVal()), color:'#1f2421'},
+      {name:'VFIAX', tag:'taxable · US index', value:this.fmt(s.vfiax), color:'#1f2421'},
+      {name:'VTIAX', tag:'taxable · intl index', value:this.fmt(s.vtiax), color:'#1f2421'},
+      {name:'VGSH', tag:'taxable · short treasuries', value:this.fmt(s.vgsh), color:'#1f2421'},
+      {name:'Retirement', tag:'401k · HSA · locked 59½', value:this.fmt(s.retire), color:'#1f2421'},
+      {name:'Home', tag:'Zillow', value:this.fmt(s.home), color:'#1f2421'},
+      {name:'Chase checking', tag:'cash', value:this.fmt(s.chase), color:'#1f2421'},
+      {name:'Vanguard Cash Plus', tag:'cash_plus · HYSA', value:this.fmt(s.cashPlus), color:'#1f2421'},
+      {name:'Car', tag:'other', value:this.fmt(s.car), color:'#1f2421'},
+      {name:'Mortgage', tag:'liability', value:this.fmt(s.mortgage), color:'#c1574d'},
+    ];
+
+    // page titles
+    const titles={dashboard:['Overview','June 2026 · at a glance'],ledger:['Ledger entries','Rows in, never columns'],safe:['Safe-to-spend','What is free to spend right now'],funds:['Funds & goals','Sinking funds and dated goals'],guard:['Guardrails','How much can we spend? (Guyton-Klinger)'],source:['Withdrawal sourcing','Where the money comes from'],forecast:['Longevity forecast','Will we run out?'],settings:['Settings & data','Accounts, assumptions, schema']};
+    const tt=titles[s.view]||titles.dashboard;
+
+    // sourcing derived
+    const gap = s.spend - 8000;
+
+    return {
+      accent:A,
+      navTrack:[N('dashboard','◎','Dashboard'),N('ledger','▦','Ledger entries'),N('safe','◐','Safe-to-spend'),N('funds','◇','Funds & goals')],
+      navPlan:[N('guard','⚖','Guardrails'),N('source','⤵','Withdrawal sourcing'),N('forecast','✦','Longevity forecast')],
+      navSettings:[N('settings','⚙','Settings & data')],
+      vDashboard:s.view==='dashboard', vLedger:s.view==='ledger', vSafe:s.view==='safe', vFunds:s.view==='funds', vGuard:s.view==='guard', vSource:s.view==='source', vForecast:s.view==='forecast', vSettings:s.view==='settings',
+      goSafe:setV('safe'), goGuard:setV('guard'), goForecast:setV('forecast'), goFunds:setV('funds'),
+      pageTitle:tt[0], pageSub:tt[1],
+
+      netWorth:this.fmt(nw), yoyLabel:(yoy>=0?'▲ ':'▼ ')+Math.abs(yoy).toFixed(1)+'%', janLabel:this.fmt(s.janNW),
+      nwSpark,
+      safeToSpend:this.fmt(sts), stsBarStyle:`width:${stsPct}%;height:100%;background:${A}`, stsHint:'See the full breakdown',
+
+      gRate:(rate*100).toFixed(1)+'%', gColor, gSoft, gStatus,
+      gMarkerStyle:`position:absolute;left:${markerPct}%;top:-3px;width:2px;height:14px;background:#1f2421;transform:translateX(-1px)`,
+      gMarkerBigStyle:`position:absolute;left:${markerPct}%;top:-5px;width:3px;height:40px;background:#1f2421;transform:translateX(-1.5px)`,
+      gPortfolio:this.fmtM(port), gUpper:(upper*100).toFixed(1)+'%', gLower:(lower*100).toFixed(1)+'%',
+      gBigMsg, gBigSub, ceiling:this.fmt(port*0.04),
+      raiseLevel:this.fmtM(s.spend/lower), cutLevel:this.fmtM(s.spend/upper),
+
+      spendLabel:this.fmt(s.spend), spendRaw:s.spend, onSpend:e=>this.setState({spend:+e.target.value}),
+      retLabel:s.ret.toFixed(1)+'%', retRaw:s.ret, onRet:e=>this.setState({ret:+e.target.value}),
+      inflLabel:s.infl.toFixed(1)+'%', inflRaw:s.infl, onInfl:e=>this.setState({infl:+e.target.value}),
+      realLabel:real.toFixed(1)+'%',
+      ssYouV:s.ssYou, onSsYou:e=>this.setState({ssYou:+String(e.target.value).replace(/[^0-9.]/g,'')||0}),
+      ssWifeV:s.ssWife, onSsWife:e=>this.setState({ssWife:+String(e.target.value).replace(/[^0-9.]/g,'')||0}),
+      ssStartV:s.ssStart, onSsStart:e=>this.setState({ssStart:+String(e.target.value).replace(/[^0-9.]/g,'')||67}),
+      ssAnnualLabel:this.fmt((s.ssYou+s.ssWife)*12), ssYouLabel:this.fmt(s.ssYou), ssWifeLabel:this.fmt(s.ssWife),
+
+      runHeadline, runColor, runSoft, balAt90:this.fmtM(sim.bal90),
+      bridgeYears, bridgeColor:bridgeOk?A:'#c1574d', bridgeMark:bridgeOk?'✓':'⚠',
+      chartCols, sensitivity:sens,
+
+      fundsTotal:this.fmt(fundsTotalN), fundsCount:s.funds.length, funds, fundsMini,
+      fName:s.fName, onFName:e=>this.setState({fName:e.target.value}),
+      fTarget:s.fTarget, onFTarget:e=>this.setState({fTarget:e.target.value}),
+      fBal:s.fBal, onFBal:e=>this.setState({fBal:e.target.value}),
+      fDate:s.fDate, onFDate:e=>this.setState({fDate:e.target.value}),
+      fMonthly:s.fMonthly, onFMonthly:e=>this.setState({fMonthly:e.target.value}),
+      addFund:()=>{
+        const name=(s.fName||'').trim(); if(!name) return;
+        const target=parseFloat(String(s.fTarget).replace(/[^0-9.]/g,''))||0;
+        const bal=parseFloat(String(s.fBal).replace(/[^0-9.]/g,''))||0;
+        const monthly=parseFloat(String(s.fMonthly).replace(/[^0-9.]/g,''))||0;
+        const date=(s.fDate||'').trim();
+        const fund={name, kind:date?'goal':'sinking', date:date||null, target:Math.max(target, bal, 1), bal, monthly};
+        this.setState({funds:[...s.funds, fund], fName:'', fTarget:'', fBal:'', fDate:'', fMonthly:''});
+      },
+      envelopes, catOptions,
+
+      // safe-to-spend forms
+      sAmt:s.sAmt, onSAmt:e=>this.setState({sAmt:e.target.value}),
+      sCat:s.sCat, onSCat:e=>this.setState({sCat:e.target.value}),
+      sFund:s.sFund, onSFund:e=>this.setState({sFund:e.target.value}), sFundIsFund:s.sFund==='fund',
+      addSpend:()=>{ const amt=parseFloat(String(s.sAmt).replace(/[^0-9.]/g,'')); if(!amt) return;
+        const cats=s.cats.map(c=>c.key===s.sCat?{...c,spent:c.spent+amt}:c);
+        const cat=s.cats.find(c=>c.key===s.sCat);
+        const act=[{icon:cat.emoji,iconBg:'#f3efe6',title:cat.name,sub:'Added · Jun 26',amount:'−$'+amt.toFixed(2),amtColor:'#1f2421'},...s.activity].slice(0,5);
+        this.setState({cats, activity:act, sAmt:''}); },
+
+      iAmt:s.iAmt, onIAmt:e=>this.setState({iAmt:e.target.value}),
+      iSrc:s.iSrc, onISrc:e=>this.setState({iSrc:e.target.value}),
+      iMonth:s.iMonth, onIMonth:e=>this.setState({iMonth:e.target.value}),
+      addFunding:()=>{ const amt=parseFloat(String(s.iAmt).replace(/[^0-9.]/g,'')); if(!amt) return;
+        const act=[{icon:'💵',iconBg:'#e8f2ec',title:s.iSrc,sub:'Funds '+s.iMonth+' · Jun 26',amount:'+$'+amt.toFixed(2),amtColor:'#2f8f6b'},...s.activity].slice(0,5);
+        this.setState({activity:act, iAmt:''}); },
+
+      // ledger entry form
+      eVfiax:this.fmt(s.vfiax).replace('$',''), onVfiax:e=>this.setState({vfiax:+String(e.target.value).replace(/[^0-9.]/g,'')||0}),
+      eVtiax:this.fmt(s.vtiax).replace('$',''), onVtiax:e=>this.setState({vtiax:+String(e.target.value).replace(/[^0-9.]/g,'')||0}),
+      eVgsh:this.fmt(s.vgsh).replace('$',''), onVgsh:e=>this.setState({vgsh:+String(e.target.value).replace(/[^0-9.]/g,'')||0}),
+      eRetire:this.fmt(s.retire).replace('$',''), onRetire:e=>this.setState({retire:+String(e.target.value).replace(/[^0-9.]/g,'')||0}),
+      eEthQty:s.ethQty, onEthQty:e=>this.setState({ethQty:+String(e.target.value).replace(/[^0-9.]/g,'')||0}),
+      eEthPrice:s.ethPrice, onEthPrice:e=>this.setState({ethPrice:+String(e.target.value).replace(/[^0-9.]/g,'')||0}),
+      eEthPriceLabel:this.fmt(s.ethPrice), ethUsd:this.fmt(this.ethUsdVal()),
+      ledgerRows,
+
+      srcGap:this.fmt(gap>0?gap:0), srcEthSell:this.fmt((gap>0?gap:0)*1.09), ethHeadroom:'$79,000',
+
+      accountsList,
+    };
+  }
+}
+</script>
+</body>
+</html>
