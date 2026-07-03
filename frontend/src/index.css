@@ -9,29 +9,48 @@
   --color-card: #ffffff;
   --color-card-border: #e9e4da;
   --color-hairline: #f0ece3;
+  --color-hairline-2: #f4f1e9;
   --color-ink: #1f2421;
   --color-muted: #757a70;
   --color-muted-2: #9aa093;
   --color-faint: #bcb6a8;
   --color-input-border: #ddd7ca;
+  --color-track: #eef0ea;
 
   --color-sidebar: #16241d;
   --color-sidebar-text: #cdd6cf;
   --color-sidebar-muted: #9fb3a8;
+  --color-sidebar-muted-2: #7e948a;
+  --color-sidebar-muted-3: #5f7268;
+  /* Active nav item: apply at ~38% opacity, e.g. bg-sidebar-active/38. */
+  --color-sidebar-active: #264334;
 
   --color-accent: #2f8f6b;
   --color-hero-green: #5cc79b;
   --color-green-soft: #e8f2ec;
+  --color-green-soft-2: #e3efe8;
+  --color-green-soft-3: #f0f5f1;
 
   --color-amber: #c79049;
   --color-amber-text: #a9772f;
   --color-amber-soft: #f4ead5;
+  --color-amber-soft-2: #f8efdc;
+  --color-amber-soft-3: #faf4e8;
 
   --color-red: #c1574d;
   --color-red-text: #b5524a;
   --color-red-soft: #f9ece9;
+  --color-red-soft-2: #f0ddd8;
+  --color-red-soft-3: #f6e3df;
 
   --color-ss-blue: #5f86ad;
+
+  /* Surfaces are flat: 1px card-border outline, no drop shadows. */
+  --radius-card: 18px;
+  --radius-hero: 20px;
+  --radius-input: 10px;
+  --radius-pill: 20px;
+  --radius-tile: 9px;
 }
 
 /* All numeric values line up in columns (ledger, tables, hero numbers). */
