@@ -111,7 +111,7 @@ class TestSeedIsIdempotent:
         db.execute("INSERT INTO account (name, kind) VALUES ('My real checking', 'cash')")
         db.commit()
         assert seed(db) is False
-        assert table_counts(db) == {table: 0 for table in ALL_TABLES} | {"account": 1}
+        assert table_counts(db) == dict.fromkeys(ALL_TABLES, 0) | {"account": 1}
 
 
 class TestMain:
