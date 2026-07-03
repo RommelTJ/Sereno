@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.0.1**
+**v0.0.2**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -49,10 +49,76 @@ whole thing in plain SQL.
    happened), and config (each year's tax and forecast assumptions), so an agent can
    answer "what changed, and when?" straight from SQL.
 
+## Tech stack
+
+- **Backend** — [FastAPI](https://fastapi.tiangolo.com/) on Python 3.13, fully typed.
+  Tooling is all-[Astral](https://astral.sh/): [uv](https://docs.astral.sh/uv/) for
+  packaging, [ruff](https://docs.astral.sh/ruff/) for linting/formatting, and
+  [ty](https://docs.astral.sh/ty/) for type checking. Tests with pytest.
+- **Database** — SQLite, append-only schema (see
+  [docs/design/schema.sql](docs/design/schema.sql)), stored in a Docker volume.
+- **Frontend** — React 19 + [Vite](https://vite.dev/) + TypeScript (strict), styled
+  with [Tailwind CSS v4](https://tailwindcss.com/) using the design tokens from the
+  design handoff. Linted with [oxlint](https://oxc.rs/), tested with
+  [Vitest](https://vitest.dev/).
+- **CI** — GitHub Actions runs linters, type checkers, and tests for both halves on
+  every pull request ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
+## Project structure
+
+```
+backend/            FastAPI app (uv project)
+  src/sereno/
+    api/            HTTP routers
+    engine/         pure financial engines (guardrails, sourcing, forecast)
+    db/             SQLite access layer, migrations, seed
+  tests/            pytest suite
+frontend/           React + Vite + TypeScript app
+  src/              components, routes, Tailwind theme (src/index.css)
+docs/design/        design handoff, schema.sql, prototypes, screenshots
+compose.yaml        Docker Compose — dev servers and checks run through this
+```
+
+## Running with Docker
+
+Requires [Docker](https://www.docker.com/) with Compose. From the repository root:
+
+```sh
+docker compose up --build
+```
+
+- Frontend (Vite dev server): <http://localhost:5173>
+- Backend API: <http://localhost:8000/api/health> (interactive docs at
+  <http://localhost:8000/docs>)
+
+Both containers hot-reload when you edit source files. Stop with `Ctrl-C` or
+`docker compose down`.
+
+### Tests, linters, and type checkers
+
+Backend (ruff, ty, pytest):
+
+```sh
+docker compose run --rm backend uv run ruff check .
+docker compose run --rm backend uv run ruff format --check .
+docker compose run --rm backend uv run ty check
+docker compose run --rm backend uv run pytest
+```
+
+Frontend (oxlint, tsc, vitest):
+
+```sh
+docker compose run --rm --no-deps frontend npm run lint
+docker compose run --rm --no-deps frontend npm run typecheck
+docker compose run --rm --no-deps frontend npm test
+```
+
 ## Status
 
-v0.0.1 — project initialization. The data model and high-fidelity designs are complete;
-implementation is next, roughly in this order:
+v0.0.2 — scaffolding. The monorepo skeleton is in place: FastAPI backend with a typed
+health endpoint, React/Tailwind frontend shell wired to it, Docker Compose for dev and
+tests, and CI. The data model and high-fidelity designs are complete (see
+[docs/design](docs/design)); implementation is next, roughly in this order:
 
 1. Database schema and seed data
 2. App shell, navigation, and dashboard

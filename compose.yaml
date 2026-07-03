@@ -1,0 +1,27 @@
+services:
+  backend:
+    build: ./backend
+    command: uv run uvicorn sereno.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/tests:/app/tests
+      - sereno-data:/app/data
+
+  frontend:
+    build: ./frontend
+    environment:
+      SERENO_API_URL: http://backend:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # keep the image's node_modules; don't shadow it with the host's
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  # SQLite database lives here — survives container rebuilds
+  sereno-data:
