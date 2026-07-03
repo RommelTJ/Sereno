@@ -1,19 +1,70 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.tsx'
 
-describe('App', () => {
-  it('renders the shell and shows backend health', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        json: () => Promise.resolve({ status: 'ok', version: '0.0.3' }),
-      }),
-    )
+beforeEach(() => {
+  window.history.pushState({}, '', '/')
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ status: 'ok', version: '1.2.3' }),
+    }),
+  )
+})
 
+describe('App shell', () => {
+  it('renders the sidebar with the three nav groups', () => {
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'Sereno' })).toBeInTheDocument()
-    expect(await screen.findByText('ok · v0.0.3')).toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    expect(nav).toBeInTheDocument()
+    expect(screen.getByText('TRACK')).toBeInTheDocument()
+    expect(screen.getByText('PLAN')).toBeInTheDocument()
+    expect(screen.getByText('SETTINGS')).toBeInTheDocument()
+  })
+
+  it('renders a nav link for each of the eight views', () => {
+    render(<App />)
+
+    for (const label of [
+      'Dashboard',
+      'Ledger entries',
+      'Safe-to-spend',
+      'Funds & goals',
+      'Guardrails',
+      'Withdrawal sourcing',
+      'Longevity forecast',
+      'Settings & data',
+    ]) {
+      expect(screen.getByRole('link', { name: label })).toBeInTheDocument()
+    }
+  })
+
+  it('renders the sticky header with the page title and net-worth slot', () => {
+    render(<App />)
+
+    const header = screen.getByRole('banner')
+    expect(header).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Dashboard' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Net worth')).toBeInTheDocument()
+    expect(screen.getByText('$—')).toBeInTheDocument()
+  })
+
+  it('shows the current month in the sidebar footer chip', () => {
+    render(<App />)
+
+    const month = new Date().toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+    })
+    expect(screen.getByText(month)).toBeInTheDocument()
+  })
+
+  it('shows backend health on the dashboard stub', async () => {
+    render(<App />)
+
+    expect(await screen.findByText('ok · v1.2.3')).toBeInTheDocument()
   })
 })
