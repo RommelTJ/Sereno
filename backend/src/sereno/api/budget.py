@@ -252,8 +252,5 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         total_spent=total_spent,
         safe_to_spend=baseline - total_spent,
         categories=envelopes,
-        activity=[
-            ActivityItem(**{key: value for key, value in row.items() if key != "created_at"})
-            for row in merged
-        ],
+        activity=[ActivityItem.model_validate(row) for row in merged],
     )
