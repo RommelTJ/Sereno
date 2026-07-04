@@ -8,7 +8,7 @@ import sqlite3
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, NonNegativeFloat, PositiveFloat
 
 from sereno.db.connection import get_db
@@ -54,6 +54,21 @@ class FundCreate(BaseModel):
     monthly_plan: NonNegativeFloat | None = None
 
 
+class FundEntryCreate(BaseModel):
+    fund_id: int
+    as_of_date: date
+    balance: NonNegativeFloat
+    contribution: float = 0
+
+
+class FundEntry(BaseModel):
+    id: int
+    fund_id: int
+    as_of_date: date
+    balance: float
+    contribution: float
+
+
 _FUND_QUERY = (
     "SELECT id, name, kind, target_amount, target_date, monthly_plan,"
     " COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = fund.id"
@@ -84,3 +99,20 @@ def create_fund(fund: FundCreate, db: Db) -> Fund:
     db.commit()
     row = db.execute(_FUND_QUERY + " WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return _fund(row)
+
+
+@router.post("/fund-entries", status_code=201)
+def create_fund_entry(entry: FundEntryCreate, db: Db) -> FundEntry:
+    if db.execute("SELECT 1 FROM fund WHERE id = ?", (entry.fund_id,)).fetchone() is None:
+        raise HTTPException(status_code=404, detail="fund not found")
+    cursor = db.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution)"
+        " VALUES (?, ?, ?, ?)",
+        (entry.fund_id, entry.as_of_date.isoformat(), entry.balance, entry.contribution),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, fund_id, as_of_date, balance, contribution FROM fund_entry WHERE id = ?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    return FundEntry(**dict(row))
