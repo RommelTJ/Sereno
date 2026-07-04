@@ -52,6 +52,76 @@ export const NET_WORTH = {
   ],
 }
 
+// Exactly as GET /api/budget-month returns June 2026: baseline = the month's
+// stored funding, safe_to_spend = baseline − total_spent. Entertainment is
+// over budget; Travel has no plan yet (planned 0).
+export const BUDGET_MONTH = {
+  month: '2026-06',
+  baseline: 5_200,
+  total_spent: 1_530,
+  safe_to_spend: 3_670,
+  categories: [
+    {
+      id: 1,
+      name: 'Groceries',
+      emoji: '🛒',
+      planned: 500,
+      spent: 387,
+      remaining: 113,
+    },
+    { id: 2, name: 'Gas', emoji: '🛢️', planned: 100, spent: 64, remaining: 36 },
+    {
+      id: 3,
+      name: 'Entertainment',
+      emoji: '🤪',
+      planned: 500,
+      spent: 546,
+      remaining: -46,
+    },
+    { id: 4, name: 'Travel', emoji: '✈️', planned: 0, spent: 0, remaining: 0 },
+  ],
+  activity: [
+    {
+      type: 'expense',
+      id: 3,
+      txn_date: '2026-06-10',
+      amount: 387,
+      category: 'Groceries',
+      source: null,
+      note: null,
+    },
+    {
+      type: 'income',
+      id: 2,
+      txn_date: '2026-05-27',
+      amount: 2_400,
+      category: null,
+      source: 'paycheck',
+      note: 'Spouse paycheck',
+    },
+  ],
+}
+
+// Active fund dimension rows, exactly as GET /api/funds returns them.
+export const FUNDS = [
+  {
+    id: 1,
+    name: 'Emergency fund',
+    kind: 'sinking',
+    target_amount: 30_000,
+    target_date: null,
+    monthly_plan: 500,
+  },
+  {
+    id: 2,
+    name: 'Bike fund',
+    kind: 'goal',
+    target_amount: 10_000,
+    target_date: '2026-07-01',
+    monthly_plan: null,
+  },
+]
+
 export const balance = (
   account_id: number,
   as_of_date: string,

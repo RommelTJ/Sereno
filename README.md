@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.7.0**
+**v0.8.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -147,6 +147,9 @@ The budget slice:
   the baseline is the month's stored funding — never recomputed from live
   spend), and the recent-activity list (spending and funding merged, newest
   first).
+- `GET /api/funds` — the active fund dimension rows (sinking funds and
+  goals: name, kind, target amount, target date, monthly plan). Read-only
+  for now — the Funds & goals slice adds latest balances and creation.
 
 ### Screens
 
@@ -157,7 +160,7 @@ The budget slice:
   Safe-to-spend, Spend guardrail, Longevity, and Funds & goals cards are
   static placeholders with the design handoff's illustrative numbers — each
   deep-links to its view and gets real data with its own feature slice — and
-  Recent activity is scaffolded empty until the Safe-to-spend slice lands.
+  Recent activity is scaffolded empty until the Dashboard v2 slice lands.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
   table (one row per month, newest first, current month highlighted; the two
   cash accounts share one column and the mortgage shows as a negative figure)
@@ -168,6 +171,20 @@ The budget slice:
   `POST /api/balance-entries` — the latest entry in a month wins and earlier
   rows are kept as history — then the table and the header net-worth readout
   refresh from the API.
+- **Safe-to-spend** (<http://localhost:5173/safe-to-spend>) — the daily-use
+  view. The dark hero shows the month's Safe-to-spend headline from
+  `GET /api/budget-month` (stored funding baseline − total spent) with the
+  "total cash − bills due − money in funds" formula pill, above the monthly
+  envelopes card: one progress bar per category, "spent · left" while under
+  budget, "$X over" in red once over — overspending is allowed and simply
+  trims the headline. Beside them, "Add a spending item" (amount, category,
+  and funded-from: the month's discretionary budget or any active fund via
+  `GET /api/funds`; choosing a fund reveals the matching
+  Cash-Plus-withdrawal reminder) posts to `POST /api/expenses`, and "Add a
+  funding item" (amount, funds month — the current or next two, so a
+  paycheck can prepay next month — and source) posts to `POST /api/income`.
+  Every submit refetches the budget month, so the hero and envelopes always
+  show the API's figures rather than client-side math.
 
 ### Tests, linters, and type checkers
 
@@ -190,19 +207,20 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.7.0 — Budget API. The budget slice's typed endpoints landed (see
-[API endpoints](#api-endpoints)): the category dimension with
-effective-dated envelope plans, append-only spending and income entry
-with prepay `budget_month` tagging, and the computed budget month —
-per-category envelopes, the Safe-to-spend headline (stored funding
-baseline − total spent), and the merged recent-activity list. The
+v0.8.0 — Safe-to-spend screen. The daily-use view is real (see
+[Screens](#screens)): the dark hero and per-category envelope bars
+render straight from `GET /api/budget-month`, and the add-spending and
+add-funding forms post to the budget API — fund-sourced spending picks
+a fund from the new read-only `GET /api/funds` and shows the matching
+Cash-Plus-withdrawal reminder, funding items can prepay a later month,
+and every submit refetches the computed month. The budget API, the
 Dashboard v1 landing view, the Ledger entries screen, the balances API,
 seed data, the append-only schema (migrations at startup), the typed
 SQLite connection module, and the app shell landed in earlier releases.
 Remaining work, roughly in this order:
 
-1. Safe-to-spend screen — envelopes and spending/funding entry forms
-2. Funds & goals
+1. Funds & goals
+2. Dashboard v2 — live safe-to-spend/funds cards and recent activity
 3. Guardrails → withdrawal sourcing engine → longevity forecast
 
 ## License

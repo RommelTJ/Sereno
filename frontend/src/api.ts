@@ -1,5 +1,5 @@
 // Typed client for the backend API. Shapes mirror the pydantic models in
-// backend/src/sereno/api/balances.py.
+// backend/src/sereno/api/balances.py, budget.py, and funds.py.
 
 export interface Account {
   id: number
@@ -44,6 +44,70 @@ export type BalanceEntryInput = { account_id: number; as_of_date: string } & (
   | { quantity: number; unit_price: number }
 )
 
+export interface Envelope {
+  id: number
+  name: string
+  emoji: string | null
+  planned: number
+  spent: number
+  remaining: number
+}
+
+export interface ActivityItem {
+  type: 'expense' | 'income'
+  id: number
+  txn_date: string
+  amount: number
+  category: string | null
+  source: string | null
+  note: string | null
+}
+
+export interface BudgetMonth {
+  month: string
+  baseline: number
+  total_spent: number
+  safe_to_spend: number
+  categories: Envelope[]
+  activity: ActivityItem[]
+}
+
+export interface Fund {
+  id: number
+  name: string
+  kind: string
+  target_amount: number | null
+  target_date: string | null
+  monthly_plan: number | null
+}
+
+export type IncomeSource =
+  | 'paycheck'
+  | 'transfer_in'
+  | 'staking'
+  | 'dividend'
+  | 'interest'
+  | 'soc_sec'
+
+// budget_month is omitted so it defaults to the transaction's month
+// server-side; fund_id goes with funded_from='fund', never alone.
+export type ExpenseInput = {
+  txn_date: string
+  category_id: number
+  amount: number
+} & (
+  | { funded_from: 'discretionary' }
+  | { funded_from: 'fund'; fund_id: number }
+)
+
+export interface IncomeInput {
+  txn_date: string
+  budget_month: string
+  source: IncomeSource
+  amount: number
+  note?: string
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path)
   if (!res.ok) {
@@ -52,19 +116,29 @@ async function getJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+async function postJson(path: string, body: unknown): Promise<void> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(`POST ${path} failed: ${res.status}`)
+  }
+}
+
 export const fetchAccounts = () => getJson<Account[]>('/api/accounts')
 export const fetchLedger = () => getJson<LedgerMonth[]>('/api/ledger')
 export const fetchNetWorth = () => getJson<NetWorth>('/api/net-worth')
+export const fetchBudgetMonth = (month?: string) =>
+  getJson<BudgetMonth>(
+    month ? `/api/budget-month?month=${month}` : '/api/budget-month',
+  )
+export const fetchFunds = () => getJson<Fund[]>('/api/funds')
 
-export async function createBalanceEntry(
-  input: BalanceEntryInput,
-): Promise<void> {
-  const res = await fetch('/api/balance-entries', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  })
-  if (!res.ok) {
-    throw new Error(`POST /api/balance-entries failed: ${res.status}`)
-  }
-}
+export const createBalanceEntry = (input: BalanceEntryInput) =>
+  postJson('/api/balance-entries', input)
+export const createExpense = (input: ExpenseInput) =>
+  postJson('/api/expenses', input)
+export const createIncome = (input: IncomeInput) =>
+  postJson('/api/income', input)
