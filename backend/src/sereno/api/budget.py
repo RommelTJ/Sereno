@@ -203,8 +203,16 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
     totals = db.execute(
         "SELECT funded_in, total_spent FROM v_budget_month WHERE month = ?", (target,)
     ).fetchone()
-    baseline = totals["funded_in"] if totals else 0
-    total_spent = totals["total_spent"] if totals else 0
+    if totals:
+        baseline, total_spent = totals["funded_in"], totals["total_spent"]
+    else:
+        # No expense rows yet, so no v_budget_month row — but the month may
+        # already be funded ahead (prepay); the baseline is still stored income.
+        baseline = db.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM income_event WHERE budget_month = ?",
+            (target,),
+        ).fetchone()[0]
+        total_spent = 0
 
     envelopes = [
         Envelope(**dict(row), remaining=row["planned"] - row["spent"])
