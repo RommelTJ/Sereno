@@ -106,8 +106,7 @@ def create_fund_entry(entry: FundEntryCreate, db: Db) -> FundEntry:
     if db.execute("SELECT 1 FROM fund WHERE id = ?", (entry.fund_id,)).fetchone() is None:
         raise HTTPException(status_code=404, detail="fund not found")
     cursor = db.execute(
-        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution)"
-        " VALUES (?, ?, ?, ?)",
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution) VALUES (?, ?, ?, ?)",
         (entry.fund_id, entry.as_of_date.isoformat(), entry.balance, entry.contribution),
     )
     db.commit()
