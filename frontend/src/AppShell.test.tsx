@@ -11,6 +11,15 @@ beforeEach(() => {
     '/api/accounts': [],
     '/api/ledger': [],
     '/api/net-worth': { current: null, yoy: null, series: [] },
+    '/api/budget-month': {
+      month: '2026-06',
+      baseline: 0,
+      total_spent: 0,
+      safe_to_spend: 0,
+      categories: [],
+      activity: [],
+    },
+    '/api/funds': [],
   })
 })
 
