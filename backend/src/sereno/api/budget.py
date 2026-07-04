@@ -7,11 +7,11 @@ never when spending lands, so safe_to_spend = funded_in − total_spent.
 """
 
 import sqlite3
-from datetime import date
-from typing import Annotated
+from datetime import date, datetime
+from typing import Annotated, Literal, Self
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field, PositiveFloat, model_validator
 
 from sereno.db.connection import get_db
 
@@ -33,6 +33,48 @@ class Category(BaseModel):
     planned: float
 
 
+class ExpenseCreate(BaseModel):
+    """budget_month defaults to the txn's month; pass a later month to prepay
+    (June pay funds July). fund_id goes with funded_from='fund', never alone."""
+
+    txn_date: date
+    budget_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
+    category_id: int | None = None
+    amount: PositiveFloat
+    is_fixed: bool = False
+    funded_from: Literal["discretionary", "fund"] = "discretionary"
+    fund_id: int | None = None
+    account_id: int | None = None
+    note: str | None = None
+
+    @model_validator(mode="after")
+    def fund_id_iff_fund_spending(self) -> Self:
+        if (self.funded_from == "fund") != (self.fund_id is not None):
+            raise ValueError("funded_from='fund' and fund_id go together")
+        return self
+
+
+class Expense(BaseModel):
+    id: int
+    txn_date: date
+    budget_month: str
+    category_id: int | None
+    amount: float
+    is_fixed: bool
+    funded_from: str
+    fund_id: int | None
+    account_id: int | None
+    note: str | None
+    created_at: datetime
+
+
+def _require(db: sqlite3.Connection, table: str, row_id: int | None, label: str) -> None:
+    if row_id is None:
+        return
+    if db.execute(f"SELECT 1 FROM {table} WHERE id = ?", (row_id,)).fetchone() is None:  # noqa: S608
+        raise HTTPException(status_code=404, detail=f"{label} not found")
+
+
 @router.get("/categories")
 def list_categories(db: Db, month: Month = None) -> list[Category]:
     rows = db.execute(
@@ -44,3 +86,34 @@ def list_categories(db: Db, month: Month = None) -> list[Category]:
         (month or _current_month(),),
     )
     return [Category(**dict(row)) for row in rows]
+
+
+@router.post("/expenses", status_code=201)
+def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
+    _require(db, "category", expense.category_id, "category")
+    _require(db, "fund", expense.fund_id, "fund")
+    _require(db, "account", expense.account_id, "account")
+    cursor = db.execute(
+        "INSERT INTO expense_line (txn_date, budget_month, category_id, amount,"
+        " is_fixed, funded_from, fund_id, account_id, note)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            expense.txn_date.isoformat(),
+            expense.budget_month or expense.txn_date.strftime("%Y-%m"),
+            expense.category_id,
+            expense.amount,
+            expense.is_fixed,
+            expense.funded_from,
+            expense.fund_id,
+            expense.account_id,
+            expense.note,
+        ),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, txn_date, budget_month, category_id, amount, is_fixed,"
+        " funded_from, fund_id, account_id, note, created_at"
+        " FROM expense_line WHERE id = ?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    return Expense(**dict(row))
