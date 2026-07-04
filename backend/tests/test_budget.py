@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -287,3 +289,132 @@ class TestPostIncome:
             json={"txn_date": "2026-06-15", "source": "paycheck", "amount": 100, "account_id": 9},
         )
         assert response.status_code == 404
+
+
+class TestGetBudgetMonth:
+    def spend(self, client, amount, txn_date="2026-06-10", **extra):
+        payload = {"txn_date": txn_date, "budget_month": "2026-06", "amount": amount, **extra}
+        assert client.post("/api/expenses", json=payload).status_code == 201
+
+    def fund_month(self, client, amount, txn_date="2026-05-24", note=None):
+        payload = {
+            "txn_date": txn_date,
+            "budget_month": "2026-06",
+            "source": "paycheck",
+            "amount": amount,
+            "note": note,
+        }
+        assert client.post("/api/income", json=payload).status_code == 201
+
+    def test_an_empty_month_returns_zeros(self, client):
+        response = client.get("/api/budget-month", params={"month": "2026-06"})
+        assert response.status_code == 200
+        assert response.json() == {
+            "month": "2026-06",
+            "baseline": 0,
+            "total_spent": 0,
+            "safe_to_spend": 0,
+            "categories": [],
+            "activity": [],
+        }
+
+    def test_envelope_math_per_category(self, client):
+        groceries_id = insert_category("Groceries", emoji="🛒")
+        travel_id = insert_category("Travel", emoji="✈️")
+        insert_plan(groceries_id, "2026-01", 500)
+        insert_plan(travel_id, "2026-01", 100)
+        self.fund_month(client, 5200)
+        self.spend(client, 387, category_id=groceries_id)
+        response = client.get("/api/budget-month", params={"month": "2026-06"})
+        body = response.json()
+        assert body["categories"] == [
+            {
+                "id": groceries_id,
+                "name": "Groceries",
+                "emoji": "🛒",
+                "planned": 500,
+                "spent": 387,
+                "remaining": 113,
+            },
+            {
+                "id": travel_id,
+                "name": "Travel",
+                "emoji": "✈️",
+                "planned": 100,
+                "spent": 0,
+                "remaining": 100,
+            },
+        ]
+        assert body["baseline"] == 5200
+        assert body["total_spent"] == 387
+        assert body["safe_to_spend"] == 4813
+
+    def test_over_budget_is_allowed_and_goes_negative(self, client):
+        gas_id = insert_category("Gas")
+        insert_plan(gas_id, "2026-01", 100)
+        self.fund_month(client, 5200)
+        self.spend(client, 150, category_id=gas_id)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["categories"][0]["remaining"] == -50
+        assert body["safe_to_spend"] == 5050
+
+    def test_the_baseline_is_stored_not_recomputed_from_live_spend(self, client):
+        # The handoff warns the baseline is a constant seeded by funding
+        # events; deriving it from live spend would cancel to a constant.
+        self.fund_month(client, 5200)
+        self.spend(client, 1000)
+        before = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert before["baseline"] == 5200
+        assert before["safe_to_spend"] == 4200
+
+        self.spend(client, 500)
+        after = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert after["baseline"] == 5200
+        assert after["safe_to_spend"] == 3700
+
+    def test_uncategorized_spending_hits_the_headline_but_no_envelope(self, client):
+        groceries_id = insert_category("Groceries")
+        insert_plan(groceries_id, "2026-01", 500)
+        self.fund_month(client, 5200)
+        self.spend(client, 118.21, is_fixed=True, note="Electric — PG&E")
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["categories"][0]["spent"] == 0
+        assert body["total_spent"] == 118.21
+        assert body["safe_to_spend"] == 5200 - 118.21
+
+    def test_activity_merges_spending_and_funding_newest_first(self, client):
+        groceries_id = insert_category("Groceries")
+        self.fund_month(client, 2800, txn_date="2026-05-24", note="You paycheck")
+        self.spend(client, 132.18, txn_date="2026-06-10", category_id=groceries_id, note="Costco")
+        self.spend(client, 96, txn_date="2026-06-20")
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [(item["type"], item["txn_date"], item["amount"]) for item in body["activity"]] == [
+            ("expense", "2026-06-20", 96),
+            ("expense", "2026-06-10", 132.18),
+            ("income", "2026-05-24", 2800),
+        ]
+        assert body["activity"][1]["category"] == "Groceries"
+        assert body["activity"][1]["note"] == "Costco"
+        assert body["activity"][2]["source"] == "paycheck"
+        assert body["activity"][2]["category"] is None
+
+    def test_everything_is_scoped_to_the_requested_month(self, client):
+        self.fund_month(client, 5200)
+        self.spend(client, 100)
+        july = {"txn_date": "2026-07-02", "budget_month": "2026-07", "amount": 40}
+        assert client.post("/api/expenses", json=july).status_code == 201
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["total_spent"] == 100
+        assert len(body["activity"]) == 2
+
+    def test_month_defaults_to_the_current_month(self, client):
+        today = date.today()
+        payload = {"txn_date": today.isoformat(), "amount": 75}
+        assert client.post("/api/expenses", json=payload).status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["month"] == today.strftime("%Y-%m")
+        assert body["total_spent"] == 75
+
+    def test_rejects_a_malformed_month(self, client):
+        response = client.get("/api/budget-month", params={"month": "2026-6"})
+        assert response.status_code == 422
