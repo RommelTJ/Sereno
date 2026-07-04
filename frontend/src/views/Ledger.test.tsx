@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { stubApi } from '../test/stubs.ts'
 import Ledger from './Ledger.tsx'
@@ -149,5 +149,61 @@ describe('Ledger monthly balance table', () => {
     const rows = await screen.findAllByTestId('ledger-row')
     expect(rows[0]).toHaveClass('bg-[#f3f6f3]')
     expect(rows[1]).not.toHaveClass('bg-[#f3f6f3]')
+  })
+})
+
+describe("Update this month's balances form", () => {
+  beforeEach(() => {
+    stubApi({ '/api/accounts': ACCOUNTS, '/api/ledger': LEDGER })
+  })
+
+  it("prefills the inputs from the newest month's canonical balances", async () => {
+    render(<Ledger />)
+
+    expect(await screen.findByLabelText('VFIAX')).toHaveValue('700,000')
+    expect(screen.getByLabelText('VTIAX')).toHaveValue('250,000')
+    expect(screen.getByLabelText('VGSH')).toHaveValue('130,000')
+    expect(screen.getByLabelText('Retirement')).toHaveValue('350,000')
+    expect(screen.getByLabelText('ETH held')).toHaveValue('20')
+    expect(screen.getByLabelText('$ / ETH')).toHaveValue('3,500')
+  })
+
+  it('recomputes the ETH value readout as quantity and price change', async () => {
+    render(<Ledger />)
+
+    fireEvent.change(await screen.findByLabelText('ETH held'), {
+      target: { value: '21' },
+    })
+    expect(screen.getByTestId('eth-value')).toHaveTextContent('$73,500')
+
+    fireEvent.change(screen.getByLabelText('$ / ETH'), {
+      target: { value: '4,000' },
+    })
+    expect(screen.getByTestId('eth-value')).toHaveTextContent('$84,000')
+  })
+
+  it('recomputes the live net worth as any field changes', async () => {
+    render(<Ledger />)
+
+    // Initial live figure matches the newest month: $1,744,000.
+    expect(await screen.findByTestId('live-net-worth')).toHaveTextContent(
+      '$1,744,000',
+    )
+
+    // +$10,000 of VFIAX.
+    fireEvent.change(screen.getByLabelText('VFIAX'), {
+      target: { value: '710,000' },
+    })
+    expect(screen.getByTestId('live-net-worth')).toHaveTextContent(
+      '$1,754,000',
+    )
+
+    // +1 ETH at $3,500 on top of the VFIAX change.
+    fireEvent.change(screen.getByLabelText('ETH held'), {
+      target: { value: '21' },
+    })
+    expect(screen.getByTestId('live-net-worth')).toHaveTextContent(
+      '$1,757,500',
+    )
   })
 })
