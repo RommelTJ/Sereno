@@ -102,7 +102,9 @@ export const BUDGET_MONTH = {
   ],
 }
 
-// Active fund dimension rows, exactly as GET /api/funds returns them.
+// Active funds, exactly as GET /api/funds returns them: dimension rows plus
+// the latest fund_entry balance and the server-derived note. The Bike fund
+// is fully funded; the Travel fund is open-ended (no target).
 export const FUNDS = [
   {
     id: 1,
@@ -111,6 +113,8 @@ export const FUNDS = [
     target_amount: 30_000,
     target_date: null,
     monthly_plan: 500,
+    balance: 10_000,
+    note: '$500 / mo · ~3.3 yrs to target',
   },
   {
     id: 2,
@@ -119,6 +123,18 @@ export const FUNDS = [
     target_amount: 10_000,
     target_date: '2026-07-01',
     monthly_plan: null,
+    balance: 10_000,
+    note: '✓ fully funded — ready to spend',
+  },
+  {
+    id: 3,
+    name: 'Travel fund',
+    kind: 'sinking',
+    target_amount: null,
+    target_date: null,
+    monthly_plan: 300,
+    balance: 4_200,
+    note: '$300 / mo · open-ended',
   },
 ]
 

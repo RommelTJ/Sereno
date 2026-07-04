@@ -79,6 +79,8 @@ export interface Fund {
   target_amount: number | null
   target_date: string | null
   monthly_plan: number | null
+  balance: number
+  note: string
 }
 
 export type IncomeSource =
