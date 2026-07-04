@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ACCOUNTS, LEDGER } from './test/fixtures.ts'
 import { stubApi } from './test/stubs.ts'
@@ -80,7 +80,9 @@ describe('Header net worth', () => {
 
     render(<App />)
 
-    expect(await screen.findByText('$1,744,000')).toBeInTheDocument()
+    // The dashboard hero shows the same figure; scope to the header.
+    const header = screen.getByRole('banner')
+    expect(await within(header).findByText('$1,744,000')).toBeInTheDocument()
   })
 
   it('refreshes the readout after saving balances on the ledger view', async () => {

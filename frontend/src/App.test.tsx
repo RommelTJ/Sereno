@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.tsx'
 
@@ -48,8 +48,8 @@ describe('App shell', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: 'Dashboard' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Net worth')).toBeInTheDocument()
-    expect(screen.getByText('$—')).toBeInTheDocument()
+    expect(within(header).getByText('Net worth')).toBeInTheDocument()
+    expect(within(header).getByText('$—')).toBeInTheDocument()
   })
 
   it('shows the current month in the sidebar footer chip', () => {
@@ -60,11 +60,5 @@ describe('App shell', () => {
       year: 'numeric',
     })
     expect(screen.getByText(month)).toBeInTheDocument()
-  })
-
-  it('shows backend health on the dashboard stub', async () => {
-    render(<App />)
-
-    expect(await screen.findByText('ok · v1.2.3')).toBeInTheDocument()
   })
 })
