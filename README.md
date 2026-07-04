@@ -113,7 +113,9 @@ first with `docker compose down -v`.
 
 ### API endpoints
 
-The balances vertical slice (interactive docs at <http://localhost:8000/docs>):
+Interactive docs at <http://localhost:8000/docs>.
+
+The balances slice:
 
 - `GET /api/accounts` — the account dimension rows (name, kind, liability and
   investable flags).
@@ -127,6 +129,24 @@ The balances vertical slice (interactive docs at <http://localhost:8000/docs>):
 - `GET /api/net-worth` — current net worth, year-over-year change vs. the same
   month a year earlier (`null` until 12 months of history exist), and the
   last-12-months series for the sparkline.
+
+The budget slice:
+
+- `GET /api/categories` — the category dimension with each envelope's planned
+  amount for a month (`?month=YYYY-MM`, default the current month). Plans are
+  effective-dated: the latest `category_plan` row on or before the month wins.
+- `POST /api/expenses` — appends a spending line. `budget_month` defaults to
+  the transaction's month; pass a later month to prepay. `funded_from` is
+  `discretionary` or `fund` (then `fund_id` is required).
+- `POST /api/income` — appends an income/funding event (paycheck, transfer,
+  staking, …). `budget_month` is the month the inflow funds — the seed's
+  Jun 27 paycheck funds July.
+- `GET /api/budget-month` — the computed month (`?month=`, default current):
+  per-category planned/spent/remaining envelopes (overspend is allowed and
+  goes negative), the Safe-to-spend headline (`baseline − total_spent`, where
+  the baseline is the month's stored funding — never recomputed from live
+  spend), and the recent-activity list (spending and funding merged, newest
+  first).
 
 ### Screens
 
