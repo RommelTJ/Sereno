@@ -1,8 +1,13 @@
 import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import type { ActivityTone } from '../dashboard.ts'
+import { fundsMini, recentActivity, stsBarPct } from '../dashboard.ts'
+import { totalParked } from '../funds.ts'
 import { formatUsd } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
-import type { NetWorthPoint } from '../api.ts'
+import type { BudgetMonth, Fund, NetWorthPoint } from '../api.ts'
+import { fetchBudgetMonth, fetchFunds } from '../api.ts'
 
 // "▲ 5.7%" / "▼ 2.3%" — the API's yoy is a fraction vs. the same month a
 // year earlier (null until 12 months of history exist).
@@ -64,8 +69,8 @@ function NetWorthHero() {
   )
 }
 
-// Placeholder deep-link card. Values are static, sanitized illustrations
-// from the design handoff until each view's feature slice lands.
+// Deep-link card shell. The Guardrail and Longevity values are static,
+// sanitized illustrations from the design handoff until Phase 2 lands.
 function CardLink({
   to,
   label,
@@ -90,7 +95,7 @@ function CardLink({
   )
 }
 
-function SafeToSpendCard() {
+function SafeToSpendCard({ budget }: { budget: BudgetMonth | null }) {
   return (
     <CardLink
       to="/safe-to-spend"
@@ -99,12 +104,16 @@ function SafeToSpendCard() {
     >
       <div>
         <p className="num mt-1.5 text-[44px] leading-none font-extrabold tracking-[-1px] text-accent">
-          $2,438
+          {budget != null ? formatUsd(budget.safe_to_spend) : '$—'}
         </p>
         <p className="mt-2 text-[12.5px] text-muted">free after bills & funds</p>
       </div>
       <div className="mt-4.5 h-2 overflow-hidden rounded-[5px] bg-track">
-        <div className="h-full bg-accent" style={{ width: '61%' }} />
+        <div
+          data-testid="sts-bar"
+          className="h-full bg-accent"
+          style={{ width: `${budget != null ? stsBarPct(budget) : 0}%` }}
+        />
       </div>
       <p className="mt-2 text-xs text-muted-2">See the full breakdown →</p>
     </CardLink>
@@ -141,22 +150,22 @@ function LongevityCard() {
   )
 }
 
-const FUNDS_MINI = [
-  { name: 'Emergency fund', pct: '33%' },
-  { name: 'House maintenance', pct: '50%' },
-  { name: '1st-year fund', pct: '100%' },
-]
-
-function FundsCard() {
+function FundsCard({ funds }: { funds: Fund[] | null }) {
   return (
     <CardLink to="/funds" label="Funds & goals">
-      <p className="num mt-1.5 text-[30px] font-extrabold">$66,000</p>
-      <p className="text-xs text-muted">parked across 5 funds</p>
+      <p className="num mt-1.5 text-[30px] font-extrabold">
+        {funds != null ? formatUsd(totalParked(funds)) : '$—'}
+      </p>
+      {funds != null && (
+        <p className="text-xs text-muted">
+          parked across {funds.length} funds
+        </p>
+      )}
       <div className="mt-3.5 flex flex-col gap-[7px]">
-        {FUNDS_MINI.map((fund) => (
-          <div key={fund.name} className="flex justify-between text-xs">
+        {fundsMini(funds ?? []).map((fund) => (
+          <div key={fund.id} className="flex justify-between text-xs">
             <span className="text-muted">{fund.name}</span>
-            <span className="num text-muted-2">{fund.pct}</span>
+            <span className="num text-muted-2">{fund.right}</span>
           </div>
         ))}
       </div>
@@ -164,33 +173,78 @@ function FundsCard() {
   )
 }
 
-// Scaffolded empty — the Safe-to-spend slice populates it.
-function RecentActivity() {
+const ACTIVITY_TONES: Record<ActivityTone, { tile: string; amount: string }> =
+  {
+    credit: { tile: 'bg-green-soft', amount: 'text-accent' },
+    debit: { tile: 'bg-tile', amount: 'text-ink' },
+    treat: { tile: 'bg-red-soft-3', amount: 'text-red' },
+  }
+
+function RecentActivity({ budget }: { budget: BudgetMonth | null }) {
+  const rows = budget != null ? recentActivity(budget) : []
   return (
     <div className="mt-5 rounded-card border border-card-border bg-card px-6 py-2">
-      <p className="border-b border-hairline pt-4 pb-2.5 text-sm font-bold">
-        Recent activity
-      </p>
-      <p className="py-4 text-[12.5px] text-muted">
-        No activity yet — spending and funding items land here.
-      </p>
+      <div className="flex items-center justify-between border-b border-hairline pt-4 pb-2.5">
+        <p className="text-sm font-bold">Recent activity</p>
+        <Link
+          to="/safe-to-spend"
+          className="text-[12.5px] font-semibold text-accent"
+        >
+          Add an item →
+        </Link>
+      </div>
+      {rows.length === 0 && (
+        <p className="py-4 text-[12.5px] text-muted">
+          No activity yet — spending and funding items land here.
+        </p>
+      )}
+      {rows.map((row) => (
+        <div
+          key={row.key}
+          data-testid="activity-row"
+          className="flex items-center justify-between border-b border-hairline-2 py-[13px]"
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-[15px] ${ACTIVITY_TONES[row.tone].tile}`}
+            >
+              {row.icon}
+            </div>
+            <div>
+              <p className="text-[13.5px] font-semibold">{row.title}</p>
+              <p className="text-[11.5px] text-muted-2">{row.sub}</p>
+            </div>
+          </div>
+          <p className={`num text-sm font-bold ${ACTIVITY_TONES[row.tone].amount}`}>
+            {row.amount}
+          </p>
+        </div>
+      ))}
     </div>
   )
 }
 
 function Dashboard() {
+  const [budget, setBudget] = useState<BudgetMonth | null>(null)
+  const [funds, setFunds] = useState<Fund[] | null>(null)
+
+  useEffect(() => {
+    void fetchBudgetMonth().then(setBudget)
+    void fetchFunds().then(setFunds)
+  }, [])
+
   return (
     <div data-testid="view-dashboard">
       <div className="grid grid-cols-[1.5fr_1fr] gap-5">
         <NetWorthHero />
-        <SafeToSpendCard />
+        <SafeToSpendCard budget={budget} />
       </div>
       <div className="mt-5 grid grid-cols-3 gap-5">
         <GuardrailCard />
         <LongevityCard />
-        <FundsCard />
+        <FundsCard funds={funds} />
       </div>
-      <RecentActivity />
+      <RecentActivity budget={budget} />
     </div>
   )
 }

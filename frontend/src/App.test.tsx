@@ -1,15 +1,23 @@
 import { render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { stubApi } from './test/stubs.ts'
 import App from './App.tsx'
 
 beforeEach(() => {
   window.history.pushState({}, '', '/')
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ status: 'ok', version: '1.2.3' }),
-    }),
-  )
+  stubApi({
+    '/api/health': { status: 'ok', version: '1.2.3' },
+    '/api/net-worth': { current: null, yoy: null, series: [] },
+    '/api/budget-month': {
+      month: '2026-06',
+      baseline: 0,
+      total_spent: 0,
+      safe_to_spend: 0,
+      categories: [],
+      activity: [],
+    },
+    '/api/funds': [],
+  })
 })
 
 describe('App shell', () => {

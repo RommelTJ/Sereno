@@ -83,6 +83,15 @@ export const BUDGET_MONTH = {
   activity: [
     {
       type: 'expense',
+      id: 5,
+      txn_date: '2026-06-26',
+      amount: 28.4,
+      category: 'Entertainment',
+      source: null,
+      note: 'Poke — treat yourself',
+    },
+    {
+      type: 'expense',
       id: 3,
       txn_date: '2026-06-10',
       amount: 387,

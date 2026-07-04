@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.9.0**
+**v0.10.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -169,11 +169,18 @@ The funds slice:
 - **Dashboard** (<http://localhost:5173/>) — the landing view. The net-worth
   hero reads `GET /api/net-worth` live: the current figure, a year-over-year
   pill vs. the same month a year earlier (omitted until 12 months of history
-  exist), and a 12-bar sparkline of the last year. Beside and below it, the
-  Safe-to-spend, Spend guardrail, Longevity, and Funds & goals cards are
-  static placeholders with the design handoff's illustrative numbers — each
-  deep-links to its view and gets real data with its own feature slice — and
-  Recent activity is scaffolded empty until the Dashboard v2 slice lands.
+  exist), and a 12-bar sparkline of the last year. Beside it, the
+  Safe-to-spend card shows the month's live headline from
+  `GET /api/budget-month` with its share of the funding baseline as a
+  progress bar, and the Funds & goals card shows the total parked and a
+  top-3 mini list (percent to target; an open-ended fund shows its
+  balance) from `GET /api/funds` — both deep-link to their views. Recent
+  activity lists the month's five newest spending and funding items as
+  emoji-tile rows with signed amounts — credits in green, debits in ink,
+  and expenses whose envelope is over budget in red — and refreshes on
+  every visit as items are added elsewhere. The Spend guardrail and
+  Longevity cards remain static placeholders until their Phase 2 slices
+  land.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
   table (one row per month, newest first, current month highlighted; the two
   cash accounts share one column and the mortgage shows as a negative figure)
@@ -230,22 +237,20 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.9.0 — Funds & goals. Sinking funds and dated goals are one live
-concept end to end (see [Screens](#screens)): `GET /api/funds` now
-carries each fund's latest balance and a server-derived note (computed
-in typed Python from the fund's own numbers — never hand-typed), and
-the new `POST /api/funds` / `POST /api/fund-entries` endpoints power
-the single-card screen with its total parked, dashed new-fund form
-(blank date ⇒ sinking fund, blank target ⇒ open-ended), per-fund
-progress bars, and accent-green completed funds. The Safe-to-spend
-screen, the budget API, the Dashboard v1 landing view, the Ledger
-entries screen, the balances API, seed data, the append-only schema
+v0.10.0 — Dashboard v2. The landing view is now a true at-a-glance
+overview for the Track half (see [Screens](#screens)): the
+Safe-to-spend card reads its live headline and baseline progress bar
+from `GET /api/budget-month`, the Funds & goals card shows the total
+parked and a top-3 mini list from `GET /api/funds`, and Recent
+activity lists the month's five newest spending and funding items as
+emoji-tile rows with signed, color-coded amounts. The Guardrail and
+Longevity cards stay placeholders until Phase 2. The Funds & goals
+screen, the Safe-to-spend screen, the budget API, the Ledger entries
+screen, the balances API, seed data, the append-only schema
 (migrations at startup), the typed SQLite connection module, and the
-app shell landed in earlier releases. Remaining work, roughly in this
-order:
+app shell landed in earlier releases. Remaining work:
 
-1. Dashboard v2 — live safe-to-spend/funds cards and recent activity
-2. Guardrails → withdrawal sourcing engine → longevity forecast
+1. Guardrails → withdrawal sourcing engine → longevity forecast
 
 ## License
 
