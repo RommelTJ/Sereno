@@ -93,6 +93,34 @@ class Income(BaseModel):
     created_at: datetime
 
 
+class Envelope(BaseModel):
+    id: int
+    name: str
+    emoji: str | None
+    planned: float
+    spent: float
+    remaining: float
+
+
+class ActivityItem(BaseModel):
+    type: Literal["expense", "income"]
+    id: int
+    txn_date: date
+    amount: float
+    category: str | None
+    source: str | None
+    note: str | None
+
+
+class BudgetMonth(BaseModel):
+    month: str
+    baseline: float
+    total_spent: float
+    safe_to_spend: float
+    categories: list[Envelope]
+    activity: list[ActivityItem]
+
+
 def _require(db: sqlite3.Connection, table: str, row_id: int | None, label: str) -> None:
     if row_id is None:
         return
@@ -167,3 +195,57 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
         (cursor.lastrowid,),
     ).fetchone()
     return Income(**dict(row))
+
+
+@router.get("/budget-month")
+def budget_month(db: Db, month: Month = None) -> BudgetMonth:
+    target = month or _current_month()
+    totals = db.execute(
+        "SELECT funded_in, total_spent FROM v_budget_month WHERE month = ?", (target,)
+    ).fetchone()
+    baseline = totals["funded_in"] if totals else 0
+    total_spent = totals["total_spent"] if totals else 0
+
+    envelopes = [
+        Envelope(**dict(row), remaining=row["planned"] - row["spent"])
+        for row in db.execute(
+            "SELECT c.id, c.name, c.emoji,"
+            " COALESCE((SELECT p.planned FROM category_plan p"
+            "           WHERE p.category_id = c.id AND p.effective_month <= ?"
+            "           ORDER BY p.effective_month DESC LIMIT 1), 0) AS planned,"
+            " COALESCE((SELECT SUM(e.amount) FROM expense_line e"
+            "           WHERE e.category_id = c.id AND e.budget_month = ?), 0) AS spent"
+            " FROM category c WHERE c.active = 1 ORDER BY c.id",
+            (target, target),
+        )
+    ]
+
+    expenses = db.execute(
+        "SELECT e.id, e.txn_date, e.amount, c.name AS category, e.note, e.created_at"
+        " FROM expense_line e LEFT JOIN category c ON c.id = e.category_id"
+        " WHERE e.budget_month = ?",
+        (target,),
+    )
+    incomes = db.execute(
+        "SELECT id, txn_date, amount, source, note, created_at"
+        " FROM income_event WHERE budget_month = ?",
+        (target,),
+    )
+    merged = sorted(
+        [dict(row) | {"type": "expense", "source": None} for row in expenses]
+        + [dict(row) | {"type": "income", "category": None} for row in incomes],
+        key=lambda row: (row["txn_date"], row["created_at"], row["id"]),
+        reverse=True,
+    )
+
+    return BudgetMonth(
+        month=target,
+        baseline=baseline,
+        total_spent=total_spent,
+        safe_to_spend=baseline - total_spent,
+        categories=envelopes,
+        activity=[
+            ActivityItem(**{key: value for key, value in row.items() if key != "created_at"})
+            for row in merged
+        ],
+    )
