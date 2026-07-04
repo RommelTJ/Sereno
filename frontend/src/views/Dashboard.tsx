@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { stsBarPct } from '../dashboard.ts'
 import { formatUsd } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
-import type { NetWorthPoint } from '../api.ts'
+import type { BudgetMonth, NetWorthPoint } from '../api.ts'
+import { fetchBudgetMonth } from '../api.ts'
 
 // "▲ 5.7%" / "▼ 2.3%" — the API's yoy is a fraction vs. the same month a
 // year earlier (null until 12 months of history exist).
@@ -64,8 +67,8 @@ function NetWorthHero() {
   )
 }
 
-// Placeholder deep-link card. Values are static, sanitized illustrations
-// from the design handoff until each view's feature slice lands.
+// Deep-link card shell. The Guardrail and Longevity values are static,
+// sanitized illustrations from the design handoff until Phase 2 lands.
 function CardLink({
   to,
   label,
@@ -90,7 +93,7 @@ function CardLink({
   )
 }
 
-function SafeToSpendCard() {
+function SafeToSpendCard({ budget }: { budget: BudgetMonth | null }) {
   return (
     <CardLink
       to="/safe-to-spend"
@@ -99,12 +102,16 @@ function SafeToSpendCard() {
     >
       <div>
         <p className="num mt-1.5 text-[44px] leading-none font-extrabold tracking-[-1px] text-accent">
-          $2,438
+          {budget != null ? formatUsd(budget.safe_to_spend) : '$—'}
         </p>
         <p className="mt-2 text-[12.5px] text-muted">free after bills & funds</p>
       </div>
       <div className="mt-4.5 h-2 overflow-hidden rounded-[5px] bg-track">
-        <div className="h-full bg-accent" style={{ width: '61%' }} />
+        <div
+          data-testid="sts-bar"
+          className="h-full bg-accent"
+          style={{ width: `${budget != null ? stsBarPct(budget) : 0}%` }}
+        />
       </div>
       <p className="mt-2 text-xs text-muted-2">See the full breakdown →</p>
     </CardLink>
@@ -179,11 +186,17 @@ function RecentActivity() {
 }
 
 function Dashboard() {
+  const [budget, setBudget] = useState<BudgetMonth | null>(null)
+
+  useEffect(() => {
+    void fetchBudgetMonth().then(setBudget)
+  }, [])
+
   return (
     <div data-testid="view-dashboard">
       <div className="grid grid-cols-[1.5fr_1fr] gap-5">
         <NetWorthHero />
-        <SafeToSpendCard />
+        <SafeToSpendCard budget={budget} />
       </div>
       <div className="mt-5 grid grid-cols-3 gap-5">
         <GuardrailCard />

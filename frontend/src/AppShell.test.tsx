@@ -4,6 +4,15 @@ import { ACCOUNTS, LEDGER } from './test/fixtures.ts'
 import { stubApi } from './test/stubs.ts'
 import App from './App.tsx'
 
+const EMPTY_BUDGET_MONTH = {
+  month: '2026-06',
+  baseline: 0,
+  total_spent: 0,
+  safe_to_spend: 0,
+  categories: [],
+  activity: [],
+}
+
 beforeEach(() => {
   window.history.pushState({}, '', '/')
   stubApi({
@@ -11,14 +20,7 @@ beforeEach(() => {
     '/api/accounts': [],
     '/api/ledger': [],
     '/api/net-worth': { current: null, yoy: null, series: [] },
-    '/api/budget-month': {
-      month: '2026-06',
-      baseline: 0,
-      total_spent: 0,
-      safe_to_spend: 0,
-      categories: [],
-      activity: [],
-    },
+    '/api/budget-month': EMPTY_BUDGET_MONTH,
     '/api/funds': [],
   })
 })
@@ -85,6 +87,8 @@ describe('Header net worth', () => {
     stubApi({
       '/api/health': { status: 'ok', version: '1.2.3' },
       '/api/net-worth': { current: 1_744_000, yoy: 0.017, series: [] },
+      '/api/budget-month': EMPTY_BUDGET_MONTH,
+      '/api/funds': [],
     })
 
     render(<App />)
@@ -100,6 +104,8 @@ describe('Header net worth', () => {
       '/api/accounts': ACCOUNTS,
       '/api/ledger': LEDGER,
       '/api/net-worth': { current: 1_744_000, yoy: 0.017, series: [] },
+      '/api/budget-month': EMPTY_BUDGET_MONTH,
+      '/api/funds': [],
       '/api/balance-entries': { id: 999 },
     }
     stubApi(routes)
