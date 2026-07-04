@@ -169,11 +169,18 @@ The funds slice:
 - **Dashboard** (<http://localhost:5173/>) — the landing view. The net-worth
   hero reads `GET /api/net-worth` live: the current figure, a year-over-year
   pill vs. the same month a year earlier (omitted until 12 months of history
-  exist), and a 12-bar sparkline of the last year. Beside and below it, the
-  Safe-to-spend, Spend guardrail, Longevity, and Funds & goals cards are
-  static placeholders with the design handoff's illustrative numbers — each
-  deep-links to its view and gets real data with its own feature slice — and
-  Recent activity is scaffolded empty until the Dashboard v2 slice lands.
+  exist), and a 12-bar sparkline of the last year. Beside it, the
+  Safe-to-spend card shows the month's live headline from
+  `GET /api/budget-month` with its share of the funding baseline as a
+  progress bar, and the Funds & goals card shows the total parked and a
+  top-3 mini list (percent to target; an open-ended fund shows its
+  balance) from `GET /api/funds` — both deep-link to their views. Recent
+  activity lists the month's five newest spending and funding items as
+  emoji-tile rows with signed amounts — credits in green, debits in ink,
+  and expenses whose envelope is over budget in red — and refreshes on
+  every visit as items are added elsewhere. The Spend guardrail and
+  Longevity cards remain static placeholders until their Phase 2 slices
+  land.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
   table (one row per month, newest first, current month highlighted; the two
   cash accounts share one column and the mortgage shows as a negative figure)
