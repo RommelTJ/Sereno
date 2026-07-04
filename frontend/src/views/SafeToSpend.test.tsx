@@ -5,9 +5,26 @@ import { BUDGET_MONTH, FUNDS } from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import SafeToSpend from './SafeToSpend.tsx'
 
-const expenseBody = (fetchMock: ReturnType<typeof stubApi>) => {
-  const call = fetchMock.mock.calls.find(([path]) => path === '/api/expenses')
+const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
+  const call = fetchMock.mock.calls.find(([input]) => input === path)
   return call ? JSON.parse(call[1]?.body as string) : undefined
+}
+
+const expenseBody = (fetchMock: ReturnType<typeof stubApi>) =>
+  postBody(fetchMock, '/api/expenses')
+
+// The funds-month options: the current month and the next two, as the
+// funding form should offer them.
+const fundsMonth = (offset: number) => {
+  const now = new Date()
+  const month = new Date(now.getFullYear(), now.getMonth() + offset)
+  return {
+    value: `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`,
+    label: month.toLocaleDateString('en-US', {
+      month: 'short',
+      year: 'numeric',
+    }),
+  }
 }
 
 beforeEach(() => {
@@ -173,5 +190,103 @@ describe('Add a spending item', () => {
     )
 
     expect(expenseBody(fetchMock)).toBeUndefined()
+  })
+})
+
+describe('Add a funding item', () => {
+  it('offers the current and next two months as the funds month', async () => {
+    render(<SafeToSpend />)
+
+    const form = await screen.findByTestId('funding-form')
+    const select = within(form).getByLabelText('Funds month')
+    const options = within(select).getAllByRole('option')
+    expect(
+      options.map((option) => ({
+        value: (option as HTMLOptionElement).value,
+        label: option.textContent,
+      })),
+    ).toEqual([fundsMonth(0), fundsMonth(1), fundsMonth(2)])
+  })
+
+  it('posts the income tagged to the selected month and refreshes the hero', async () => {
+    const routes: Record<string, unknown> = {
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 5 },
+    }
+    const fetchMock = stubApi(routes)
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('funding-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '2,400' },
+    })
+    fireEvent.change(within(form).getByLabelText('Funds month'), {
+      target: { value: fundsMonth(1).value },
+    })
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'your-paycheck' },
+    })
+    routes['/api/budget-month'] = {
+      ...BUDGET_MONTH,
+      baseline: 7_600,
+      safe_to_spend: 6_070,
+    }
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add funding row' }),
+    )
+
+    expect(await screen.findByText('$6,070')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/income')).toEqual({
+      txn_date: todayIso(),
+      budget_month: fundsMonth(1).value,
+      source: 'paycheck',
+      amount: 2400,
+      note: 'You paycheck',
+    })
+    expect(within(form).getByLabelText('Amount')).toHaveValue('')
+  })
+
+  it('maps every source option onto the API source values', async () => {
+    render(<SafeToSpend />)
+
+    const form = await screen.findByTestId('funding-form')
+    const select = within(form).getByLabelText('Source')
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual([
+      '💵 Spouse paycheck',
+      '💵 Your paycheck',
+      '🏦 Brokerage withdrawal',
+      'Ξ ETH harvest',
+      '🏠 Cash Plus transfer',
+    ])
+  })
+
+  it('explains the rollover behavior', async () => {
+    render(<SafeToSpend />)
+
+    const form = await screen.findByTestId('funding-form')
+    expect(within(form).getByText('Rollover')).toBeInTheDocument()
+    expect(
+      within(form).getByText(/rolls into the next month's funding/),
+    ).toBeInTheDocument()
+  })
+
+  it('does not post when the amount is empty', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('funding-form')
+
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add funding row' }),
+    )
+
+    expect(postBody(fetchMock, '/api/income')).toBeUndefined()
   })
 })
