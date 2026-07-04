@@ -2,7 +2,8 @@
 // from GET /api/budget-month and GET /api/funds — nothing is recomputed
 // client-side beyond display math.
 
-import type { BudgetMonth, Fund } from './api.ts'
+import type { ActivityItem, BudgetMonth, Fund } from './api.ts'
+import { monthLabel } from './budget.ts'
 import { formatUsd } from './ledger.ts'
 
 // The Safe-to-spend card's progress bar: the share of the month's funding
@@ -33,4 +34,66 @@ export function fundsMini(funds: Fund[]): FundMini[] {
         ? `${Math.round((fund.balance / fund.target_amount) * 100)}%`
         : formatUsd(fund.balance),
   }))
+}
+
+// "2026-06-10" → "Jun 10"
+function shortDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+// Row amounts keep cents only when they exist: "$2,400", "$28.40".
+function usd(value: number): string {
+  return `$${value.toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+export type ActivityTone = 'credit' | 'debit' | 'treat'
+
+export interface ActivityRow {
+  key: string
+  icon: string
+  title: string
+  sub: string
+  amount: string
+  tone: ActivityTone
+}
+
+// The newest five spend/funding items as display rows. An expense's emoji
+// comes from its category's envelope; every activity item funds the
+// fetched month, so a credit's sub names it; a "treat" — an expense in an
+// over-budget envelope — shows in red.
+export function recentActivity(budget: BudgetMonth): ActivityRow[] {
+  return budget.activity.slice(0, 5).map((item) => activityRow(item, budget))
+}
+
+function activityRow(item: ActivityItem, budget: BudgetMonth): ActivityRow {
+  const key = `${item.type}-${item.id}`
+  const date = shortDate(item.txn_date)
+  if (item.type === 'income') {
+    return {
+      key,
+      icon: '💵',
+      title: item.note ?? item.source ?? 'Income',
+      sub: `Funds ${monthLabel(budget.month)} · ${date}`,
+      amount: `+${usd(item.amount)}`,
+      tone: 'credit',
+    }
+  }
+  const envelope = budget.categories.find(
+    (category) => category.name === item.category,
+  )
+  return {
+    key,
+    icon: envelope?.emoji ?? '🧾',
+    title: item.note ?? item.category ?? 'Expense',
+    sub: item.category ? `${item.category} · ${date}` : date,
+    amount: `−${usd(item.amount)}`,
+    tone: envelope != null && envelope.remaining < 0 ? 'treat' : 'debit',
+  }
 }
