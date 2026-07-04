@@ -168,3 +168,59 @@ class TestCreateFund:
     def test_rejects_a_blank_name(self, client):
         response = client.post("/api/funds", json={"name": ""})
         assert response.status_code == 422
+
+
+class TestCreateFundEntry:
+    def test_appends_a_dated_balance_row(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        response = client.post(
+            "/api/fund-entries",
+            json={"fund_id": fund_id, "as_of_date": "2026-06-01", "balance": 10000},
+        )
+        assert response.status_code == 201
+        entry = response.json()
+        assert entry["fund_id"] == fund_id
+        assert entry["as_of_date"] == "2026-06-01"
+        assert entry["balance"] == 10000
+        assert entry["contribution"] == 0
+
+    def test_a_later_entry_becomes_the_balance_and_history_is_kept(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        client.post(
+            "/api/fund-entries",
+            json={"fund_id": fund_id, "as_of_date": "2026-05-01", "balance": 9000},
+        )
+        client.post(
+            "/api/fund-entries",
+            json={
+                "fund_id": fund_id,
+                "as_of_date": "2026-06-01",
+                "balance": 10000,
+                "contribution": 1000,
+            },
+        )
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 10000
+        conn = connect()
+        try:
+            (count,) = conn.execute(
+                "SELECT COUNT(*) FROM fund_entry WHERE fund_id = ?", (fund_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        assert count == 2
+
+    def test_an_unknown_fund_is_a_404(self, client):
+        response = client.post(
+            "/api/fund-entries",
+            json={"fund_id": 999, "as_of_date": "2026-06-01", "balance": 10000},
+        )
+        assert response.status_code == 404
+
+    def test_rejects_a_negative_balance(self, client):
+        fund_id = insert_fund("Emergency fund")
+        response = client.post(
+            "/api/fund-entries",
+            json={"fund_id": fund_id, "as_of_date": "2026-06-01", "balance": -1},
+        )
+        assert response.status_code == 422
