@@ -130,6 +130,14 @@ The balances vertical slice (interactive docs at <http://localhost:8000/docs>):
 
 ### Screens
 
+- **Dashboard** (<http://localhost:5173/>) — the landing view. The net-worth
+  hero reads `GET /api/net-worth` live: the current figure, a year-over-year
+  pill vs. the same month a year earlier (omitted until 12 months of history
+  exist), and a 12-bar sparkline of the last year. Beside and below it, the
+  Safe-to-spend, Spend guardrail, Longevity, and Funds & goals cards are
+  static placeholders with the design handoff's illustrative numbers — each
+  deep-links to its view and gets real data with its own feature slice — and
+  Recent activity is scaffolded empty until the Safe-to-spend slice lands.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
   table (one row per month, newest first, current month highlighted; the two
   cash accounts share one column and the mortgage shows as a negative figure)
