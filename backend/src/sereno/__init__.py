@@ -1,3 +1,3 @@
 """Sereno — a private, LAN-only personal finance tracker."""
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"

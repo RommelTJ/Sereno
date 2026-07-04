@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.6.0**
+**v0.7.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -113,7 +113,9 @@ first with `docker compose down -v`.
 
 ### API endpoints
 
-The balances vertical slice (interactive docs at <http://localhost:8000/docs>):
+Interactive docs at <http://localhost:8000/docs>.
+
+The balances slice:
 
 - `GET /api/accounts` — the account dimension rows (name, kind, liability and
   investable flags).
@@ -127,6 +129,24 @@ The balances vertical slice (interactive docs at <http://localhost:8000/docs>):
 - `GET /api/net-worth` — current net worth, year-over-year change vs. the same
   month a year earlier (`null` until 12 months of history exist), and the
   last-12-months series for the sparkline.
+
+The budget slice:
+
+- `GET /api/categories` — the category dimension with each envelope's planned
+  amount for a month (`?month=YYYY-MM`, default the current month). Plans are
+  effective-dated: the latest `category_plan` row on or before the month wins.
+- `POST /api/expenses` — appends a spending line. `budget_month` defaults to
+  the transaction's month; pass a later month to prepay. `funded_from` is
+  `discretionary` or `fund` (then `fund_id` is required).
+- `POST /api/income` — appends an income/funding event (paycheck, transfer,
+  staking, …). `budget_month` is the month the inflow funds — the seed's
+  Jun 27 paycheck funds July.
+- `GET /api/budget-month` — the computed month (`?month=`, default current):
+  per-category planned/spent/remaining envelopes (overspend is allowed and
+  goes negative), the Safe-to-spend headline (`baseline − total_spent`, where
+  the baseline is the month's stored funding — never recomputed from live
+  spend), and the recent-activity list (spending and funding merged, newest
+  first).
 
 ### Screens
 
@@ -170,18 +190,18 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.6.0 — Dashboard v1. The landing view is real (see [Screens](#screens)):
-the net-worth hero renders the live figure, YoY pill, and 12-bar sparkline
-from `GET /api/net-worth` through the same shared provider as the header
-readout, and the Safe-to-spend, Spend guardrail, Longevity, and Funds &
-goals cards deep-link to their views as static placeholders until each
-feature slice lands. Recent activity is scaffolded empty for the
-Safe-to-spend ticket. The Ledger entries screen, the balances API, seed
-data, the append-only schema (migrations at startup), the typed SQLite
-connection module, and the app shell landed in earlier releases.
+v0.7.0 — Budget API. The budget slice's typed endpoints landed (see
+[API endpoints](#api-endpoints)): the category dimension with
+effective-dated envelope plans, append-only spending and income entry
+with prepay `budget_month` tagging, and the computed budget month —
+per-category envelopes, the Safe-to-spend headline (stored funding
+baseline − total spent), and the merged recent-activity list. The
+Dashboard v1 landing view, the Ledger entries screen, the balances API,
+seed data, the append-only schema (migrations at startup), the typed
+SQLite connection module, and the app shell landed in earlier releases.
 Remaining work, roughly in this order:
 
-1. Safe-to-spend, envelopes, and spending/funding entry
+1. Safe-to-spend screen — envelopes and spending/funding entry forms
 2. Funds & goals
 3. Guardrails → withdrawal sourcing engine → longevity forecast
 
