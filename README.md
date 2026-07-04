@@ -147,9 +147,22 @@ The budget slice:
   the baseline is the month's stored funding — never recomputed from live
   spend), and the recent-activity list (spending and funding merged, newest
   first).
-- `GET /api/funds` — the active fund dimension rows (sinking funds and
-  goals: name, kind, target amount, target date, monthly plan). Read-only
-  for now — the Funds & goals slice adds latest balances and creation.
+The funds slice:
+
+- `GET /api/funds` — the active funds (sinking funds and goals: name, kind,
+  target amount, target date, monthly plan), each with its latest balance
+  from `fund_entry` and an auto-derived note ("needs $X / mo to finish by
+  2027-08", "$X / mo · ~Y yrs to target", "✓ fully funded — ready to
+  spend", …). Notes are computed server-side from the fund's own numbers,
+  never hand-typed, so they can't go stale; dates in notes stay ISO —
+  display formatting is the frontend's job.
+- `POST /api/funds` — creates a fund. `kind` is derived, never sent: a
+  blank `target_date` means a sinking fund, a set date means a goal; a
+  blank `target_amount` is an open-ended fund (no finish line, so no
+  progress percent — just a parked balance and a monthly plan).
+- `POST /api/fund-entries` — appends a dated balance row for a fund
+  (append-only, like `balance_entry`); the latest entry is the fund's
+  balance and earlier rows are kept as history.
 
 ### Screens
 
@@ -185,6 +198,16 @@ The budget slice:
   paycheck can prepay next month — and source) posts to `POST /api/income`.
   Every submit refetches the budget month, so the hero and envelopes always
   show the API's figures rather than client-side math.
+- **Funds & goals** (<http://localhost:5173/funds>) — sinking funds and
+  dated goals as one concept, in a single card: a header with the total
+  parked and the "notes auto-calculate" hint, the dashed **+ New fund or
+  goal** form (name, target, saved, target date — blank = sinking fund —
+  and $/month), then each fund with its meta line, `saved / target` amount,
+  progress bar, and the server-derived note from `GET /api/funds`, rendered
+  verbatim. Completed funds turn accent green; open-ended funds (no target)
+  show just their balance, with no bar. Submitting the form posts the
+  dimension row to `POST /api/funds`, appends any initial saved amount via
+  `POST /api/fund-entries`, and refetches the list.
 
 ### Tests, linters, and type checkers
 
