@@ -156,9 +156,68 @@ describe('Funds & goals card', () => {
   })
 })
 
-describe('Recent activity scaffold', () => {
-  it('renders the empty card awaiting the safe-to-spend slice', async () => {
+describe('Recent activity', () => {
+  it('renders a spending row with its category emoji and ink amount', async () => {
     stubDashboard()
+    renderDashboard()
+
+    expect(await screen.findByText('Groceries · Jun 10')).toBeInTheDocument()
+    expect(screen.getByText('🛒')).toBeInTheDocument()
+    expect(screen.getByText('Groceries')).toBeInTheDocument()
+    expect(screen.getByText('−$387').className).toContain('text-ink')
+  })
+
+  it('renders a treat in red when its category is over budget', async () => {
+    stubDashboard()
+    renderDashboard()
+
+    expect(await screen.findByText('Poke — treat yourself')).toBeInTheDocument()
+    expect(screen.getByText('Entertainment · Jun 26')).toBeInTheDocument()
+    expect(screen.getByText('−$28.40').className).toContain('text-red')
+  })
+
+  it('renders a funding row with a green amount and the funded month', async () => {
+    stubDashboard()
+    renderDashboard()
+
+    expect(await screen.findByText('Spouse paycheck')).toBeInTheDocument()
+    expect(screen.getByText('Funds June · May 27')).toBeInTheDocument()
+    expect(screen.getByText('💵')).toBeInTheDocument()
+    expect(screen.getByText('+$2,400').className).toContain('text-accent')
+  })
+
+  it('deep-links the header to add an item on the safe-to-spend view', async () => {
+    stubDashboard()
+    renderDashboard()
+
+    const link = await screen.findByRole('link', { name: 'Add an item →' })
+    expect(link).toHaveAttribute('href', '/safe-to-spend')
+  })
+
+  it('caps the list at the five newest items', async () => {
+    stubDashboard({
+      '/api/budget-month': {
+        ...BUDGET_MONTH,
+        activity: Array.from({ length: 7 }, (_, i) => ({
+          type: 'expense',
+          id: i + 1,
+          txn_date: `2026-06-${String(20 - i).padStart(2, '0')}`,
+          amount: 10 + i,
+          category: 'Groceries',
+          source: null,
+          note: null,
+        })),
+      },
+    })
+    renderDashboard()
+
+    expect(await screen.findAllByTestId('activity-row')).toHaveLength(5)
+  })
+
+  it('keeps the empty state when the month has no activity', async () => {
+    stubDashboard({
+      '/api/budget-month': { ...BUDGET_MONTH, activity: [] },
+    })
     renderDashboard()
 
     expect(await screen.findByText('Recent activity')).toBeInTheDocument()
