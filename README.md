@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.5.0**
+**v0.6.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -170,22 +170,20 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.5.0 — Ledger entries screen. The first full read/write screen (see
-[Screens](#screens)): the monthly balance table reads from `GET /api/ledger`
-with the current month highlighted, and the "Update this month's balances"
-form recomputes ETH value (quantity × price) and net worth live on every
-keystroke, then appends one dated row per account via
-`POST /api/balance-entries` — nothing is ever updated in place. Saving
-refreshes the table and the header net-worth readout, which is now live app
-wide via a shared provider the upcoming Dashboard hero will reuse. The
-balances API, seed data, the append-only schema (migrations at startup), the
-typed SQLite connection module, and the app shell landed in earlier releases.
+v0.6.0 — Dashboard v1. The landing view is real (see [Screens](#screens)):
+the net-worth hero renders the live figure, YoY pill, and 12-bar sparkline
+from `GET /api/net-worth` through the same shared provider as the header
+readout, and the Safe-to-spend, Spend guardrail, Longevity, and Funds &
+goals cards deep-link to their views as static placeholders until each
+feature slice lands. Recent activity is scaffolded empty for the
+Safe-to-spend ticket. The Ledger entries screen, the balances API, seed
+data, the append-only schema (migrations at startup), the typed SQLite
+connection module, and the app shell landed in earlier releases.
 Remaining work, roughly in this order:
 
-1. Dashboard reading from the net-worth endpoint
-2. Safe-to-spend, envelopes, and spending/funding entry
-3. Funds & goals
-4. Guardrails → withdrawal sourcing engine → longevity forecast
+1. Safe-to-spend, envelopes, and spending/funding entry
+2. Funds & goals
+3. Guardrails → withdrawal sourcing engine → longevity forecast
 
 ## License
 
