@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it } from 'vitest'
 import NetWorthProvider from '../components/NetWorthProvider.tsx'
-import { NET_WORTH } from '../test/fixtures.ts'
+import { BUDGET_MONTH, FUNDS, NET_WORTH } from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import Dashboard from './Dashboard.tsx'
 
@@ -15,16 +15,25 @@ const renderDashboard = () =>
     </MemoryRouter>,
   )
 
+// The wired dashboard fetches all three APIs; tests override per route.
+const stubDashboard = (routes: Record<string, unknown> = {}) =>
+  stubApi({
+    '/api/net-worth': NET_WORTH,
+    '/api/budget-month': BUDGET_MONTH,
+    '/api/funds': FUNDS,
+    ...routes,
+  })
+
 describe('Net worth hero', () => {
   it('shows the current net worth from the API', async () => {
-    stubApi({ '/api/net-worth': NET_WORTH })
+    stubDashboard()
     renderDashboard()
 
     expect(await screen.findByText('$1,744,000')).toBeInTheDocument()
   })
 
   it('shows a rising YoY pill with the baseline month', async () => {
-    stubApi({ '/api/net-worth': NET_WORTH })
+    stubDashboard()
     renderDashboard()
 
     expect(await screen.findByText('▲ 5.7%')).toBeInTheDocument()
@@ -32,14 +41,14 @@ describe('Net worth hero', () => {
   })
 
   it('shows a falling YoY pill when the change is negative', async () => {
-    stubApi({ '/api/net-worth': { ...NET_WORTH, yoy: -0.023 } })
+    stubDashboard({ '/api/net-worth': { ...NET_WORTH, yoy: -0.023 } })
     renderDashboard()
 
     expect(await screen.findByText('▼ 2.3%')).toBeInTheDocument()
   })
 
   it('renders one sparkline bar per series month, scaled to the max', async () => {
-    stubApi({ '/api/net-worth': NET_WORTH })
+    stubDashboard()
     renderDashboard()
 
     const bars = await screen.findAllByTestId('spark-bar')
@@ -49,7 +58,9 @@ describe('Net worth hero', () => {
   })
 
   it('shows a placeholder and no pill before any data exists', async () => {
-    stubApi({ '/api/net-worth': { current: null, yoy: null, series: [] } })
+    stubDashboard({
+      '/api/net-worth': { current: null, yoy: null, series: [] },
+    })
     renderDashboard()
 
     expect(await screen.findByText('$—')).toBeInTheDocument()
@@ -58,7 +69,7 @@ describe('Net worth hero', () => {
   })
 
   it('omits the pill when under 12 months of history', async () => {
-    stubApi({
+    stubDashboard({
       '/api/net-worth': {
         current: 1_744_000,
         yoy: null,
@@ -72,16 +83,29 @@ describe('Net worth hero', () => {
   })
 })
 
-describe('Placeholder cards', () => {
-  beforeEach(() => {
-    stubApi({ '/api/net-worth': NET_WORTH })
+describe('Safe-to-spend card', () => {
+  it('deep-links and shows the live headline from the budget API', async () => {
+    stubDashboard()
     renderDashboard()
-  })
 
-  it('deep-links the safe-to-spend card with its placeholder number', () => {
     const card = screen.getByRole('link', { name: /safe-to-spend/i })
     expect(card).toHaveAttribute('href', '/safe-to-spend')
-    expect(within(card).getByText('$2,438')).toBeInTheDocument()
+    expect(await within(card).findByText('$3,670')).toBeInTheDocument()
+  })
+
+  it('fills the progress bar with the safe-to-spend share of the baseline', async () => {
+    stubDashboard()
+    renderDashboard()
+
+    const bar = await screen.findByTestId('sts-bar')
+    expect(bar.style.width).toBe(`${(3_670 / 5_200) * 100}%`)
+  })
+})
+
+describe('Placeholder cards', () => {
+  beforeEach(() => {
+    stubDashboard()
+    renderDashboard()
   })
 
   it('deep-links the guardrail card with its placeholder rate and status', () => {
@@ -111,7 +135,7 @@ describe('Placeholder cards', () => {
 
 describe('Recent activity scaffold', () => {
   it('renders the empty card awaiting the safe-to-spend slice', async () => {
-    stubApi({ '/api/net-worth': NET_WORTH })
+    stubDashboard()
     renderDashboard()
 
     expect(await screen.findByText('Recent activity')).toBeInTheDocument()
