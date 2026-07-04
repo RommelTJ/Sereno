@@ -407,6 +407,17 @@ class TestGetBudgetMonth:
         assert body["total_spent"] == 100
         assert len(body["activity"]) == 2
 
+    def test_a_funded_month_with_no_spending_keeps_its_baseline(self, client):
+        # v_budget_month groups over expense_line, so a month that is funded
+        # ahead (the seed's Jun 27 paycheck funding July) has no view row yet;
+        # the baseline must still be the stored funding, not zero.
+        self.fund_month(client, 2400, txn_date="2026-05-27")
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["baseline"] == 2400
+        assert body["total_spent"] == 0
+        assert body["safe_to_spend"] == 2400
+        assert [item["type"] for item in body["activity"]] == ["income"]
+
     def test_month_defaults_to_the_current_month(self, client):
         today = date.today()
         payload = {"txn_date": today.isoformat(), "amount": 75}
