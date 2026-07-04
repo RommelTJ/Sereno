@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import NetWorthProvider from '../components/NetWorthProvider.tsx'
 import { NET_WORTH } from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
@@ -69,5 +69,54 @@ describe('Net worth hero', () => {
 
     expect(await screen.findByText('$1,744,000')).toBeInTheDocument()
     expect(screen.queryByText(/[▲▼]/)).not.toBeInTheDocument()
+  })
+})
+
+describe('Placeholder cards', () => {
+  beforeEach(() => {
+    stubApi({ '/api/net-worth': NET_WORTH })
+    renderDashboard()
+  })
+
+  it('deep-links the safe-to-spend card with its placeholder number', () => {
+    const card = screen.getByRole('link', { name: /safe-to-spend/i })
+    expect(card).toHaveAttribute('href', '/safe-to-spend')
+    expect(within(card).getByText('$2,438')).toBeInTheDocument()
+  })
+
+  it('deep-links the guardrail card with its placeholder rate and status', () => {
+    const card = screen.getByRole('link', { name: /spend guardrail/i })
+    expect(card).toHaveAttribute('href', '/guardrails')
+    expect(within(card).getByText('3.0%')).toBeInTheDocument()
+    expect(within(card).getByText('Hold steady')).toBeInTheDocument()
+  })
+
+  it('deep-links the longevity card with its placeholder verdict', () => {
+    const card = screen.getByRole('link', { name: /longevity/i })
+    expect(card).toHaveAttribute('href', '/forecast')
+    expect(within(card).getByText("You don't run out.")).toBeInTheDocument()
+    expect(within(card).getByText('~$5.5M')).toBeInTheDocument()
+  })
+
+  it('deep-links the funds card with its placeholder totals and mini list', () => {
+    const card = screen.getByRole('link', { name: /funds & goals/i })
+    expect(card).toHaveAttribute('href', '/funds')
+    expect(within(card).getByText('$66,000')).toBeInTheDocument()
+    expect(within(card).getByText('parked across 5 funds')).toBeInTheDocument()
+    expect(within(card).getByText('Emergency fund')).toBeInTheDocument()
+    expect(within(card).getByText('House maintenance')).toBeInTheDocument()
+    expect(within(card).getByText('1st-year fund')).toBeInTheDocument()
+  })
+})
+
+describe('Recent activity scaffold', () => {
+  it('renders the empty card awaiting the safe-to-spend slice', async () => {
+    stubApi({ '/api/net-worth': NET_WORTH })
+    renderDashboard()
+
+    expect(await screen.findByText('Recent activity')).toBeInTheDocument()
+    expect(
+      screen.getByText('No activity yet — spending and funding items land here.'),
+    ).toBeInTheDocument()
   })
 })
