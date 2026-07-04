@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { BudgetMonth, ExpenseInput, Fund } from '../api.ts'
-import { createExpense, fetchBudgetMonth, fetchFunds } from '../api.ts'
+import type { BudgetMonth, ExpenseInput, Fund, IncomeInput } from '../api.ts'
+import {
+  createExpense,
+  createIncome,
+  fetchBudgetMonth,
+  fetchFunds,
+} from '../api.ts'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
+import FundingForm from '../components/FundingForm.tsx'
 import SpendingForm from '../components/SpendingForm.tsx'
 import { formatUsd } from '../ledger.ts'
 
@@ -35,6 +41,11 @@ function SafeToSpend() {
     setBudget(await fetchBudgetMonth())
   }
 
+  const addIncome = async (input: IncomeInput) => {
+    await createIncome(input)
+    setBudget(await fetchBudgetMonth())
+  }
+
   return (
     <div
       data-testid="view-safe-to-spend"
@@ -53,6 +64,7 @@ function SafeToSpend() {
               funds={funds}
               onAdd={addExpense}
             />
+            <FundingForm onAdd={addIncome} />
           </div>
         </>
       )}

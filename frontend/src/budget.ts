@@ -2,7 +2,12 @@
 // month labels. All figures come straight from GET /api/budget-month — the
 // headline is never recomputed client-side.
 
-import type { Envelope, ExpenseInput } from './api.ts'
+import type {
+  Envelope,
+  ExpenseInput,
+  IncomeInput,
+  IncomeSource,
+} from './api.ts'
 import { formatUsd, parseAmount } from './ledger.ts'
 
 export interface EnvelopeView {
@@ -42,6 +47,88 @@ export function monthLabel(month: string): string {
   return new Date(year, monthNumber - 1).toLocaleDateString('en-US', {
     month: 'long',
   })
+}
+
+// The funding sources the handoff's prototype offers, mapped onto the API's
+// source values; the label context that the enum can't carry (whose
+// paycheck, which transfer) goes in the note, matching the seed's style.
+export interface SourceOption {
+  value: string
+  label: string
+  source: IncomeSource
+  note: string
+}
+
+export const SOURCE_OPTIONS: SourceOption[] = [
+  {
+    value: 'spouse-paycheck',
+    label: '💵 Spouse paycheck',
+    source: 'paycheck',
+    note: 'Spouse paycheck',
+  },
+  {
+    value: 'your-paycheck',
+    label: '💵 Your paycheck',
+    source: 'paycheck',
+    note: 'You paycheck',
+  },
+  {
+    value: 'brokerage-withdrawal',
+    label: '🏦 Brokerage withdrawal',
+    source: 'transfer_in',
+    note: 'Brokerage withdrawal',
+  },
+  {
+    value: 'eth-harvest',
+    label: 'Ξ ETH harvest',
+    source: 'staking',
+    note: 'ETH harvest',
+  },
+  {
+    value: 'cash-plus-transfer',
+    label: '🏠 Cash Plus transfer',
+    source: 'transfer_in',
+    note: 'Cash Plus transfer',
+  },
+]
+
+export interface MonthOption {
+  value: string
+  label: string
+}
+
+// The months a funding item can be tagged to: the current month and the
+// next two — enough for the prepay pattern (June pay funds July).
+export function fundsMonthOptions(todayIsoDate: string): MonthOption[] {
+  const [year, month] = todayIsoDate.split('-').map(Number)
+  return [0, 1, 2].map((offset) => {
+    const date = new Date(year, month - 1 + offset)
+    return {
+      value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+      label: date.toLocaleDateString('en-US', {
+        month: 'short',
+        year: 'numeric',
+      }),
+    }
+  })
+}
+
+export function incomeInput(
+  rawAmount: string,
+  sourceKey: string,
+  budgetMonth: string,
+  txnDate: string,
+): IncomeInput | null {
+  const amount = parseAmount(rawAmount)
+  const option = SOURCE_OPTIONS.find((source) => source.value === sourceKey)
+  if (!amount || !option) return null
+  return {
+    txn_date: txnDate,
+    budget_month: budgetMonth,
+    source: option.source,
+    amount,
+    note: option.note,
+  }
 }
 
 // The funded-from select encodes its choice as 'discretionary' or
