@@ -2,8 +2,10 @@ import { vi } from 'vitest'
 
 /**
  * Stub global fetch with per-path JSON payloads, e.g.
- * `stubApi({ '/api/ledger': [...] })`. Payloads are read at call time, so a
- * test can mutate the routes object to simulate server state changing
+ * `stubApi({ '/api/ledger': [...] })`. A method-prefixed key like
+ * `'POST /api/funds'` wins over the bare path when the same path serves a
+ * GET and a POST with different payloads. Payloads are read at call time, so
+ * a test can mutate the routes object to simulate server state changing
  * between requests. Requests to unstubbed paths reject loudly.
  */
 export function stubApi(routes: Record<string, unknown>) {
@@ -15,7 +17,7 @@ export function stubApi(routes: Record<string, unknown>) {
           ? input.href
           : input.url
     const path = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0]
-    const body = routes[path]
+    const body = routes[`${init?.method ?? 'GET'} ${path}`] ?? routes[path]
     if (body === undefined) {
       return Promise.reject(
         new Error(`unstubbed fetch: ${init?.method ?? 'GET'} ${path}`),

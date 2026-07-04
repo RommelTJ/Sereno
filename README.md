@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.8.0**
+**v0.9.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -147,9 +147,22 @@ The budget slice:
   the baseline is the month's stored funding — never recomputed from live
   spend), and the recent-activity list (spending and funding merged, newest
   first).
-- `GET /api/funds` — the active fund dimension rows (sinking funds and
-  goals: name, kind, target amount, target date, monthly plan). Read-only
-  for now — the Funds & goals slice adds latest balances and creation.
+The funds slice:
+
+- `GET /api/funds` — the active funds (sinking funds and goals: name, kind,
+  target amount, target date, monthly plan), each with its latest balance
+  from `fund_entry` and an auto-derived note ("needs $X / mo to finish by
+  2027-08", "$X / mo · ~Y yrs to target", "✓ fully funded — ready to
+  spend", …). Notes are computed server-side from the fund's own numbers,
+  never hand-typed, so they can't go stale; dates in notes stay ISO —
+  display formatting is the frontend's job.
+- `POST /api/funds` — creates a fund. `kind` is derived, never sent: a
+  blank `target_date` means a sinking fund, a set date means a goal; a
+  blank `target_amount` is an open-ended fund (no finish line, so no
+  progress percent — just a parked balance and a monthly plan).
+- `POST /api/fund-entries` — appends a dated balance row for a fund
+  (append-only, like `balance_entry`); the latest entry is the fund's
+  balance and earlier rows are kept as history.
 
 ### Screens
 
@@ -185,6 +198,16 @@ The budget slice:
   paycheck can prepay next month — and source) posts to `POST /api/income`.
   Every submit refetches the budget month, so the hero and envelopes always
   show the API's figures rather than client-side math.
+- **Funds & goals** (<http://localhost:5173/funds>) — sinking funds and
+  dated goals as one concept, in a single card: a header with the total
+  parked and the "notes auto-calculate" hint, the dashed **+ New fund or
+  goal** form (name, target, saved, target date — blank = sinking fund —
+  and $/month), then each fund with its meta line, `saved / target` amount,
+  progress bar, and the server-derived note from `GET /api/funds`, rendered
+  verbatim. Completed funds turn accent green; open-ended funds (no target)
+  show just their balance, with no bar. Submitting the form posts the
+  dimension row to `POST /api/funds`, appends any initial saved amount via
+  `POST /api/fund-entries`, and refetches the list.
 
 ### Tests, linters, and type checkers
 
@@ -207,21 +230,22 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.8.0 — Safe-to-spend screen. The daily-use view is real (see
-[Screens](#screens)): the dark hero and per-category envelope bars
-render straight from `GET /api/budget-month`, and the add-spending and
-add-funding forms post to the budget API — fund-sourced spending picks
-a fund from the new read-only `GET /api/funds` and shows the matching
-Cash-Plus-withdrawal reminder, funding items can prepay a later month,
-and every submit refetches the computed month. The budget API, the
-Dashboard v1 landing view, the Ledger entries screen, the balances API,
-seed data, the append-only schema (migrations at startup), the typed
-SQLite connection module, and the app shell landed in earlier releases.
-Remaining work, roughly in this order:
+v0.9.0 — Funds & goals. Sinking funds and dated goals are one live
+concept end to end (see [Screens](#screens)): `GET /api/funds` now
+carries each fund's latest balance and a server-derived note (computed
+in typed Python from the fund's own numbers — never hand-typed), and
+the new `POST /api/funds` / `POST /api/fund-entries` endpoints power
+the single-card screen with its total parked, dashed new-fund form
+(blank date ⇒ sinking fund, blank target ⇒ open-ended), per-fund
+progress bars, and accent-green completed funds. The Safe-to-spend
+screen, the budget API, the Dashboard v1 landing view, the Ledger
+entries screen, the balances API, seed data, the append-only schema
+(migrations at startup), the typed SQLite connection module, and the
+app shell landed in earlier releases. Remaining work, roughly in this
+order:
 
-1. Funds & goals
-2. Dashboard v2 — live safe-to-spend/funds cards and recent activity
-3. Guardrails → withdrawal sourcing engine → longevity forecast
+1. Dashboard v2 — live safe-to-spend/funds cards and recent activity
+2. Guardrails → withdrawal sourcing engine → longevity forecast
 
 ## License
 

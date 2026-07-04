@@ -79,6 +79,8 @@ export interface Fund {
   target_amount: number | null
   target_date: string | null
   monthly_plan: number | null
+  balance: number
+  note: string
 }
 
 export type IncomeSource =
@@ -108,6 +110,21 @@ export interface IncomeInput {
   note?: string
 }
 
+// kind is derived server-side: a blank target_date means a sinking fund, a
+// set date means a goal; a blank target_amount is an open-ended fund.
+export interface FundInput {
+  name: string
+  target_amount?: number
+  target_date?: string
+  monthly_plan?: number
+}
+
+export interface FundEntryInput {
+  fund_id: number
+  as_of_date: string
+  balance: number
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path)
   if (!res.ok) {
@@ -116,7 +133,7 @@ async function getJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
-async function postJson(path: string, body: unknown): Promise<void> {
+async function postJsonReturning<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -125,6 +142,11 @@ async function postJson(path: string, body: unknown): Promise<void> {
   if (!res.ok) {
     throw new Error(`POST ${path} failed: ${res.status}`)
   }
+  return res.json() as Promise<T>
+}
+
+async function postJson(path: string, body: unknown): Promise<void> {
+  await postJsonReturning<unknown>(path, body)
 }
 
 export const fetchAccounts = () => getJson<Account[]>('/api/accounts')
@@ -142,3 +164,7 @@ export const createExpense = (input: ExpenseInput) =>
   postJson('/api/expenses', input)
 export const createIncome = (input: IncomeInput) =>
   postJson('/api/income', input)
+export const createFund = (input: FundInput) =>
+  postJsonReturning<Fund>('/api/funds', input)
+export const createFundEntry = (input: FundEntryInput) =>
+  postJson('/api/fund-entries', input)
