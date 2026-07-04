@@ -41,6 +41,24 @@ def insert_plan(category_id, effective_month, planned):
     )
 
 
+def insert_fund(name, kind="sinking"):
+    return execute("INSERT INTO fund (name, kind) VALUES (?, ?)", name, kind)
+
+
+def insert_account(name, kind="cash"):
+    return execute(
+        "INSERT INTO account (name, kind, tax_treatment) VALUES (?, ?, 'NONE')", name, kind
+    )
+
+
+def query(sql, *params):
+    conn = connect()
+    try:
+        return [dict(row) for row in conn.execute(sql, params)]
+    finally:
+        conn.close()
+
+
 class TestGetCategories:
     def test_empty_database_returns_no_categories(self, client):
         response = client.get("/api/categories")
@@ -101,4 +119,110 @@ class TestGetCategories:
 
     def test_rejects_a_malformed_month(self, client):
         response = client.get("/api/categories", params={"month": "June 2026"})
+        assert response.status_code == 422
+
+
+class TestPostExpenses:
+    def test_appends_an_expense_line(self, client):
+        groceries_id = insert_category("Groceries")
+        account_id = insert_account("Chase checking")
+        response = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": "2026-06-10",
+                "category_id": groceries_id,
+                "amount": 254.82,
+                "account_id": account_id,
+                "note": "Weekly shop",
+            },
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["id"] > 0
+        assert body["created_at"]
+        assert {k: body[k] for k in body if k not in ("id", "created_at")} == {
+            "txn_date": "2026-06-10",
+            "budget_month": "2026-06",
+            "category_id": groceries_id,
+            "amount": 254.82,
+            "is_fixed": False,
+            "funded_from": "discretionary",
+            "fund_id": None,
+            "account_id": account_id,
+            "note": "Weekly shop",
+        }
+        rows = query("SELECT budget_month, amount FROM expense_line")
+        assert rows == [{"budget_month": "2026-06", "amount": 254.82}]
+
+    def test_prepay_charges_a_later_budget_month(self, client):
+        response = client.post(
+            "/api/expenses",
+            json={"txn_date": "2026-06-28", "budget_month": "2026-07", "amount": 100},
+        )
+        assert response.status_code == 201
+        assert response.json()["budget_month"] == "2026-07"
+
+    def test_fund_spending_records_the_fund(self, client):
+        bike_id = insert_fund("Bike fund")
+        response = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": "2026-06-05",
+                "amount": 1200,
+                "funded_from": "fund",
+                "fund_id": bike_id,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["funded_from"] == "fund"
+        assert response.json()["fund_id"] == bike_id
+
+    def test_fund_spending_requires_a_fund_id(self, client):
+        response = client.post(
+            "/api/expenses",
+            json={"txn_date": "2026-06-05", "amount": 1200, "funded_from": "fund"},
+        )
+        assert response.status_code == 422
+
+    def test_a_fund_id_requires_fund_spending(self, client):
+        bike_id = insert_fund("Bike fund")
+        response = client.post(
+            "/api/expenses",
+            json={"txn_date": "2026-06-05", "amount": 1200, "fund_id": bike_id},
+        )
+        assert response.status_code == 422
+
+    def test_unknown_category_returns_404(self, client):
+        response = client.post(
+            "/api/expenses",
+            json={"txn_date": "2026-06-10", "category_id": 999, "amount": 50},
+        )
+        assert response.status_code == 404
+
+    def test_unknown_fund_returns_404(self, client):
+        response = client.post(
+            "/api/expenses",
+            json={"txn_date": "2026-06-05", "amount": 1200, "funded_from": "fund", "fund_id": 999},
+        )
+        assert response.status_code == 404
+
+    def test_unknown_account_returns_404(self, client):
+        response = client.post(
+            "/api/expenses",
+            json={"txn_date": "2026-06-10", "amount": 50, "account_id": 999},
+        )
+        assert response.status_code == 404
+
+    def test_rejects_a_non_positive_amount(self, client):
+        for amount in (0, -25):
+            response = client.post(
+                "/api/expenses", json={"txn_date": "2026-06-10", "amount": amount}
+            )
+            assert response.status_code == 422
+
+    def test_rejects_an_unknown_funded_from(self, client):
+        response = client.post(
+            "/api/expenses",
+            json={"txn_date": "2026-06-10", "amount": 50, "funded_from": "mattress"},
+        )
         assert response.status_code == 422
