@@ -31,6 +31,27 @@ export const ACCOUNTS = [
   account(10, 'Mortgage', 'mortgage', { is_liability: true }),
 ]
 
+// Exactly as GET /api/net-worth returns it: last-12-months series (oldest
+// first), current = newest month, yoy vs. the same month a year earlier.
+export const NET_WORTH = {
+  current: 1_744_000,
+  yoy: 0.057,
+  series: [
+    { month: '2025-07', net_worth: 1_480_000 },
+    { month: '2025-08', net_worth: 1_505_000 },
+    { month: '2025-09', net_worth: 1_530_000 },
+    { month: '2025-10', net_worth: 1_552_000 },
+    { month: '2025-11', net_worth: 1_575_000 },
+    { month: '2025-12', net_worth: 1_600_000 },
+    { month: '2026-01', net_worth: 1_622_000 },
+    { month: '2026-02', net_worth: 1_648_000 },
+    { month: '2026-03', net_worth: 1_672_000 },
+    { month: '2026-04', net_worth: 1_695_000 },
+    { month: '2026-05', net_worth: 1_717_300 },
+    { month: '2026-06', net_worth: 1_744_000 },
+  ],
+}
+
 export const balance = (
   account_id: number,
   as_of_date: string,
