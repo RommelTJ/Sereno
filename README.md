@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.8.0**
+**v0.9.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -230,21 +230,22 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.8.0 — Safe-to-spend screen. The daily-use view is real (see
-[Screens](#screens)): the dark hero and per-category envelope bars
-render straight from `GET /api/budget-month`, and the add-spending and
-add-funding forms post to the budget API — fund-sourced spending picks
-a fund from the new read-only `GET /api/funds` and shows the matching
-Cash-Plus-withdrawal reminder, funding items can prepay a later month,
-and every submit refetches the computed month. The budget API, the
-Dashboard v1 landing view, the Ledger entries screen, the balances API,
-seed data, the append-only schema (migrations at startup), the typed
-SQLite connection module, and the app shell landed in earlier releases.
-Remaining work, roughly in this order:
+v0.9.0 — Funds & goals. Sinking funds and dated goals are one live
+concept end to end (see [Screens](#screens)): `GET /api/funds` now
+carries each fund's latest balance and a server-derived note (computed
+in typed Python from the fund's own numbers — never hand-typed), and
+the new `POST /api/funds` / `POST /api/fund-entries` endpoints power
+the single-card screen with its total parked, dashed new-fund form
+(blank date ⇒ sinking fund, blank target ⇒ open-ended), per-fund
+progress bars, and accent-green completed funds. The Safe-to-spend
+screen, the budget API, the Dashboard v1 landing view, the Ledger
+entries screen, the balances API, seed data, the append-only schema
+(migrations at startup), the typed SQLite connection module, and the
+app shell landed in earlier releases. Remaining work, roughly in this
+order:
 
-1. Funds & goals
-2. Dashboard v2 — live safe-to-spend/funds cards and recent activity
-3. Guardrails → withdrawal sourcing engine → longevity forecast
+1. Dashboard v2 — live safe-to-spend/funds cards and recent activity
+2. Guardrails → withdrawal sourcing engine → longevity forecast
 
 ## License
 
