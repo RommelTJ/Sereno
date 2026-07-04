@@ -2,8 +2,8 @@
 // the header total. Notes come verbatim from GET /api/funds — the server
 // derives them; only date display formatting happens here.
 
-import type { Fund } from './api.ts'
-import { formatUsd } from './ledger.ts'
+import type { Fund, FundInput } from './api.ts'
+import { formatUsd, parseAmount } from './ledger.ts'
 
 export interface FundView {
   id: number
@@ -48,4 +48,35 @@ export function fundView(fund: Fund): FundView {
 
 export function totalParked(funds: Fund[]): number {
   return funds.reduce((sum, fund) => sum + fund.balance, 0)
+}
+
+export interface NewFund {
+  fund: FundInput
+  saved: number
+}
+
+// The form's raw fields → what to post. Returns null without a name —
+// nothing should be posted. Blank target, date and monthly plan are omitted
+// so the server treats them as unset (open-ended / sinking); the saved
+// amount becomes the first fund entry, appended after the fund is created.
+export function newFund(
+  name: string,
+  rawTarget: string,
+  rawSaved: string,
+  targetDate: string,
+  rawMonthly: string,
+): NewFund | null {
+  const trimmed = name.trim()
+  if (!trimmed) return null
+  const target = parseAmount(rawTarget)
+  const monthly = parseAmount(rawMonthly)
+  return {
+    fund: {
+      name: trimmed,
+      ...(target ? { target_amount: target } : {}),
+      ...(targetDate ? { target_date: targetDate } : {}),
+      ...(monthly ? { monthly_plan: monthly } : {}),
+    },
+    saved: parseAmount(rawSaved),
+  }
 }

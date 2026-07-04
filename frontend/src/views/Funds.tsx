@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { Fund } from '../api.ts'
-import { fetchFunds } from '../api.ts'
+import { createFund, createFundEntry, fetchFunds } from '../api.ts'
+import NewFundForm from '../components/NewFundForm.tsx'
+import type { NewFund } from '../funds.ts'
 import { fundView, totalParked } from '../funds.ts'
-import { formatUsd } from '../ledger.ts'
+import { formatUsd, todayIso } from '../ledger.ts'
 
 function FundRow({ fund }: { fund: Fund }) {
   const view = fundView(fund)
@@ -42,6 +44,18 @@ function Funds() {
     void fetchFunds().then(setFunds)
   }, [])
 
+  const addFund = async ({ fund, saved }: NewFund) => {
+    const created = await createFund(fund)
+    if (saved > 0) {
+      await createFundEntry({
+        fund_id: created.id,
+        as_of_date: todayIso(),
+        balance: saved,
+      })
+    }
+    setFunds(await fetchFunds())
+  }
+
   return (
     <div data-testid="view-funds" className="max-w-[760px]">
       {funds && (
@@ -57,6 +71,7 @@ function Funds() {
               notes auto-calculate from target, saved &amp; date
             </p>
           </div>
+          <NewFundForm onAdd={addFund} />
           <div className="mt-[18px] flex flex-col gap-5">
             {funds.map((fund) => (
               <FundRow key={fund.id} fund={fund} />
