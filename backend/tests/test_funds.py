@@ -117,3 +117,54 @@ class TestGetFunds:
         insert_fund_entry(fund_id, "2026-06-01", 4200)
         (fund,) = client.get("/api/funds").json()
         assert fund["note"] == "$300 / mo · open-ended"
+
+
+class TestCreateFund:
+    def test_a_blank_target_date_creates_a_sinking_fund(self, client):
+        response = client.post(
+            "/api/funds",
+            json={"name": "House maintenance", "target_amount": 30000, "monthly_plan": 180},
+        )
+        assert response.status_code == 201
+        fund = response.json()
+        assert fund["name"] == "House maintenance"
+        assert fund["kind"] == "sinking"
+        assert fund["target_amount"] == 30000
+        assert fund["target_date"] is None
+        assert fund["monthly_plan"] == 180
+        assert fund["balance"] == 0
+
+    def test_a_target_date_creates_a_goal(self, client):
+        response = client.post(
+            "/api/funds",
+            json={"name": "Pool fund", "target_amount": 14000, "target_date": "2027-08-01"},
+        )
+        assert response.status_code == 201
+        fund = response.json()
+        assert fund["kind"] == "goal"
+        assert fund["target_date"] == "2027-08-01"
+
+    def test_a_blank_target_creates_an_open_ended_fund(self, client):
+        response = client.post("/api/funds", json={"name": "Travel fund", "monthly_plan": 300})
+        assert response.status_code == 201
+        fund = response.json()
+        assert fund["kind"] == "sinking"
+        assert fund["target_amount"] is None
+        assert fund["note"] == "$300 / mo · open-ended"
+
+    def test_the_created_fund_shows_up_in_the_listing(self, client):
+        created = client.post("/api/funds", json={"name": "Bike fund"}).json()
+        listed = client.get("/api/funds").json()
+        assert [fund["id"] for fund in listed] == [created["id"]]
+
+    def test_rejects_a_non_positive_target(self, client):
+        response = client.post("/api/funds", json={"name": "Bad fund", "target_amount": 0})
+        assert response.status_code == 422
+
+    def test_rejects_a_negative_monthly_plan(self, client):
+        response = client.post("/api/funds", json={"name": "Bad fund", "monthly_plan": -5})
+        assert response.status_code == 422
+
+    def test_rejects_a_blank_name(self, client):
+        response = client.post("/api/funds", json={"name": ""})
+        assert response.status_code == 422
