@@ -1,15 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { stubApi } from './test/stubs.ts'
 import App from './App.tsx'
 
 beforeEach(() => {
   window.history.pushState({}, '', '/')
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({ status: 'ok', version: '1.2.3' }),
-    }),
-  )
+  stubApi({
+    '/api/health': { status: 'ok', version: '1.2.3' },
+    '/api/accounts': [],
+    '/api/ledger': [],
+  })
 })
 
 describe('App shell navigation', () => {
