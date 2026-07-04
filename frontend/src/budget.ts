@@ -2,8 +2,8 @@
 // month labels. All figures come straight from GET /api/budget-month — the
 // headline is never recomputed client-side.
 
-import type { Envelope } from './api.ts'
-import { formatUsd } from './ledger.ts'
+import type { Envelope, ExpenseInput } from './api.ts'
+import { formatUsd, parseAmount } from './ledger.ts'
 
 export interface EnvelopeView {
   id: number
@@ -42,4 +42,25 @@ export function monthLabel(month: string): string {
   return new Date(year, monthNumber - 1).toLocaleDateString('en-US', {
     month: 'long',
   })
+}
+
+// The funded-from select encodes its choice as 'discretionary' or
+// 'fund:<id>'. budget_month is left to the server default (the txn's month).
+// Returns null when the amount doesn't parse — nothing should be posted.
+export function expenseInput(
+  rawAmount: string,
+  categoryId: number,
+  fundedFrom: string,
+  txnDate: string,
+): ExpenseInput | null {
+  const amount = parseAmount(rawAmount)
+  if (!amount) return null
+  const base = { txn_date: txnDate, category_id: categoryId, amount }
+  return fundedFrom === 'discretionary'
+    ? { ...base, funded_from: 'discretionary' }
+    : {
+        ...base,
+        funded_from: 'fund',
+        fund_id: Number(fundedFrom.slice('fund:'.length)),
+      }
 }

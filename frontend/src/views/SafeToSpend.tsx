@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { BudgetMonth, Fund } from '../api.ts'
-import { fetchBudgetMonth, fetchFunds } from '../api.ts'
+import type { BudgetMonth, ExpenseInput, Fund } from '../api.ts'
+import { createExpense, fetchBudgetMonth, fetchFunds } from '../api.ts'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
+import SpendingForm from '../components/SpendingForm.tsx'
 import { formatUsd } from '../ledger.ts'
 
 function Hero({ safeToSpend }: { safeToSpend: number }) {
@@ -29,6 +30,11 @@ function SafeToSpend() {
     void fetchFunds().then(setFunds)
   }, [])
 
+  const addExpense = async (input: ExpenseInput) => {
+    await createExpense(input)
+    setBudget(await fetchBudgetMonth())
+  }
+
   return (
     <div
       data-testid="view-safe-to-spend"
@@ -41,7 +47,12 @@ function SafeToSpend() {
             <EnvelopesCard month={budget.month} envelopes={budget.categories} />
           </div>
           <div className="flex flex-col gap-5">
-            {/* The spending and funding forms land in the next commits. */}
+            <SpendingForm
+              month={budget.month}
+              categories={budget.categories}
+              funds={funds}
+              onAdd={addExpense}
+            />
           </div>
         </>
       )}
