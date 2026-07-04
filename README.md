@@ -128,6 +128,19 @@ The balances vertical slice (interactive docs at <http://localhost:8000/docs>):
   month a year earlier (`null` until 12 months of history exist), and the
   last-12-months series for the sparkline.
 
+### Screens
+
+- **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
+  table (one row per month, newest first, current month highlighted; the two
+  cash accounts share one column and the mortgage shows as a negative figure)
+  beside the "Update this month's balances" form. Fund and retirement balances
+  are entered in USD; ETH is entered as quantity + $/ETH with a live
+  quantity × price readout, and every edit recomputes the displayed net worth
+  before anything is saved. Saving appends one dated row per account via
+  `POST /api/balance-entries` — the latest entry in a month wins and earlier
+  rows are kept as history — then the table and the header net-worth readout
+  refresh from the API.
+
 ### Tests, linters, and type checkers
 
 Backend (ruff, ty, pytest):
