@@ -226,3 +226,64 @@ class TestPostExpenses:
             json={"txn_date": "2026-06-10", "amount": 50, "funded_from": "mattress"},
         )
         assert response.status_code == 422
+
+
+class TestPostIncome:
+    def test_appends_an_income_event(self, client):
+        account_id = insert_account("Chase checking")
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-05-24",
+                "budget_month": "2026-06",
+                "source": "paycheck",
+                "amount": 2800,
+                "tax_treatment": "ORDINARY",
+                "account_id": account_id,
+                "note": "You paycheck",
+            },
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["id"] > 0
+        assert body["created_at"]
+        assert {k: body[k] for k in body if k not in ("id", "created_at")} == {
+            "txn_date": "2026-05-24",
+            "budget_month": "2026-06",
+            "source": "paycheck",
+            "amount": 2800,
+            "tax_treatment": "ORDINARY",
+            "account_id": account_id,
+            "note": "You paycheck",
+        }
+        rows = query("SELECT budget_month, source, amount FROM income_event")
+        assert rows == [{"budget_month": "2026-06", "source": "paycheck", "amount": 2800}]
+
+    def test_budget_month_defaults_to_the_txn_month(self, client):
+        response = client.post(
+            "/api/income",
+            json={"txn_date": "2026-06-15", "source": "interest", "amount": 12.34},
+        )
+        assert response.status_code == 201
+        assert response.json()["budget_month"] == "2026-06"
+
+    def test_rejects_an_unknown_source(self, client):
+        response = client.post(
+            "/api/income",
+            json={"txn_date": "2026-06-15", "source": "lottery", "amount": 100},
+        )
+        assert response.status_code == 422
+
+    def test_rejects_a_non_positive_amount(self, client):
+        response = client.post(
+            "/api/income",
+            json={"txn_date": "2026-06-15", "source": "paycheck", "amount": 0},
+        )
+        assert response.status_code == 422
+
+    def test_unknown_account_returns_404(self, client):
+        response = client.post(
+            "/api/income",
+            json={"txn_date": "2026-06-15", "source": "paycheck", "amount": 100, "account_id": 9},
+        )
+        assert response.status_code == 404
