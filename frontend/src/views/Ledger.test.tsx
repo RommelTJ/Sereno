@@ -1,85 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { ACCOUNTS, LEDGER, balance } from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import Ledger from './Ledger.tsx'
-
-// Accounts mirror the seed dimension rows: columns map by kind, except the
-// three brokerage funds, which map by name.
-const account = (
-  id: number,
-  name: string,
-  kind: string,
-  overrides: Partial<{ is_liability: boolean; is_investable: boolean }> = {},
-) => ({
-  id,
-  name,
-  kind,
-  tax_treatment: 'NONE',
-  owner: null,
-  is_liability: false,
-  is_investable: false,
-  active: true,
-  ...overrides,
-})
-
-export const ACCOUNTS = [
-  account(1, 'Ethereum', 'eth', { is_investable: true }),
-  account(2, 'VFIAX', 'brokerage_fund', { is_investable: true }),
-  account(3, 'VTIAX', 'brokerage_fund', { is_investable: true }),
-  account(4, 'VGSH', 'brokerage_fund', { is_investable: true }),
-  account(5, 'Retirement', '401k', { is_investable: true }),
-  account(6, 'Home', 'home'),
-  account(7, 'Chase checking', 'cash'),
-  account(8, 'Vanguard Cash Plus', 'cash_plus'),
-  account(9, 'Car', 'car'),
-  account(10, 'Mortgage', 'mortgage', { is_liability: true }),
-]
-
-const balance = (
-  account_id: number,
-  as_of_date: string,
-  balance_usd: number,
-  quantity: number | null = null,
-  unit_price: number | null = null,
-) => ({ account_id, as_of_date, balance_usd, quantity, unit_price })
-
-// Two months, newest first, exactly as GET /api/ledger returns them.
-// Liability balances (Mortgage) are positive, as stored.
-// June net worth = 70k+700k+250k+130k+350k+350k+9k+20k+15k − 150k = 1,744,000.
-export const LEDGER = [
-  {
-    month: '2026-06',
-    net_worth: 1_744_000,
-    balances: [
-      balance(1, '2026-06-01', 70_000, 20, 3_500),
-      balance(2, '2026-06-01', 700_000),
-      balance(3, '2026-06-01', 250_000),
-      balance(4, '2026-06-01', 130_000),
-      balance(5, '2026-06-01', 350_000),
-      balance(6, '2026-06-01', 350_000),
-      balance(7, '2026-06-01', 9_000),
-      balance(8, '2026-06-01', 20_000),
-      balance(9, '2026-06-01', 15_000),
-      balance(10, '2026-06-01', 150_000),
-    ],
-  },
-  {
-    month: '2026-05',
-    net_worth: 1_717_300,
-    balances: [
-      balance(1, '2026-05-01', 68_000, 20, 3_400),
-      balance(2, '2026-05-01', 690_000),
-      balance(3, '2026-05-01', 246_000),
-      balance(4, '2026-05-01', 128_000),
-      balance(5, '2026-05-01', 345_000),
-      balance(6, '2026-05-01', 349_000),
-      balance(7, '2026-05-01', 7_000),
-      balance(8, '2026-05-01', 20_000),
-      balance(9, '2026-05-01', 15_000),
-      balance(10, '2026-05-01', 150_700),
-    ],
-  },
-]
 
 describe('Ledger monthly balance table', () => {
   beforeEach(() => {
@@ -204,6 +127,90 @@ describe("Update this month's balances form", () => {
     })
     expect(screen.getByTestId('live-net-worth')).toHaveTextContent(
       '$1,757,500',
+    )
+  })
+})
+
+describe('Saving balances', () => {
+  let routes: Record<string, unknown>
+  let fetchMock: ReturnType<typeof stubApi>
+
+  beforeEach(() => {
+    routes = {
+      '/api/accounts': ACCOUNTS,
+      '/api/ledger': LEDGER,
+      '/api/balance-entries': { id: 999 },
+    }
+    fetchMock = stubApi(routes)
+  })
+
+  it('appends one entry per form account, dated today, on save', async () => {
+    render(<Ledger />)
+
+    fireEvent.change(await screen.findByLabelText('VFIAX'), {
+      target: { value: '710,000' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save balances' }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Saved ✓' }),
+    ).toBeInTheDocument()
+    const today = new Date().toLocaleDateString('en-CA')
+    const bodies = fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'POST')
+      .map(([, init]) => JSON.parse(String(init?.body)) as unknown)
+    expect(bodies).toHaveLength(5)
+    expect(bodies).toContainEqual({
+      account_id: 1,
+      as_of_date: today,
+      quantity: 20,
+      unit_price: 3500,
+    })
+    expect(bodies).toContainEqual({
+      account_id: 2,
+      as_of_date: today,
+      balance_usd: 710000,
+    })
+    expect(bodies).toContainEqual({
+      account_id: 3,
+      as_of_date: today,
+      balance_usd: 250000,
+    })
+    expect(bodies).toContainEqual({
+      account_id: 4,
+      as_of_date: today,
+      balance_usd: 130000,
+    })
+    expect(bodies).toContainEqual({
+      account_id: 5,
+      as_of_date: today,
+      balance_usd: 350000,
+    })
+  })
+
+  it('refreshes the table so the appended month row appears', async () => {
+    render(<Ledger />)
+    await screen.findAllByTestId('ledger-row')
+
+    // The server now has a July entry; saving should refetch and show it.
+    routes['/api/ledger'] = [
+      {
+        month: '2026-07',
+        net_worth: 1_754_000,
+        balances: [
+          balance(1, '2026-07-04', 73_500, 21, 3_500),
+          balance(2, '2026-07-04', 710_000),
+        ],
+      },
+      ...LEDGER,
+    ]
+    fireEvent.click(screen.getByRole('button', { name: 'Save balances' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('ledger-row')).toHaveLength(3),
+    )
+    expect(screen.getAllByTestId('ledger-row')[0]).toHaveTextContent(
+      'Jul 4, 2026',
     )
   })
 })
