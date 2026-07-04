@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { stsBarPct } from '../dashboard.ts'
+import { fundsMini, stsBarPct } from '../dashboard.ts'
+import { totalParked } from '../funds.ts'
 import { formatUsd } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
-import type { BudgetMonth, NetWorthPoint } from '../api.ts'
-import { fetchBudgetMonth } from '../api.ts'
+import type { BudgetMonth, Fund, NetWorthPoint } from '../api.ts'
+import { fetchBudgetMonth, fetchFunds } from '../api.ts'
 
 // "▲ 5.7%" / "▼ 2.3%" — the API's yoy is a fraction vs. the same month a
 // year earlier (null until 12 months of history exist).
@@ -148,22 +149,22 @@ function LongevityCard() {
   )
 }
 
-const FUNDS_MINI = [
-  { name: 'Emergency fund', pct: '33%' },
-  { name: 'House maintenance', pct: '50%' },
-  { name: '1st-year fund', pct: '100%' },
-]
-
-function FundsCard() {
+function FundsCard({ funds }: { funds: Fund[] | null }) {
   return (
     <CardLink to="/funds" label="Funds & goals">
-      <p className="num mt-1.5 text-[30px] font-extrabold">$66,000</p>
-      <p className="text-xs text-muted">parked across 5 funds</p>
+      <p className="num mt-1.5 text-[30px] font-extrabold">
+        {funds != null ? formatUsd(totalParked(funds)) : '$—'}
+      </p>
+      {funds != null && (
+        <p className="text-xs text-muted">
+          parked across {funds.length} funds
+        </p>
+      )}
       <div className="mt-3.5 flex flex-col gap-[7px]">
-        {FUNDS_MINI.map((fund) => (
-          <div key={fund.name} className="flex justify-between text-xs">
+        {fundsMini(funds ?? []).map((fund) => (
+          <div key={fund.id} className="flex justify-between text-xs">
             <span className="text-muted">{fund.name}</span>
-            <span className="num text-muted-2">{fund.pct}</span>
+            <span className="num text-muted-2">{fund.right}</span>
           </div>
         ))}
       </div>
@@ -187,9 +188,11 @@ function RecentActivity() {
 
 function Dashboard() {
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
+  const [funds, setFunds] = useState<Fund[] | null>(null)
 
   useEffect(() => {
     void fetchBudgetMonth().then(setBudget)
+    void fetchFunds().then(setFunds)
   }, [])
 
   return (
@@ -201,7 +204,7 @@ function Dashboard() {
       <div className="mt-5 grid grid-cols-3 gap-5">
         <GuardrailCard />
         <LongevityCard />
-        <FundsCard />
+        <FundsCard funds={funds} />
       </div>
       <RecentActivity />
     </div>
