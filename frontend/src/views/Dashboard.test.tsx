@@ -122,14 +122,37 @@ describe('Placeholder cards', () => {
     expect(within(card).getByText('~$5.5M')).toBeInTheDocument()
   })
 
-  it('deep-links the funds card with its placeholder totals and mini list', () => {
+})
+
+describe('Funds & goals card', () => {
+  it('deep-links and shows the live total parked from the funds API', async () => {
+    stubDashboard()
+    renderDashboard()
+
     const card = screen.getByRole('link', { name: /funds & goals/i })
     expect(card).toHaveAttribute('href', '/funds')
-    expect(within(card).getByText('$66,000')).toBeInTheDocument()
-    expect(within(card).getByText('parked across 5 funds')).toBeInTheDocument()
-    expect(within(card).getByText('Emergency fund')).toBeInTheDocument()
-    expect(within(card).getByText('House maintenance')).toBeInTheDocument()
-    expect(within(card).getByText('1st-year fund')).toBeInTheDocument()
+    expect(await within(card).findByText('$24,200')).toBeInTheDocument()
+    expect(within(card).getByText('parked across 3 funds')).toBeInTheDocument()
+  })
+
+  it('lists the top three funds with their percent to target', async () => {
+    stubDashboard()
+    renderDashboard()
+
+    const card = screen.getByRole('link', { name: /funds & goals/i })
+    expect(await within(card).findByText('Emergency fund')).toBeInTheDocument()
+    expect(within(card).getByText('33%')).toBeInTheDocument()
+    expect(within(card).getByText('Bike fund')).toBeInTheDocument()
+    expect(within(card).getByText('100%')).toBeInTheDocument()
+  })
+
+  it('shows an open-ended fund by its balance instead of a percent', async () => {
+    stubDashboard()
+    renderDashboard()
+
+    const card = screen.getByRole('link', { name: /funds & goals/i })
+    expect(await within(card).findByText('Travel fund')).toBeInTheDocument()
+    expect(within(card).getByText('$4,200')).toBeInTheDocument()
   })
 })
 
