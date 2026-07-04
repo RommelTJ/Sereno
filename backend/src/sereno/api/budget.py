@@ -68,6 +68,31 @@ class Expense(BaseModel):
     created_at: datetime
 
 
+class IncomeCreate(BaseModel):
+    """budget_month is the month this inflow funds; it defaults to the txn's
+    month — the prepay pattern passes the next month (June pay funds July)."""
+
+    txn_date: date
+    budget_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
+    source: Literal["paycheck", "transfer_in", "staking", "dividend", "interest", "soc_sec"]
+    amount: PositiveFloat
+    tax_treatment: Literal["ORDINARY", "LTCG", "TAX_FREE"] | None = None
+    account_id: int | None = None
+    note: str | None = None
+
+
+class Income(BaseModel):
+    id: int
+    txn_date: date
+    budget_month: str
+    source: str
+    amount: float
+    tax_treatment: str | None
+    account_id: int | None
+    note: str | None
+    created_at: datetime
+
+
 def _require(db: sqlite3.Connection, table: str, row_id: int | None, label: str) -> None:
     if row_id is None:
         return
@@ -117,3 +142,28 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
         (cursor.lastrowid,),
     ).fetchone()
     return Expense(**dict(row))
+
+
+@router.post("/income", status_code=201)
+def create_income(income: IncomeCreate, db: Db) -> Income:
+    _require(db, "account", income.account_id, "account")
+    cursor = db.execute(
+        "INSERT INTO income_event (txn_date, budget_month, source, amount,"
+        " tax_treatment, account_id, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            income.txn_date.isoformat(),
+            income.budget_month or income.txn_date.strftime("%Y-%m"),
+            income.source,
+            income.amount,
+            income.tax_treatment,
+            income.account_id,
+            income.note,
+        ),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, txn_date, budget_month, source, amount, tax_treatment,"
+        " account_id, note, created_at FROM income_event WHERE id = ?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    return Income(**dict(row))
