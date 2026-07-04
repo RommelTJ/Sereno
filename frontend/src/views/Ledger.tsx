@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { Account, LedgerMonth } from '../api.ts'
 import { fetchAccounts, fetchLedger } from '../api.ts'
+import BalanceForm from '../components/BalanceForm.tsx'
 import LedgerTable from '../components/LedgerTable.tsx'
-import { ledgerRows } from '../ledger.ts'
+import {
+  initialFormValues,
+  ledgerRows,
+  otherBalancesTotal,
+} from '../ledger.ts'
 
 function Ledger() {
   const [accounts, setAccounts] = useState<Account[] | null>(null)
@@ -19,7 +24,13 @@ function Ledger() {
       className="grid grid-cols-[1.6fr_1fr] items-start gap-5"
     >
       {accounts && months && (
-        <LedgerTable rows={ledgerRows(months, accounts)} />
+        <>
+          <LedgerTable rows={ledgerRows(months, accounts)} />
+          <BalanceForm
+            initial={initialFormValues(months, accounts)}
+            otherBalances={otherBalancesTotal(months, accounts)}
+          />
+        </>
       )}
     </div>
   )
