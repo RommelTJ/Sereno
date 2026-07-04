@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.6.0**
+**v0.7.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -190,18 +190,18 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.6.0 — Dashboard v1. The landing view is real (see [Screens](#screens)):
-the net-worth hero renders the live figure, YoY pill, and 12-bar sparkline
-from `GET /api/net-worth` through the same shared provider as the header
-readout, and the Safe-to-spend, Spend guardrail, Longevity, and Funds &
-goals cards deep-link to their views as static placeholders until each
-feature slice lands. Recent activity is scaffolded empty for the
-Safe-to-spend ticket. The Ledger entries screen, the balances API, seed
-data, the append-only schema (migrations at startup), the typed SQLite
-connection module, and the app shell landed in earlier releases.
+v0.7.0 — Budget API. The budget slice's typed endpoints landed (see
+[API endpoints](#api-endpoints)): the category dimension with
+effective-dated envelope plans, append-only spending and income entry
+with prepay `budget_month` tagging, and the computed budget month —
+per-category envelopes, the Safe-to-spend headline (stored funding
+baseline − total spent), and the merged recent-activity list. The
+Dashboard v1 landing view, the Ledger entries screen, the balances API,
+seed data, the append-only schema (migrations at startup), the typed
+SQLite connection module, and the app shell landed in earlier releases.
 Remaining work, roughly in this order:
 
-1. Safe-to-spend, envelopes, and spending/funding entry
+1. Safe-to-spend screen — envelopes and spending/funding entry forms
 2. Funds & goals
 3. Guardrails → withdrawal sourcing engine → longevity forecast
 
