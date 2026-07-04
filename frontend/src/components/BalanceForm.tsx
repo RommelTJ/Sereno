@@ -38,9 +38,10 @@ function Field({ id, label, small = false, value, onChange }: FieldProps) {
 interface BalanceFormProps {
   initial: BalanceFormValues
   otherBalances: number
+  onSave: (values: BalanceFormValues) => Promise<void>
 }
 
-function BalanceForm({ initial, otherBalances }: BalanceFormProps) {
+function BalanceForm({ initial, otherBalances, onSave }: BalanceFormProps) {
   const [fields, setFields] = useState(() => ({
     vfiax: formatAmount(initial.vfiax),
     vtiax: formatAmount(initial.vtiax),
@@ -49,9 +50,13 @@ function BalanceForm({ initial, otherBalances }: BalanceFormProps) {
     ethQty: formatAmount(initial.ethQty),
     ethPrice: formatAmount(initial.ethPrice),
   }))
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
-  const setField = (key: keyof typeof fields) => (value: string) =>
+  const setField = (key: keyof typeof fields) => (value: string) => {
+    setSaved(false)
     setFields((current) => ({ ...current, [key]: value }))
+  }
 
   const values: BalanceFormValues = {
     vfiax: parseAmount(fields.vfiax),
@@ -63,6 +68,16 @@ function BalanceForm({ initial, otherBalances }: BalanceFormProps) {
   }
   const ethValue = values.ethQty * values.ethPrice
   const netWorth = computeLiveNetWorth(values, otherBalances)
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onSave(values)
+      setSaved(true)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <section className="rounded-card border border-card-border bg-card p-5.5">
@@ -140,6 +155,14 @@ function BalanceForm({ initial, otherBalances }: BalanceFormProps) {
             {formatUsd(netWorth)}
           </p>
         </div>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => void handleSave()}
+          className="cursor-pointer rounded-[11px] bg-sidebar px-5 py-2.5 text-[13px] font-bold text-white disabled:opacity-60"
+        >
+          {saved ? 'Saved ✓' : 'Save balances'}
+        </button>
       </div>
     </section>
   )

@@ -5,7 +5,7 @@
 // share the single Cash column; the mortgage (stored positive, per the
 // schema) displays as a negative figure.
 
-import type { Account, LedgerMonth } from './api.ts'
+import type { Account, BalanceEntryInput, LedgerMonth } from './api.ts'
 
 export interface LedgerRow {
   month: string
@@ -113,6 +113,43 @@ export function computeLiveNetWorth(
     values.retire +
     otherBalances
   )
+}
+
+// One append-only entry per form account: the funds and retirement as USD,
+// ETH as quantity + price (the server derives its USD value).
+export function balanceEntryInputs(
+  values: BalanceFormValues,
+  accounts: Account[],
+  asOfDate: string,
+): BalanceEntryInput[] {
+  const byName = new Map(accounts.map((account) => [account.name, account]))
+  const inputs: BalanceEntryInput[] = []
+  const eth = accounts.find((account) => account.kind === 'eth')
+  if (eth) {
+    inputs.push({
+      account_id: eth.id,
+      as_of_date: asOfDate,
+      quantity: values.ethQty,
+      unit_price: values.ethPrice,
+    })
+  }
+  const usd = (account: Account | undefined, balance_usd: number) => {
+    if (account) {
+      inputs.push({ account_id: account.id, as_of_date: asOfDate, balance_usd })
+    }
+  }
+  usd(byName.get('VFIAX'), values.vfiax)
+  usd(byName.get('VTIAX'), values.vtiax)
+  usd(byName.get('VGSH'), values.vgsh)
+  usd(
+    accounts.find((account) => account.kind === '401k'),
+    values.retire,
+  )
+  return inputs
+}
+
+export function todayIso(): string {
+  return new Date().toLocaleDateString('en-CA')
 }
 
 export function parseAmount(raw: string): number {
