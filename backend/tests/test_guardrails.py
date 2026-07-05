@@ -6,6 +6,7 @@ would the next rule fire?".
 """
 
 import pytest
+
 from sereno.engine.guardrails import evaluate_guardrails
 
 
