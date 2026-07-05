@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { todayIso } from '../ledger.ts'
 import {
@@ -24,6 +24,13 @@ const routes = () => ({
   '/api/social-security': SOCIAL_SECURITY,
   '/api/tax-params': TAX_PARAMS,
 })
+
+const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
+  const call = fetchMock.mock.calls.find(
+    ([input, init]) => input === path && init?.method === 'POST',
+  )
+  return call ? JSON.parse(call[1]?.body as string) : undefined
+}
 
 beforeEach(() => {
   stubApi(routes())
@@ -96,6 +103,114 @@ describe('Envelopes card', () => {
 
     const card = await screen.findByTestId('envelopes-card')
     expect(within(card).getByText('no envelopes yet')).toBeInTheDocument()
+  })
+
+  it('offers the curated emoji options in a select', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('envelopes-card')
+    const select = within(card).getByLabelText('Emoji')
+    expect(
+      within(select).getByRole('option', { name: '🛒 Groceries' }),
+    ).toBeInTheDocument()
+    expect(
+      within(select).getByRole('option', { name: '🏠 Housing' }),
+    ).toBeInTheDocument()
+  })
+
+  it('posts a new envelope and refreshes the list', async () => {
+    const CREATED = {
+      id: 9,
+      name: 'Housing',
+      emoji: '🏠',
+      is_fixed: false,
+      planned: 2_000,
+    }
+    const liveRoutes = {
+      ...routes(),
+      'POST /api/categories': CREATED,
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const card = await screen.findByTestId('envelopes-card')
+    fireEvent.change(within(card).getByLabelText('Name'), {
+      target: { value: 'Housing' },
+    })
+    fireEvent.change(within(card).getByLabelText('Emoji'), {
+      target: { value: '🏠' },
+    })
+    fireEvent.change(within(card).getByLabelText('$ / month'), {
+      target: { value: '2000' },
+    })
+    liveRoutes['/api/categories'] = [...CATEGORIES, CREATED]
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('settings-envelope-row')).toHaveLength(5),
+    )
+    expect(postBody(fetchMock, '/api/categories')).toEqual({
+      name: 'Housing',
+      emoji: '🏠',
+      planned: 2000,
+    })
+    expect(within(card).getByLabelText('Name')).toHaveValue('')
+  })
+
+  it('does not post a blank name or a negative amount', async () => {
+    const fetchMock = stubApi(routes())
+    render(<Settings />)
+
+    const card = await screen.findByTestId('envelopes-card')
+    fireEvent.change(within(card).getByLabelText('$ / month'), {
+      target: { value: '100' },
+    })
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    fireEvent.change(within(card).getByLabelText('Name'), {
+      target: { value: 'Housing' },
+    })
+    fireEvent.change(within(card).getByLabelText('$ / month'), {
+      target: { value: '-100' },
+    })
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    expect(postBody(fetchMock, '/api/categories')).toBeUndefined()
+  })
+
+  it('appends a plan revision from the per-row edit and refreshes', async () => {
+    const liveRoutes = {
+      ...routes(),
+      'POST /api/categories/1/plan': {
+        id: 12,
+        category_id: 1,
+        effective_month: '2026-07',
+        planned: 550,
+      },
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ / month'), {
+      target: { value: '550' },
+    })
+    liveRoutes['/api/categories'] = CATEGORIES.map((category) =>
+      category.id === 1 ? { ...category, planned: 550 } : category,
+    )
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        within(screen.getAllByTestId('settings-envelope-row')[0]).getByText(
+          '$550 / mo',
+        ),
+      ).toBeInTheDocument(),
+    )
+    expect(postBody(fetchMock, '/api/categories/1/plan')).toEqual({
+      planned: 550,
+    })
   })
 })
 
