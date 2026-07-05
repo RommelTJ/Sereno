@@ -100,15 +100,60 @@ describe("Update this month's balances form", () => {
     stubApi({ '/api/accounts': ACCOUNTS, '/api/ledger': LEDGER })
   })
 
-  it("prefills the inputs from the newest month's canonical balances", async () => {
+  it('offers the active accounts in a picker, assets then liabilities', async () => {
     render(<Ledger />)
 
-    expect(await screen.findByLabelText('VFIAX')).toHaveValue('700,000')
-    expect(screen.getByLabelText('VTIAX')).toHaveValue('250,000')
-    expect(screen.getByLabelText('VGSH')).toHaveValue('130,000')
-    expect(screen.getByLabelText('Retirement')).toHaveValue('350,000')
-    expect(screen.getByLabelText('ETH held')).toHaveValue('20')
+    const select = await screen.findByLabelText('Account')
+    const options = within(select)
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(options).toEqual([
+      '⚡ Ethereum',
+      '📈 VFIAX',
+      '🌍 VTIAX',
+      '🏦 VGSH',
+      '🏖️ Retirement',
+      '🏠 Home',
+      '💵 Chase checking',
+      '💵 Vanguard Cash Plus',
+      '🚗 Car',
+      '🏡 Mortgage',
+    ])
+  })
+
+  it('leaves inactive accounts out of the picker', async () => {
+    stubApi({
+      '/api/accounts': [
+        ...ACCOUNTS,
+        { ...ACCOUNTS[8], id: 11, name: 'Old boat', active: false },
+      ],
+      '/api/ledger': LEDGER,
+    })
+    render(<Ledger />)
+
+    const select = await screen.findByLabelText('Account')
+    expect(
+      within(select).queryByRole('option', { name: '🚗 Old boat' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows quantity and price inputs for the ETH account', async () => {
+    render(<Ledger />)
+
+    expect(await screen.findByLabelText('ETH held')).toHaveValue('20')
     expect(screen.getByLabelText('$ / ETH')).toHaveValue('3,500')
+    expect(screen.getByTestId('eth-value')).toHaveTextContent('$70,000')
+    expect(screen.queryByLabelText('Value')).not.toBeInTheDocument()
+  })
+
+  it('swaps to a single value input prefilled from the newest month for USD accounts', async () => {
+    render(<Ledger />)
+
+    fireEvent.change(await screen.findByLabelText('Account'), {
+      target: { value: '2' },
+    })
+    expect(screen.getByLabelText('Value')).toHaveValue('700,000')
+    expect(screen.queryByLabelText('ETH held')).not.toBeInTheDocument()
   })
 
   it('recomputes the ETH value readout as quantity and price change', async () => {
@@ -125,7 +170,7 @@ describe("Update this month's balances form", () => {
     expect(screen.getByTestId('eth-value')).toHaveTextContent('$84,000')
   })
 
-  it('recomputes the live net worth as any field changes', async () => {
+  it('recomputes the live net worth as the draft value changes', async () => {
     render(<Ledger />)
 
     // Initial live figure matches the newest month: $1,744,000.
@@ -134,19 +179,29 @@ describe("Update this month's balances form", () => {
     )
 
     // +$10,000 of VFIAX.
-    fireEvent.change(screen.getByLabelText('VFIAX'), {
+    fireEvent.change(screen.getByLabelText('Account'), {
+      target: { value: '2' },
+    })
+    fireEvent.change(screen.getByLabelText('Value'), {
       target: { value: '710,000' },
     })
     expect(screen.getByTestId('live-net-worth')).toHaveTextContent(
       '$1,754,000',
     )
+  })
 
-    // +1 ETH at $3,500 on top of the VFIAX change.
-    fireEvent.change(screen.getByLabelText('ETH held'), {
-      target: { value: '21' },
+  it('treats a liability draft as negative in the live net worth', async () => {
+    render(<Ledger />)
+
+    // Paying the mortgage down from $150,000 to $140,000 adds $10,000.
+    fireEvent.change(await screen.findByLabelText('Account'), {
+      target: { value: '10' },
+    })
+    fireEvent.change(screen.getByLabelText('Value'), {
+      target: { value: '140,000' },
     })
     expect(screen.getByTestId('live-net-worth')).toHaveTextContent(
-      '$1,757,500',
+      '$1,754,000',
     )
   })
 })
@@ -166,12 +221,10 @@ describe('Responsive layout', () => {
     )
   })
 
-  it('stacks the balance-form grids into one column on narrow screens', async () => {
+  it('stacks the ETH quantity and price grid on narrow screens', async () => {
     render(<Ledger />)
 
-    const brokerage = (await screen.findByLabelText('VFIAX')).closest('.grid')
-    expect(brokerage).toHaveClass('grid-cols-1', 'sm:grid-cols-3')
-    const eth = screen.getByLabelText('ETH held').closest('.grid')
+    const eth = (await screen.findByLabelText('ETH held')).closest('.grid')
     expect(eth).toHaveClass('grid-cols-1', 'sm:grid-cols-2')
   })
 })
@@ -189,13 +242,16 @@ describe('Saving balances', () => {
     fetchMock = stubApi(routes)
   })
 
-  it('appends one entry per form account, dated today, on save', async () => {
+  it('appends one entry for the selected USD account, dated today, on save', async () => {
     render(<Ledger />)
 
-    fireEvent.change(await screen.findByLabelText('VFIAX'), {
+    fireEvent.change(await screen.findByLabelText('Account'), {
+      target: { value: '2' },
+    })
+    fireEvent.change(screen.getByLabelText('Value'), {
       target: { value: '710,000' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save balances' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save balance' }))
 
     expect(
       await screen.findByRole('button', { name: 'Saved ✓' }),
@@ -204,33 +260,29 @@ describe('Saving balances', () => {
     const bodies = fetchMock.mock.calls
       .filter(([, init]) => init?.method === 'POST')
       .map(([, init]) => JSON.parse(String(init?.body)) as unknown)
-    expect(bodies).toHaveLength(5)
-    expect(bodies).toContainEqual({
-      account_id: 1,
-      as_of_date: today,
-      quantity: 20,
-      unit_price: 3500,
+    expect(bodies).toEqual([
+      { account_id: 2, as_of_date: today, balance_usd: 710000 },
+    ])
+  })
+
+  it('appends a quantity and price entry for the ETH account', async () => {
+    render(<Ledger />)
+
+    fireEvent.change(await screen.findByLabelText('ETH held'), {
+      target: { value: '21' },
     })
-    expect(bodies).toContainEqual({
-      account_id: 2,
-      as_of_date: today,
-      balance_usd: 710000,
-    })
-    expect(bodies).toContainEqual({
-      account_id: 3,
-      as_of_date: today,
-      balance_usd: 250000,
-    })
-    expect(bodies).toContainEqual({
-      account_id: 4,
-      as_of_date: today,
-      balance_usd: 130000,
-    })
-    expect(bodies).toContainEqual({
-      account_id: 5,
-      as_of_date: today,
-      balance_usd: 350000,
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save balance' }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Saved ✓' }),
+    ).toBeInTheDocument()
+    const today = new Date().toLocaleDateString('en-CA')
+    const bodies = fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'POST')
+      .map(([, init]) => JSON.parse(String(init?.body)) as unknown)
+    expect(bodies).toEqual([
+      { account_id: 1, as_of_date: today, quantity: 21, unit_price: 3500 },
+    ])
   })
 
   it('refreshes the table so the appended month row appears', async () => {
@@ -249,7 +301,7 @@ describe('Saving balances', () => {
       },
       ...LEDGER,
     ]
-    fireEvent.click(screen.getByRole('button', { name: 'Save balances' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save balance' }))
 
     await waitFor(() =>
       expect(screen.getAllByTestId('ledger-row')).toHaveLength(3),
