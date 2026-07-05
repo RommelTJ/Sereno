@@ -148,3 +148,12 @@ describe('step detail derivation', () => {
     )
   })
 })
+
+describe('responsive layout', () => {
+  it('stacks the waterfall and rule cards into one column on narrow screens', async () => {
+    render(<Withdrawals />)
+
+    const view = await screen.findByTestId('view-withdrawals')
+    expect(view.firstElementChild).toHaveClass('grid-cols-1', 'lg:grid-cols-2')
+  })
+})

@@ -529,3 +529,23 @@ describe('Tax parameter editing', () => {
     })
   })
 })
+
+describe('Responsive layout', () => {
+  it('stacks the assumptions row into one column on narrow screens', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('assumptions-card')
+    expect(card.parentElement).toHaveClass('grid-cols-1', 'sm:grid-cols-2')
+  })
+
+  it('stacks the add-envelope form into one column on narrow screens', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('envelopes-card')
+    const nameField = within(card).getByLabelText('Name')
+    expect(nameField.closest('.grid')).toHaveClass(
+      'grid-cols-1',
+      'sm:grid-cols-[1fr_1fr_1fr_auto]',
+    )
+  })
+})

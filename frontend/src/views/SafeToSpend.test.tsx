@@ -290,3 +290,28 @@ describe('Add a funding item', () => {
     expect(postBody(fetchMock, '/api/income')).toBeUndefined()
   })
 })
+
+describe('Responsive layout', () => {
+  it('stacks the hero column and forms into one column on narrow screens', async () => {
+    render(<SafeToSpend />)
+    await screen.findByText('$3,670')
+
+    expect(screen.getByTestId('view-safe-to-spend')).toHaveClass(
+      'grid-cols-1',
+      'lg:grid-cols-[1fr_1fr]',
+    )
+  })
+
+  it('stacks the form field grids into one column on narrow screens', async () => {
+    render(<SafeToSpend />)
+
+    const spending = await screen.findByTestId('spending-form')
+    expect(
+      within(spending).getByLabelText('Amount').closest('.grid'),
+    ).toHaveClass('grid-cols-1', 'sm:grid-cols-2')
+    const funding = screen.getByTestId('funding-form')
+    expect(
+      within(funding).getByLabelText('Amount').closest('.grid'),
+    ).toHaveClass('grid-cols-1', 'sm:grid-cols-2')
+  })
+})

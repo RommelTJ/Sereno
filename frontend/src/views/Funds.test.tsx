@@ -183,3 +183,18 @@ describe('+ New fund or goal form', () => {
     expect(postBody(fetchMock, '/api/funds')).toBeUndefined()
   })
 })
+
+describe('responsive layout', () => {
+  it('stacks the new-fund form grids into one column on narrow screens', async () => {
+    render(<Funds />)
+
+    const form = await screen.findByTestId('new-fund-form')
+    expect(within(form).getByLabelText('Name').closest('.grid')).toHaveClass(
+      'grid-cols-1',
+      'sm:grid-cols-[2fr_1fr_1fr]',
+    )
+    expect(
+      within(form).getByLabelText('$ / month').closest('.grid'),
+    ).toHaveClass('grid-cols-1', 'sm:grid-cols-[1.4fr_1fr_auto]')
+  })
+})

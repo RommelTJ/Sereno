@@ -131,6 +131,31 @@ describe("Update this month's balances form", () => {
   })
 })
 
+describe('Responsive layout', () => {
+  beforeEach(() => {
+    stubApi({ '/api/accounts': ACCOUNTS, '/api/ledger': LEDGER })
+  })
+
+  it('stacks the table and form into one column on narrow screens', async () => {
+    render(<Ledger />)
+    await screen.findAllByTestId('ledger-row')
+
+    expect(screen.getByTestId('view-ledger')).toHaveClass(
+      'grid-cols-1',
+      'lg:grid-cols-[1.6fr_1fr]',
+    )
+  })
+
+  it('stacks the balance-form grids into one column on narrow screens', async () => {
+    render(<Ledger />)
+
+    const brokerage = (await screen.findByLabelText('VFIAX')).closest('.grid')
+    expect(brokerage).toHaveClass('grid-cols-1', 'sm:grid-cols-3')
+    const eth = screen.getByLabelText('ETH held').closest('.grid')
+    expect(eth).toHaveClass('grid-cols-1', 'sm:grid-cols-2')
+  })
+})
+
 describe('Saving balances', () => {
   let routes: Record<string, unknown>
   let fetchMock: ReturnType<typeof stubApi>
