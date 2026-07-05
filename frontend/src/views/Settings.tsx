@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import type {
   Account,
+  AccountInput,
   Assumption,
   Category,
   CategoryInput,
   CategoryPlanInput,
-  Fund,
   LedgerMonth,
   SocialSecurityEntry,
   SocialSecurityInput,
@@ -15,15 +15,16 @@ import type {
   TaxParamInput,
 } from '../api.ts'
 import {
+  createAccount,
   createAssumption,
   createCategory,
   createSocialSecurity,
   createSpendPlan,
   createTaxParam,
+  deactivateAccount,
   fetchAccounts,
   fetchAssumptions,
   fetchCategories,
-  fetchFunds,
   fetchLedger,
   fetchSocialSecurity,
   fetchSpendPlan,
@@ -34,12 +35,14 @@ import {
 import { FieldLabel } from '../components/SpendingForm.tsx'
 import { formatUsd, todayIso } from '../ledger.ts'
 import type {
+  AccountRow,
   AssumptionsEdit,
-  BucketRow,
   TaxFormValues,
 } from '../settings.ts'
 import {
+  accountInput,
   accountRows,
+  ASSET_EMOJI_OPTIONS,
   assumptionsEdits,
   assumptionsFormValues,
   bracketLabel,
@@ -48,7 +51,6 @@ import {
   envelopePlanInput,
   formatPct,
   formatRate,
-  fundRows,
   socialSecurityEdits,
   socialSecurityFormValues,
   taxFormValues,
@@ -58,7 +60,6 @@ import {
 interface SettingsData {
   accounts: Account[]
   ledger: LedgerMonth[]
-  funds: Fund[]
   categories: Category[]
   assumption: Assumption | null
   spendPlan: SpendPlan | null
@@ -166,22 +167,132 @@ function EditField({
   )
 }
 
-function Bucket({ row, testId }: { row: BucketRow; testId: string }) {
+function AccountRowItem({
+  row,
+  testId,
+  onDeactivate,
+}: {
+  row: AccountRow
+  testId: string
+  onDeactivate: (accountId: number) => Promise<void>
+}) {
   return (
     <div
       data-testid={testId}
       className="flex items-center justify-between border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
     >
       <p className="font-semibold">
-        {row.name}{' '}
-        <span className="font-normal text-[11.5px] text-muted-2">
-          · {row.tag}
-        </span>
+        <span className="mr-2">{row.emoji}</span>
+        <span>{row.name}</span>
       </p>
-      <p className={`num font-bold ${row.negative ? 'text-red' : ''}`}>
-        {row.value}
-      </p>
+      <div className="flex items-center gap-3">
+        <p className={`num font-bold ${row.negative ? 'text-red' : ''}`}>
+          {row.value}
+        </p>
+        <GhostButton
+          label="Deactivate"
+          onClick={() => void onDeactivate(row.id)}
+        />
+      </div>
     </div>
+  )
+}
+
+function AccountsCard({
+  title,
+  hint,
+  testId,
+  rowTestId,
+  idPrefix,
+  liability,
+  rows,
+  onAdd,
+  onDeactivate,
+}: {
+  title: string
+  hint: string
+  testId: string
+  rowTestId: string
+  idPrefix: string
+  liability: boolean
+  rows: AccountRow[]
+  onAdd: (input: AccountInput) => Promise<void>
+  onDeactivate: (accountId: number) => Promise<void>
+}) {
+  const [values, setValues] = useState({ name: '', emoji: '', initialValue: '' })
+  const [adding, setAdding] = useState(false)
+
+  const set = (key: keyof typeof values) => (value: string) =>
+    setValues((current) => ({ ...current, [key]: value }))
+
+  const add = async () => {
+    const input = accountInput(values, liability)
+    if (!input) {
+      return
+    }
+    setAdding(true)
+    try {
+      await onAdd(input)
+      setValues({ name: '', emoji: '', initialValue: '' })
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <Card title={title} hint={hint} testId={testId}>
+      <div className="mt-2">
+        {rows.length === 0 && (
+          <p className="text-[12.5px] leading-8 text-muted-2">none yet</p>
+        )}
+        {rows.map((row) => (
+          <AccountRowItem
+            key={row.id}
+            row={row}
+            testId={rowTestId}
+            onDeactivate={onDeactivate}
+          />
+        ))}
+      </div>
+      <div className="mt-4 grid grid-cols-1 items-end gap-[11px] border-t border-hairline-2 pt-4 sm:grid-cols-[1fr_1fr_1fr_auto]">
+        <EditField
+          id={`${idPrefix}-name`}
+          label="Name"
+          value={values.name}
+          onChange={set('name')}
+        />
+        <label htmlFor={`${idPrefix}-emoji`} className="block">
+          <FieldLabel text="Emoji" />
+          <select
+            id={`${idPrefix}-emoji`}
+            className="mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+            value={values.emoji}
+            onChange={(event) => set('emoji')(event.target.value)}
+          >
+            <option value="">—</option>
+            {ASSET_EMOJI_OPTIONS.map((option) => (
+              <option key={option.label} value={option.emoji}>
+                {option.emoji} {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <EditField
+          id={`${idPrefix}-value`}
+          label="Initial value"
+          value={values.initialValue}
+          onChange={set('initialValue')}
+        />
+        <button
+          type="button"
+          disabled={adding}
+          onClick={() => void add()}
+          className="cursor-pointer rounded-[8px] bg-accent px-3 py-2 text-[11.5px] font-bold text-white disabled:opacity-60"
+        >
+          + Add
+        </button>
+      </div>
+    </Card>
   )
 }
 
@@ -759,7 +870,6 @@ function Settings() {
     void Promise.all([
       fetchAccounts(),
       fetchLedger(),
-      fetchFunds(),
       fetchCategories(),
       fetchAssumptions(),
       fetchSpendPlan(),
@@ -769,7 +879,6 @@ function Settings() {
       ([
         accounts,
         ledger,
-        funds,
         categories,
         assumption,
         spendPlan,
@@ -779,7 +888,6 @@ function Settings() {
         setData({
           accounts,
           ledger,
-          funds,
           categories,
           assumption,
           spendPlan,
@@ -788,6 +896,24 @@ function Settings() {
         }),
     )
   }, [])
+
+  const refetchAccounts = async () => {
+    const [accounts, ledger] = await Promise.all([
+      fetchAccounts(),
+      fetchLedger(),
+    ])
+    setData((current) => (current ? { ...current, accounts, ledger } : current))
+  }
+
+  const addAccount = async (input: AccountInput) => {
+    await createAccount(input)
+    await refetchAccounts()
+  }
+
+  const removeAccount = async (accountId: number) => {
+    await deactivateAccount(accountId)
+    await refetchAccounts()
+  }
 
   const refetchCategories = async () => {
     const categories = await fetchCategories()
@@ -847,16 +973,28 @@ function Settings() {
 
   return (
     <div data-testid="view-settings" className="flex max-w-[880px] flex-col gap-5">
-      <Card title="Accounts & buckets">
-        <div className="mt-2">
-          {accountRows(data.accounts, data.ledger).map((row) => (
-            <Bucket key={row.key} row={row} testId="settings-account-row" />
-          ))}
-          {fundRows(data.funds).map((row) => (
-            <Bucket key={row.key} row={row} testId="settings-fund-row" />
-          ))}
-        </div>
-      </Card>
+      <AccountsCard
+        title="Assets"
+        hint="· latest ledger value; later values go through the Ledger"
+        testId="assets-card"
+        rowTestId="settings-asset-row"
+        idPrefix="asset"
+        liability={false}
+        rows={accountRows(data.accounts, data.ledger, false)}
+        onAdd={addAccount}
+        onDeactivate={removeAccount}
+      />
+      <AccountsCard
+        title="Liabilities"
+        hint="· stored positive, shown negative"
+        testId="liabilities-card"
+        rowTestId="settings-liability-row"
+        idPrefix="liability"
+        liability
+        rows={accountRows(data.accounts, data.ledger, true)}
+        onAdd={addAccount}
+        onDeactivate={removeAccount}
+      />
       <EnvelopesCard
         categories={data.categories}
         onAdd={addEnvelope}

@@ -6,7 +6,6 @@ import {
   ASSUMPTION,
   balance,
   CATEGORIES,
-  FUNDS,
   LEDGER,
   SOCIAL_SECURITY,
   SPEND_PLAN,
@@ -18,7 +17,6 @@ import Settings from './Settings.tsx'
 const routes = () => ({
   '/api/accounts': ACCOUNTS,
   '/api/ledger': LEDGER,
-  '/api/funds': FUNDS,
   '/api/categories': CATEGORIES,
   '/api/assumptions': ASSUMPTION,
   '/api/spend-plan': SPEND_PLAN,
