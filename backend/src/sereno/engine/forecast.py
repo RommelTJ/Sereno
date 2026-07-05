@@ -11,9 +11,17 @@ the caller's numbers; loading buckets and config is the API layer's
 job.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
-from sereno.engine.sourcing import Bracket, Bucket, BucketDraw, source_withdrawals
+from sereno.engine.sourcing import (
+    STAKING_INCOME,
+    STAKING_MIN_ETH_BALANCE,
+    Bracket,
+    Bucket,
+    BucketDraw,
+    source_withdrawals,
+)
 
 START_AGE = 38
 END_AGE = 95
@@ -25,9 +33,16 @@ _SHORTFALL_TOLERANCE = 0.01
 
 
 @dataclass(frozen=True)
+class SocialSecurityBenefit:
+    monthly_amount: float
+    start_age: float
+
+
+@dataclass(frozen=True)
 class ForecastPoint:
     age: int
     balances: tuple[float, ...]
+    ss_income: float
 
 
 @dataclass(frozen=True)
@@ -54,6 +69,7 @@ def simulate_forecast(
     return_pct: float,
     inflation_pct: float,
     buckets: list[Bucket],
+    social_security: Sequence[SocialSecurityBenefit] = (),
     ltcg_0_ceiling: float,
     std_deduction: float,
     ordinary_brackets: list[Bracket] | None,
@@ -64,12 +80,21 @@ def simulate_forecast(
     run_out_age: int | None = None
     for age in range(START_AGE, END_AGE + 1):
         current = [_grow(bucket, real_rate) for bucket in current]
-        series.append(ForecastPoint(age=age, balances=tuple(b.balance for b in current)))
+        ss_income = sum(
+            12 * benefit.monthly_amount for benefit in social_security if age >= benefit.start_age
+        )
+        series.append(
+            ForecastPoint(
+                age=age, balances=tuple(b.balance for b in current), ss_income=ss_income
+            )
+        )
+        eth_balance = sum(b.balance for b in current if b.headroom_only)
+        staking_income = STAKING_INCOME if eth_balance > STAKING_MIN_ETH_BALANCE else 0.0
         year = source_withdrawals(
             target_spend=spend,
             age=age,
-            income=0.0,
-            ordinary_income=0.0,
+            income=ss_income + staking_income,
+            ordinary_income=staking_income,
             buckets=current,
             ltcg_0_ceiling=ltcg_0_ceiling,
             std_deduction=std_deduction,

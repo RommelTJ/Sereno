@@ -19,7 +19,13 @@ from pydantic import BaseModel
 
 from sereno.api.config import TaxParam, get_social_security, get_spend_plan, list_tax_params
 from sereno.db.connection import get_db
-from sereno.engine.sourcing import Bracket, Bucket, source_withdrawals
+from sereno.engine.sourcing import (
+    STAKING_INCOME,
+    STAKING_MIN_ETH_BALANCE,
+    Bracket,
+    Bucket,
+    source_withdrawals,
+)
 
 router = APIRouter()
 
@@ -28,11 +34,6 @@ Db = Annotated[sqlite3.Connection, Depends(get_db)]
 Spend = Annotated[float | None, Query(gt=0)]
 
 Age = Annotated[float, Query(ge=0)]
-
-# The handoff's staking rule: ~3,000/yr while the ETH stake stays
-# meaningful. Promote to config if the rule ever needs tuning.
-STAKING_INCOME = 3_000.0
-STAKING_MIN_ETH_BALANCE = 50_000.0
 
 ETH_PRIORITY = 1
 
