@@ -182,6 +182,19 @@ The config slice (the one input source for the Plan engines):
   `tax_param` is keyed by year, the one config table that replaces
   rather than appends.
 
+The guardrails slice (the first Plan engine):
+
+- `GET /api/guardrails` — the Guyton-Klinger evaluation: the withdrawal
+  rate (spend ÷ the latest month's investable total, every
+  `is_investable` account), the guardrails at the stored at-retirement
+  `initial_rate` × (1 ± the configured band), the zone (`cut` above the
+  upper rail, `raise` below the lower, else `hold` — the ±band is the
+  trigger, the ~10% change is the response, never a reset to the band),
+  the raise/cut trigger portfolios, and the 4% rate as a sanity
+  ceiling, not a binding rule. `?spend=` evaluates a what-if level
+  instead of the plan's annual target. `null` until a spend plan with
+  an initial rate and at least one balance month exist.
+
 ### Screens
 
 - **Dashboard** (<http://localhost:5173/>) — the landing view. The net-worth
@@ -196,9 +209,11 @@ The config slice (the one input source for the Plan engines):
   activity lists the month's five newest spending and funding items as
   emoji-tile rows with signed amounts — credits in green, debits in ink,
   and expenses whose envelope is over budget in red — and refreshes on
-  every visit as items are added elsewhere. The Spend guardrail and
-  Longevity cards remain static placeholders until their Phase 2 slices
-  land.
+  every visit as items are added elsewhere. The Spend guardrail card
+  shows the live withdrawal rate, mini band, and zone status from
+  `GET /api/guardrails` (muted until a spend plan exists); the
+  Longevity card remains a static placeholder until the forecast slice
+  lands.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
   table (one row per month, newest first, current month highlighted; the two
   cash accounts share one column and the mortgage shows as a negative figure)
@@ -233,6 +248,18 @@ The config slice (the one input source for the Plan engines):
   show just their balance, with no bar. Submitting the form posts the
   dimension row to `POST /api/funds`, appends any initial saved amount via
   `POST /api/fund-entries`, and refetches the list.
+- **Guardrails** (<http://localhost:5173/guardrails>) — the "how much
+  can we spend?" view, every figure from `GET /api/guardrails`: KPIs
+  (investable portfolio, planned spend, and the withdrawal rate —
+  colored by zone — beside the ±band and 4% ceiling), the three-zone
+  Cut / Hold / Raise band with a marker at the current rate, the
+  recommendation banner (trim ~10% above the upper guardrail, raise
+  ~10% below the lower, hold steady inside), a spend slider that
+  re-evaluates everything server-side at each level, and raise/cut
+  trigger cards naming the portfolio levels where the next rule fires.
+  The slider's bounds derive from the band edges, so both rails are
+  always reachable whatever the portfolio and plan sizes are. Until a
+  spend plan and balances exist, the view points at Settings & data.
 - **Settings & data** (<http://localhost:5173/settings>) — the config
   home. Accounts & buckets lists every account's newest ledger balance
   (walking back through the months; liabilities negative in red) with
