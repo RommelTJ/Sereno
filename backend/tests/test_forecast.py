@@ -8,10 +8,12 @@ basis pro-rata. The first year the need can't be met is the run-out
 age; a portfolio that always delivers never runs out.
 """
 
+from collections.abc import Sequence
+
 import pytest
 
-from sereno.engine.forecast import SocialSecurityBenefit, simulate_forecast
-from sereno.engine.sourcing import Bucket
+from sereno.engine.forecast import ForecastResult, SocialSecurityBenefit, simulate_forecast
+from sereno.engine.sourcing import Bracket, Bucket
 
 
 def eth(balance: float, basis: float | None = None) -> Bucket:
@@ -39,18 +41,27 @@ def four01k(balance: float) -> Bucket:
     return Bucket(name="401(k)", balance=balance, basis=0.0, treatment="ORDINARY", access_age=59.5)
 
 
-def run(**overrides):
-    defaults = {
-        "spend": 40_000.0,
-        "return_pct": 7.0,
-        "inflation_pct": 3.0,
-        "buckets": [brokerage(2_000_000)],
-        "ltcg_0_ceiling": 96_700.0,
-        "std_deduction": 30_000.0,
-        "ordinary_brackets": None,
-    }
-    defaults.update(overrides)
-    return simulate_forecast(**defaults)
+def run(
+    *,
+    spend: float = 40_000.0,
+    return_pct: float = 7.0,
+    inflation_pct: float = 3.0,
+    buckets: list[Bucket] | None = None,
+    social_security: Sequence[SocialSecurityBenefit] = (),
+    ltcg_0_ceiling: float = 96_700.0,
+    std_deduction: float = 30_000.0,
+    ordinary_brackets: list[Bracket] | None = None,
+) -> ForecastResult:
+    return simulate_forecast(
+        spend=spend,
+        return_pct=return_pct,
+        inflation_pct=inflation_pct,
+        buckets=buckets if buckets is not None else [brokerage(2_000_000)],
+        social_security=social_security,
+        ltcg_0_ceiling=ltcg_0_ceiling,
+        std_deduction=std_deduction,
+        ordinary_brackets=ordinary_brackets,
+    )
 
 
 class TestSeries:
