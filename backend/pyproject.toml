@@ -46,5 +46,10 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ANN"]
 
+[tool.ruff.lint.isort]
+# By name, not by resolution: a red TDD test imports the module it is
+# about to force into existence, which must still sort as first-party.
+known-first-party = ["sereno"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
