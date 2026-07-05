@@ -294,11 +294,11 @@ function Dashboard() {
 
   return (
     <div data-testid="view-dashboard">
-      <div className="grid grid-cols-[1.5fr_1fr] gap-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
         <NetWorthHero />
         <SafeToSpendCard budget={budget} />
       </div>
-      <div className="mt-5 grid grid-cols-3 gap-5">
+      <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
         <GuardrailCard guardrails={guardrails} />
         <LongevityCard forecast={forecast} />
         <FundsCard funds={funds} />

@@ -310,7 +310,7 @@ function EnvelopesCard({
           />
         ))}
       </div>
-      <div className="mt-4 grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-[11px] border-t border-hairline-2 pt-4">
+      <div className="mt-4 grid grid-cols-1 items-end gap-[11px] border-t border-hairline-2 pt-4 sm:grid-cols-[1fr_1fr_1fr_auto]">
         <EditField
           id="envelope-name"
           label="Name"
@@ -398,7 +398,7 @@ function AssumptionsCard({
       }
     >
       {editing ? (
-        <div className="mt-3 grid grid-cols-2 gap-[11px]">
+        <div className="mt-3 grid grid-cols-1 gap-[11px] sm:grid-cols-2">
           <EditField
             id="assumption-return"
             label="Return %"
@@ -496,7 +496,7 @@ function SocialSecurityCard({
       }
     >
       {editing ? (
-        <div className="mt-3 grid grid-cols-3 gap-[11px]">
+        <div className="mt-3 grid grid-cols-1 gap-[11px] sm:grid-cols-3">
           <EditField
             id="ss-you"
             label="You $ / mo"
@@ -606,7 +606,7 @@ function TaxCard({
     >
       {mode !== 'view' && (
         <div className="mt-3">
-          <div className="grid grid-cols-2 gap-[11px]">
+          <div className="grid grid-cols-1 gap-[11px] sm:grid-cols-2">
             <EditField
               id="tax-filing"
               label="Filing status"
@@ -660,7 +660,7 @@ function TaxCard({
               // Rows are positional form state; there is no stable id.
               // eslint-disable-next-line react/no-array-index-key
               key={index}
-              className="mt-[7px] grid grid-cols-2 gap-[11px]"
+              className="mt-[7px] grid grid-cols-1 gap-[11px] sm:grid-cols-2"
             >
               <EditField
                 id={`tax-bracket-rate-${index}`}
@@ -862,7 +862,7 @@ function Settings() {
         onAdd={addEnvelope}
         onRevise={reviseEnvelope}
       />
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <AssumptionsCard
           assumption={data.assumption}
           spendPlan={data.spendPlan}

@@ -108,7 +108,7 @@ function Withdrawals() {
 
   return (
     <div data-testid="view-withdrawals" className="max-w-[980px]">
-      <div className="grid grid-cols-2 items-start gap-5">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
         <div className="rounded-card border border-card-border bg-card p-6">
           <p className="text-sm font-bold">
             Sequencing — solve for net delivered

@@ -49,7 +49,7 @@ function SafeToSpend() {
   return (
     <div
       data-testid="view-safe-to-spend"
-      className="grid grid-cols-[1fr_1fr] items-start gap-5"
+      className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_1fr]"
     >
       {budget && funds && (
         <>

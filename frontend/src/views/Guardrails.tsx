@@ -150,7 +150,7 @@ function Guardrails() {
           />
         </div>
 
-        <div className="mt-[18px] grid grid-cols-2 gap-3.5 text-[12.5px]">
+        <div className="mt-[18px] grid grid-cols-1 gap-3.5 text-[12.5px] sm:grid-cols-2">
           <div
             data-testid="guardrails-raise-trigger"
             className="rounded-[11px] bg-amber-soft p-[13px]"

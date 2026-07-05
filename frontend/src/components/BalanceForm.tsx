@@ -91,7 +91,7 @@ function BalanceForm({ initial, otherBalances, onSave }: BalanceFormProps) {
           <span className="text-[11px] font-semibold text-muted-2 uppercase">
             Taxable brokerage · per fund
           </span>
-          <div className="mt-1 grid grid-cols-3 gap-2">
+          <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Field
               id="balance-vfiax"
               label="VFIAX"
@@ -121,7 +121,7 @@ function BalanceForm({ initial, otherBalances, onSave }: BalanceFormProps) {
           value={fields.retire}
           onChange={setField('retire')}
         />
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <Field
             id="balance-eth-qty"
             label="ETH held"

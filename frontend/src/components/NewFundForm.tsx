@@ -36,7 +36,7 @@ function NewFundForm({ onAdd }: { onAdd: (input: NewFund) => Promise<void> }) {
       className="mt-4 rounded-[14px] border border-dashed border-[#d4cdbf] bg-[#faf8f3] p-[18px]"
     >
       <h2 className="mb-3 text-[13px] font-bold">+ New fund or goal</h2>
-      <div className="grid grid-cols-[2fr_1fr_1fr] gap-[11px]">
+      <div className="grid grid-cols-1 gap-[11px] sm:grid-cols-[2fr_1fr_1fr]">
         <label htmlFor="new-fund-name" className="block">
           <FieldLabel text="Name" />
           <input
@@ -68,7 +68,7 @@ function NewFundForm({ onAdd }: { onAdd: (input: NewFund) => Promise<void> }) {
           />
         </label>
       </div>
-      <div className="mt-[11px] grid grid-cols-[1.4fr_1fr_auto] items-end gap-[11px]">
+      <div className="mt-[11px] grid grid-cols-1 items-end gap-[11px] sm:grid-cols-[1.4fr_1fr_auto]">
         <div>
           <label htmlFor="new-fund-date">
             <FieldLabel text="Target date" />

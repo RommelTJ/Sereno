@@ -45,7 +45,7 @@ function SpendingForm({ month, categories, funds, onAdd }: SpendingFormProps) {
       className="rounded-card border border-card-border bg-card p-[22px]"
     >
       <h2 className="text-sm font-bold">Add a spending item</h2>
-      <div className="mt-3.5 grid grid-cols-2 gap-[11px]">
+      <div className="mt-3.5 grid grid-cols-1 gap-[11px] sm:grid-cols-2">
         <label htmlFor="spend-amount" className="block">
           <FieldLabel text="Amount" />
           <input
