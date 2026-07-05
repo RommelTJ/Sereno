@@ -93,6 +93,42 @@ def _draw_ltcg(bucket: Bucket, needed: float, headroom: float) -> tuple[BucketDr
     return draw, headroom - free_gross * gain_fraction
 
 
+def _gross_up_ordinary(
+    needed: float,
+    balance: float,
+    ordinary_income: float,
+    std_deduction: float,
+    brackets: list[Bracket] | None,
+) -> tuple[float, float]:
+    """Gross and tax for an ordinary-income withdrawal delivering
+    `needed` net, stacked on the caller's ordinary income: the unused
+    standard deduction shelters the first gross dollars, then a
+    closed-form walk up the brackets. Absent brackets mean no tax to
+    model — the config column is nullable — not an error."""
+    if not brackets:
+        brackets = [Bracket(rate=0.0, upto=None)]
+    shelter = max(0.0, std_deduction - ordinary_income)
+    gross = min(needed, shelter, balance)
+    tax = 0.0
+    remaining_net = needed - gross
+    remaining_balance = balance - gross
+    taxable = max(0.0, ordinary_income - std_deduction)
+    for bracket in brackets:
+        if remaining_net <= 0 or remaining_balance <= 0:
+            break
+        capacity = bracket.upto - taxable if bracket.upto is not None else float("inf")
+        if capacity <= 0:
+            continue
+        net_rate = 1.0 - bracket.rate
+        take = min(remaining_net / net_rate, capacity, remaining_balance)
+        gross += take
+        tax += take * bracket.rate
+        remaining_net -= take * net_rate
+        remaining_balance -= take
+        taxable += take
+    return gross, tax
+
+
 def source_withdrawals(
     *,
     target_spend: float,
@@ -110,14 +146,28 @@ def source_withdrawals(
 
     remaining = gap
     remaining_headroom = headroom
+    ordinary_running = ordinary_income
     draws: list[BucketDraw] = []
     for bucket in buckets:
         if bucket.treatment == "LTCG":
             draw, remaining_headroom = _draw_ltcg(bucket, remaining, remaining_headroom)
-        else:
+        elif bucket.access_age is not None and age < bucket.access_age:
             draw = BucketDraw(
-                name=bucket.name, treatment=bucket.treatment, gross=0.0, tax=0.0, net=0.0
+                name=bucket.name,
+                treatment="ORDINARY",
+                gross=0.0,
+                tax=0.0,
+                net=0.0,
+                note=f"locked until age {bucket.access_age:g}",
             )
+        else:
+            gross, tax = _gross_up_ordinary(
+                remaining, bucket.balance, ordinary_running, std_deduction, ordinary_brackets
+            )
+            draw = BucketDraw(
+                name=bucket.name, treatment="ORDINARY", gross=gross, tax=tax, net=gross - tax
+            )
+            ordinary_running += gross
         draws.append(draw)
         remaining -= draw.net
 
