@@ -314,4 +314,13 @@ describe('Responsive layout', () => {
       within(funding).getByLabelText('Amount').closest('.grid'),
     ).toHaveClass('grid-cols-1', 'sm:grid-cols-2')
   })
+
+  it('scales the hero figure down on narrow screens', async () => {
+    render(<SafeToSpend />)
+
+    expect(await screen.findByText('$3,670')).toHaveClass(
+      'text-4xl',
+      'sm:text-[56px]',
+    )
+  })
 })
