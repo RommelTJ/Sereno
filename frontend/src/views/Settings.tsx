@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type {
   Account,
   Assumption,
+  Category,
   Fund,
   LedgerMonth,
   SocialSecurityEntry,
@@ -18,6 +19,7 @@ import {
   createTaxParam,
   fetchAccounts,
   fetchAssumptions,
+  fetchCategories,
   fetchFunds,
   fetchLedger,
   fetchSocialSecurity,
@@ -50,6 +52,7 @@ interface SettingsData {
   accounts: Account[]
   ledger: LedgerMonth[]
   funds: Fund[]
+  categories: Category[]
   assumption: Assumption | null
   spendPlan: SpendPlan | null
   socialSecurity: SocialSecurityEntry[]
@@ -189,6 +192,37 @@ function ConfigLine({
       {label} <b className="num text-ink">{value}</b>
       {hint && <span className="text-muted-2"> {hint}</span>}
     </p>
+  )
+}
+
+function EnvelopesCard({ categories }: { categories: Category[] }) {
+  return (
+    <Card
+      title="Envelopes"
+      hint="· planned $ / month"
+      testId="envelopes-card"
+    >
+      <div className="mt-2">
+        {categories.length === 0 && (
+          <p className="text-[12.5px] leading-8 text-muted-2">
+            no envelopes yet
+          </p>
+        )}
+        {categories.map((category) => (
+          <div
+            key={category.id}
+            data-testid="settings-envelope-row"
+            className="flex items-center justify-between border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
+          >
+            <p className="font-semibold">
+              <span className="mr-2">{category.emoji ?? '🧾'}</span>
+              <span>{category.name}</span>
+            </p>
+            <p className="num font-bold">{formatUsd(category.planned)} / mo</p>
+          </div>
+        ))}
+      </div>
+    </Card>
   )
 }
 
@@ -600,6 +634,7 @@ function Settings() {
       fetchAccounts(),
       fetchLedger(),
       fetchFunds(),
+      fetchCategories(),
       fetchAssumptions(),
       fetchSpendPlan(),
       fetchSocialSecurity(),
@@ -609,6 +644,7 @@ function Settings() {
         accounts,
         ledger,
         funds,
+        categories,
         assumption,
         spendPlan,
         socialSecurity,
@@ -618,6 +654,7 @@ function Settings() {
           accounts,
           ledger,
           funds,
+          categories,
           assumption,
           spendPlan,
           socialSecurity,
@@ -679,6 +716,7 @@ function Settings() {
           ))}
         </div>
       </Card>
+      <EnvelopesCard categories={data.categories} />
       <div className="grid grid-cols-2 gap-5">
         <AssumptionsCard
           assumption={data.assumption}

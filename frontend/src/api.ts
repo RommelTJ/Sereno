@@ -46,6 +46,16 @@ export type BalanceEntryInput = { account_id: number; as_of_date: string } & (
   | { quantity: number; unit_price: number }
 )
 
+// GET /api/categories: the category dimension with each envelope's planned
+// amount resolved for a month (default: the current one).
+export interface Category {
+  id: number
+  name: string
+  emoji: string | null
+  is_fixed: boolean
+  planned: number
+}
+
 export interface Envelope {
   id: number
   name: string
@@ -346,6 +356,7 @@ export const fetchBudgetMonth = (month?: string) =>
   getJson<BudgetMonth>(
     month ? `/api/budget-month?month=${month}` : '/api/budget-month',
   )
+export const fetchCategories = () => getJson<Category[]>('/api/categories')
 export const fetchFunds = () => getJson<Fund[]>('/api/funds')
 export const fetchAssumptions = () =>
   getJson<Assumption | null>('/api/assumptions')
