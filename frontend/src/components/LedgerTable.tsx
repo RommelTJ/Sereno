@@ -1,22 +1,13 @@
+import type { Account } from '../api.ts'
 import type { LedgerRow } from '../ledger.ts'
 import { formatUsd } from '../ledger.ts'
 
-const NUMERIC_HEADERS = [
-  'ETH',
-  'VFIAX',
-  'VTIAX',
-  'VGSH',
-  'Retire',
-  'Home',
-  'Cash',
-  'Mortgage',
-]
-
 interface LedgerTableProps {
+  columns: Account[]
   rows: LedgerRow[]
 }
 
-function LedgerTable({ rows }: LedgerTableProps) {
+function LedgerTable({ columns, rows }: LedgerTableProps) {
   return (
     <section className="overflow-hidden rounded-card border border-card-border bg-card">
       <h2 className="border-b border-hairline px-5.5 py-4.5 text-sm font-bold">
@@ -28,12 +19,12 @@ function LedgerTable({ rows }: LedgerTableProps) {
           <thead>
             <tr className="bg-[#faf8f3] text-muted-2">
               <th className="px-3.5 py-2.5 text-left font-semibold">Date</th>
-              {NUMERIC_HEADERS.map((header) => (
+              {columns.map((account) => (
                 <th
-                  key={header}
+                  key={account.id}
                   className="px-3.5 py-2.5 text-right font-semibold"
                 >
-                  {header}
+                  {account.name}
                 </th>
               ))}
               <th className="px-3.5 py-2.5 text-right font-bold text-ink">
@@ -55,22 +46,16 @@ function LedgerTable({ rows }: LedgerTableProps) {
                 <td className="px-3.5 py-[11px] text-left font-semibold">
                   {row.date}
                 </td>
-                {[
-                  row.eth,
-                  row.vfiax,
-                  row.vtiax,
-                  row.vgsh,
-                  row.retire,
-                  row.home,
-                  row.cash,
-                ].map((value, cell) => (
-                  <td key={cell} className="px-3.5 py-[11px] text-right">
+                {row.values.map((value, cell) => (
+                  <td
+                    key={columns[cell].id}
+                    className={`px-3.5 py-[11px] text-right${
+                      columns[cell].is_liability ? ' text-red-text' : ''
+                    }`}
+                  >
                     {formatUsd(value)}
                   </td>
                 ))}
-                <td className="px-3.5 py-[11px] text-right text-red-text">
-                  {formatUsd(row.mortgage)}
-                </td>
                 <td className="px-3.5 py-[11px] text-right font-bold">
                   {formatUsd(row.netWorth)}
                 </td>

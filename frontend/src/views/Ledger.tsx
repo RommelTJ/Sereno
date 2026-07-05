@@ -7,6 +7,7 @@ import type { BalanceFormValues } from '../ledger.ts'
 import {
   balanceEntryInputs,
   initialFormValues,
+  ledgerColumns,
   ledgerRows,
   otherBalancesTotal,
   todayIso,
@@ -38,7 +39,10 @@ function Ledger() {
     >
       {accounts && months && (
         <>
-          <LedgerTable rows={ledgerRows(months, accounts)} />
+          <LedgerTable
+            columns={ledgerColumns(accounts)}
+            rows={ledgerRows(months, ledgerColumns(accounts))}
+          />
           <BalanceForm
             initial={initialFormValues(months, accounts)}
             otherBalances={otherBalancesTotal(months, accounts)}
