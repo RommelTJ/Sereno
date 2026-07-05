@@ -149,6 +149,33 @@ export interface TaxParam {
   ordinary_brackets: TaxBracket[] | null
 }
 
+// GET /api/sourcing: the tax-aware waterfall evaluated at a required
+// ?age= and an optional what-if ?spend= (default: the plan's annual
+// target). Null until a tax year, a balance, and a spend target exist.
+export interface SourcingStep {
+  name: string
+  treatment: 'LTCG' | 'ORDINARY'
+  gross: number
+  tax: number
+  net: number
+  note: string | null
+}
+
+export interface Sourcing {
+  target_net: number
+  annual_target: number | null
+  age: number
+  tax_year: number
+  ss_income: number
+  staking_income: number
+  income: number
+  gap: number
+  headroom: number
+  steps: SourcingStep[]
+  net_delivered: number
+  shortfall: number
+}
+
 export type IncomeSource =
   | 'paycheck'
   | 'transfer_in'
@@ -281,6 +308,12 @@ export const fetchSpendPlan = () => getJson<SpendPlan | null>('/api/spend-plan')
 export const fetchGuardrails = (spend?: number) =>
   getJson<Guardrails | null>(
     spend != null ? `/api/guardrails?spend=${spend}` : '/api/guardrails',
+  )
+export const fetchSourcing = (age: number, spend?: number) =>
+  getJson<Sourcing | null>(
+    spend != null
+      ? `/api/sourcing?age=${age}&spend=${spend}`
+      : `/api/sourcing?age=${age}`,
   )
 export const fetchSocialSecurity = () =>
   getJson<SocialSecurityEntry[]>('/api/social-security')

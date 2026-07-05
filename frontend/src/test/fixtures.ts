@@ -1,6 +1,8 @@
 // Shared API fixtures. Accounts mirror the seed dimension rows: table
 // columns map by kind, except the three brokerage funds, which map by name.
 
+import type { Sourcing } from '../api.ts'
+
 const account = (
   id: number,
   name: string,
@@ -267,3 +269,45 @@ export const TAX_PARAMS = [
     ],
   },
 ]
+
+// GET /api/sourcing at age 38: staking is the only income, the whole
+// gap fits ETH's 0% headroom, and the 401(k) reports its gate.
+export const SOURCING: Sourcing = {
+  target_net: 45_000,
+  annual_target: 45_000,
+  age: 38,
+  tax_year: 2026,
+  ss_income: 0,
+  staking_income: 3_000,
+  income: 3_000,
+  gap: 42_000,
+  headroom: 96_700,
+  steps: [
+    {
+      name: 'ETH',
+      treatment: 'LTCG',
+      gross: 42_000,
+      tax: 0,
+      net: 42_000,
+      note: null,
+    },
+    {
+      name: 'Brokerage',
+      treatment: 'LTCG',
+      gross: 0,
+      tax: 0,
+      net: 0,
+      note: null,
+    },
+    {
+      name: '401(k)',
+      treatment: 'ORDINARY',
+      gross: 0,
+      tax: 0,
+      net: 0,
+      note: 'locked until age 59.5',
+    },
+  ],
+  net_delivered: 45_000,
+  shortfall: 0,
+}

@@ -10,6 +10,7 @@ from sereno.api.config import router as config_router
 from sereno.api.funds import router as funds_router
 from sereno.api.guardrails import router as guardrails_router
 from sereno.api.health import router as health_router
+from sereno.api.sourcing import router as sourcing_router
 from sereno.db.connection import connect
 from sereno.db.migrations import migrate
 
@@ -31,3 +32,4 @@ app.include_router(budget_router, prefix="/api")
 app.include_router(config_router, prefix="/api")
 app.include_router(funds_router, prefix="/api")
 app.include_router(guardrails_router, prefix="/api")
+app.include_router(sourcing_router, prefix="/api")

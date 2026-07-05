@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.12.1**
+**v0.13.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -195,6 +195,28 @@ The guardrails slice (the first Plan engine):
   instead of the plan's annual target. `null` until a spend plan with
   an initial rate and at least one balance month exist.
 
+The sourcing slice (the second Plan engine):
+
+- `GET /api/sourcing` — the tax-aware withdrawal waterfall: target net
+  spend minus non-portfolio income leaves a gap, filled from ETH
+  inside the 0% long-term-capital-gains headroom (the ceiling minus
+  taxable ordinary income, converted to sale proceeds through each
+  bucket's gain fraction), then taxable brokerage (leftover headroom
+  first, then 15% on the gain portion), then 401(k) only at age ≥ 59½
+  with ordinary-income treatment (the unused standard deduction
+  shelters the first dollars, then a walk up the year's brackets).
+  Buckets aggregate accounts by `withdrawal_priority`; each account
+  contributes its newest balance row from any month and its basis
+  from open tax lots, falling back to the balance row's `cost_basis`,
+  then to zero. `?age=` is required — no birthdate lives in the
+  schema — and `?spend=` tests a what-if level (it also stands in for
+  a missing spend plan). Each step reports gross, tax, net, and any
+  gate note; whatever the waterfall cannot deliver comes back as
+  `shortfall` — never a naive 4%-per-bucket draw. Null until a tax
+  year, a balance, and a spend target exist. Deliberately federal-only
+  and one-pass in v1: no state tax, no NIIT, and Social Security
+  reduces the gap without counting as ordinary income.
+
 ### Screens
 
 - **Dashboard** (<http://localhost:5173/>) — the landing view. The net-worth
@@ -260,6 +282,21 @@ The guardrails slice (the first Plan engine):
   The slider's bounds derive from the band edges, so both rails are
   always reachable whatever the portfolio and plan sizes are. Until a
   spend plan and balances exist, the view points at Settings & data.
+- **Withdrawal sourcing** (<http://localhost:5173/withdrawals>) — the
+  "where does the money come from?" view, every figure from
+  `GET /api/sourcing`. Left, the sequencing waterfall: target net
+  spend, minus non-portfolio income (Social Security past its start
+  age, staking while the ETH stake stays meaningful), the gap from
+  the portfolio, then the three bucket steps — ETH sold tax-free
+  inside the 0% LTCG headroom, brokerage next (inheriting leftover
+  headroom, then 15% on the gain portion), 401(k) last and only at
+  59½ — down to the net delivered, with a shortfall banner when the
+  gap goes unfilled. Age and what-if spend inputs re-evaluate the
+  whole waterfall server-side (the screen defaults to age 38 — no
+  birthdate lives in the schema). Right, the per-bucket rule cards
+  and the engine rule: never 0.04 × balance per bucket; solve for
+  net spendable. Until tax parameters, a spend target, and balances
+  exist, the view points at Settings & data.
 - **Settings & data** (<http://localhost:5173/settings>) — the config
   home. Accounts & buckets lists every account's newest ledger balance
   (walking back through the months; liabilities negative in red) with
@@ -296,6 +333,20 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
+v0.13.0 — Withdrawal sourcing. The second Plan engine lands: a pure,
+typed waterfall in `engine/sourcing.py` — target net spend minus
+non-portfolio income, then ETH inside the 0% LTCG headroom, taxable
+brokerage, and the age-gated 401(k), each step grossed up from basis
+and the year's brackets, solving for net spendable rather than a flat
+per-bucket rate — exposed through `GET /api/sourcing?age=&spend=`.
+The Withdrawal sourcing screen replaces its stub (see
+[Screens](#screens)): the sequencing waterfall with per-step amounts
+and tax detail, age and what-if spend inputs re-evaluated
+server-side, a shortfall banner when the gap goes unfilled, and the
+bucket-rule cards. Deliberately federal-only and one-pass in v1 (no
+state tax, no NIIT); the longevity forecast consumes this engine
+next.
+
 v0.12.1 — Bug fix: SQLite connections are now opened with
 `check_same_thread=False`, so a request's connection can be opened,
 used, and closed on different FastAPI threadpool threads. Concurrent
@@ -319,7 +370,7 @@ screen, the balances API, seed data, the append-only schema
 (migrations at startup), the typed SQLite connection module, and the
 app shell landed in earlier releases. Remaining work:
 
-1. Withdrawal sourcing engine → longevity forecast
+1. Longevity forecast (simulating with the sourcing engine)
 
 ## License
 
