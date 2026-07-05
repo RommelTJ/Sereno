@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.16.0**
+**v0.17.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -414,6 +414,20 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v0.17.0 — Asset & liability management. Accounts are no longer
+seed-only: `POST /api/accounts` creates an asset or liability — name,
+emoji, and an initial balance entry dated today — and
+`POST /api/accounts/{id}/deactivate` soft-removes one with its history
+intact. Settings replaces the mixed Accounts & buckets card with
+separate Assets and Liabilities cards (add form, curated emoji select,
+per-row Deactivate; fund rows moved off to Funds & Goals). The Ledger's
+fixed-field form becomes an account picker — one value input, or
+quantity + $/ETH for the ETH account — the table grows one column per
+active account, and migration 0004 makes the SQL views carry balances
+forward: a month's balance is the latest entry on or before that
+month's end, so single-entry accounts like Home keep counting in every
+later month.
 
 v0.16.0 — Responsive layout. The frontend is now mobile-first rather
 than a fixed ~1180px desktop shell. The capped main column is centered
