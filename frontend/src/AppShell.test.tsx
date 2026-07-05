@@ -22,6 +22,7 @@ beforeEach(() => {
     '/api/net-worth': { current: null, yoy: null, series: [] },
     '/api/budget-month': EMPTY_BUDGET_MONTH,
     '/api/funds': [],
+    '/api/categories': [],
     '/api/guardrails': null,
     '/api/sourcing': null,
     '/api/forecast': null,

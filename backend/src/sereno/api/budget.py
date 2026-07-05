@@ -11,7 +11,7 @@ from datetime import date, datetime
 from typing import Annotated, Literal, Self
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, PositiveFloat, model_validator
+from pydantic import BaseModel, Field, PositiveFloat, StringConstraints, model_validator
 
 from sereno.db.connection import get_db
 
@@ -30,6 +30,28 @@ class Category(BaseModel):
     name: str
     emoji: str | None
     is_fixed: bool
+    planned: float
+
+
+class CategoryCreate(BaseModel):
+    """effective_month dates the initial plan row; it defaults to the current
+    month. planned may be 0 — an envelope can exist before it's funded."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    emoji: str | None = None
+    planned: float = Field(ge=0)
+    effective_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
+
+
+class CategoryPlanCreate(BaseModel):
+    planned: float = Field(ge=0)
+    effective_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
+
+
+class CategoryPlan(BaseModel):
+    id: int
+    category_id: int
+    effective_month: str
     planned: float
 
 
@@ -134,11 +156,52 @@ def list_categories(db: Db, month: Month = None) -> list[Category]:
         "SELECT c.id, c.name, c.emoji, c.is_fixed,"
         " COALESCE((SELECT p.planned FROM category_plan p"
         "           WHERE p.category_id = c.id AND p.effective_month <= ?"
-        "           ORDER BY p.effective_month DESC LIMIT 1), 0) AS planned"
+        "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned"
         " FROM category c WHERE c.active = 1 ORDER BY c.id",
         (month or _current_month(),),
     )
     return [Category(**dict(row)) for row in rows]
+
+
+@router.post("/categories", status_code=201)
+def create_category(category: CategoryCreate, db: Db) -> Category:
+    duplicate = db.execute(
+        "SELECT 1 FROM category WHERE active = 1 AND LOWER(name) = LOWER(?)",
+        (category.name,),
+    ).fetchone()
+    if duplicate:
+        raise HTTPException(status_code=409, detail=f"category {category.name!r} exists")
+    cursor = db.execute(
+        "INSERT INTO category (name, emoji) VALUES (?, ?)",
+        (category.name, category.emoji),
+    )
+    category_id = cursor.lastrowid
+    db.execute(
+        "INSERT INTO category_plan (category_id, effective_month, planned) VALUES (?, ?, ?)",
+        (category_id, category.effective_month or _current_month(), category.planned),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, name, emoji, is_fixed FROM category WHERE id = ?", (category_id,)
+    ).fetchone()
+    return Category(**dict(row), planned=category.planned)
+
+
+@router.post("/categories/{category_id}/plan", status_code=201)
+def create_category_plan(category_id: int, plan: CategoryPlanCreate, db: Db) -> CategoryPlan:
+    """Appends a new effective-dated plan row — revisions never update in
+    place; the latest row per month wins, like every config table."""
+    _require(db, "category", category_id, "category")
+    cursor = db.execute(
+        "INSERT INTO category_plan (category_id, effective_month, planned) VALUES (?, ?, ?)",
+        (category_id, plan.effective_month or _current_month(), plan.planned),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, category_id, effective_month, planned FROM category_plan WHERE id = ?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    return CategoryPlan(**dict(row))
 
 
 @router.post("/expenses", status_code=201)
@@ -220,7 +283,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
             "SELECT c.id, c.name, c.emoji,"
             " COALESCE((SELECT p.planned FROM category_plan p"
             "           WHERE p.category_id = c.id AND p.effective_month <= ?"
-            "           ORDER BY p.effective_month DESC LIMIT 1), 0) AS planned,"
+            "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned,"
             " COALESCE((SELECT SUM(e.amount) FROM expense_line e"
             "           WHERE e.category_id = c.id AND e.budget_month = ?), 0) AS spent"
             " FROM category c WHERE c.active = 1 ORDER BY c.id",

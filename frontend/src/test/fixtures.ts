@@ -113,6 +113,15 @@ export const BUDGET_MONTH = {
   ],
 }
 
+// The category dimension exactly as GET /api/categories returns it: each
+// active envelope with its planned amount resolved for the month.
+export const CATEGORIES = [
+  { id: 1, name: 'Groceries', emoji: '🛒', is_fixed: false, planned: 500 },
+  { id: 2, name: 'Gas', emoji: '🛢️', is_fixed: false, planned: 100 },
+  { id: 3, name: 'Entertainment', emoji: '🤪', is_fixed: false, planned: 500 },
+  { id: 4, name: 'Travel', emoji: '✈️', is_fixed: false, planned: 0 },
+]
+
 // Active funds, exactly as GET /api/funds returns them: dimension rows plus
 // the latest fund_entry balance and the server-derived note. The Bike fund
 // is fully funded; the Travel fund is open-ended (no target).
