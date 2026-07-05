@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.17.0**
+**v1.0.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -415,7 +415,7 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.17.0 — Asset & liability management. Accounts are no longer
+v1.0.0 — Asset & liability management. Accounts are no longer
 seed-only: `POST /api/accounts` creates an asset or liability — name,
 emoji, and an initial balance entry dated today — and
 `POST /api/accounts/{id}/deactivate` soft-removes one with its history
