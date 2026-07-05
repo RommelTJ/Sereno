@@ -21,6 +21,11 @@ from typing import Literal
 
 BucketTreatment = Literal["LTCG", "ORDINARY"]
 
+# The federal rate above the 0% bracket. Flat by design: a gap big
+# enough to push realized gains past the 15% → 20% threshold
+# (tax_param.ltcg_15_ceiling) is out of scope for v1.
+LTCG_RATE = 0.15
+
 
 @dataclass(frozen=True)
 class Bracket:
@@ -66,13 +71,26 @@ def _gain_fraction(bucket: Bucket) -> float:
 
 
 def _draw_ltcg(bucket: Bucket, needed: float, headroom: float) -> tuple[BucketDraw, float]:
-    """Sell inside the 0% headroom: gain headroom buys headroom/g of
-    proceeds (unbounded when nothing is gain), tax-free."""
+    """Sell inside the 0% headroom first — gain headroom buys headroom/g
+    of proceeds (unbounded when nothing is gain), tax-free — then, unless
+    the bucket is headroom-only, keep selling at 15% on the gain portion:
+    net N costs N / (1 − 0.15·g)."""
     gain_fraction = _gain_fraction(bucket)
     cap = headroom / gain_fraction if gain_fraction > 0 else float("inf")
-    gross = max(0.0, min(needed, bucket.balance, cap))
-    draw = BucketDraw(name=bucket.name, treatment="LTCG", gross=gross, tax=0.0, net=gross)
-    return draw, headroom - gross * gain_fraction
+    free_gross = max(0.0, min(needed, bucket.balance, cap))
+    gross, tax, net = free_gross, 0.0, free_gross
+
+    still_needed = needed - free_gross
+    balance_left = bucket.balance - free_gross
+    if not bucket.headroom_only and still_needed > 0 and balance_left > 0:
+        net_rate = 1.0 - gain_fraction * LTCG_RATE
+        taxed_gross = min(still_needed / net_rate, balance_left)
+        gross += taxed_gross
+        tax = taxed_gross * gain_fraction * LTCG_RATE
+        net += taxed_gross - tax
+
+    draw = BucketDraw(name=bucket.name, treatment="LTCG", gross=gross, tax=tax, net=net)
+    return draw, headroom - free_gross * gain_fraction
 
 
 def source_withdrawals(
