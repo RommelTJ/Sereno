@@ -91,6 +91,21 @@ describe('App shell navigation', () => {
   })
 })
 
+describe('Responsive shell', () => {
+  it('centers the main column and pads it responsively', () => {
+    render(<App />)
+
+    const main = screen.getByRole('main')
+    expect(main).toHaveClass('mx-auto', 'px-4', 'sm:px-9')
+  })
+
+  it('pads the header responsively', () => {
+    render(<App />)
+
+    expect(screen.getByRole('banner')).toHaveClass('px-4', 'sm:px-9')
+  })
+})
+
 describe('Header net worth', () => {
   it('shows the live net worth from the API', async () => {
     stubApi({
