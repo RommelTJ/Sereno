@@ -1,6 +1,8 @@
 // Shared API fixtures. Accounts mirror the seed dimension rows: table
 // columns map by kind, except the three brokerage funds, which map by name.
 
+import type { Sourcing } from '../api.ts'
+
 const account = (
   id: number,
   name: string,
@@ -270,7 +272,7 @@ export const TAX_PARAMS = [
 
 // GET /api/sourcing at age 38: staking is the only income, the whole
 // gap fits ETH's 0% headroom, and the 401(k) reports its gate.
-export const SOURCING = {
+export const SOURCING: Sourcing = {
   target_net: 45_000,
   annual_target: 45_000,
   age: 38,

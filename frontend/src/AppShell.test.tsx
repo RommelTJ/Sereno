@@ -23,6 +23,7 @@ beforeEach(() => {
     '/api/budget-month': EMPTY_BUDGET_MONTH,
     '/api/funds': [],
     '/api/guardrails': null,
+    '/api/sourcing': null,
     // The Settings view's config fetches, as a fresh database answers.
     '/api/assumptions': null,
     '/api/spend-plan': null,
