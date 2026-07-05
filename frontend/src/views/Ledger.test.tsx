@@ -9,24 +9,43 @@ describe('Ledger monthly balance table', () => {
     stubApi({ '/api/accounts': ACCOUNTS, '/api/ledger': LEDGER })
   })
 
-  it('renders a column per handoff account plus Date and Net worth', async () => {
+  it('renders one column per active account, assets then liabilities', async () => {
     render(<Ledger />)
 
     expect(await screen.findByRole('table')).toBeInTheDocument()
-    for (const name of [
+    const headers = screen
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent)
+    expect(headers).toEqual([
       'Date',
-      'ETH',
+      'Ethereum',
       'VFIAX',
       'VTIAX',
       'VGSH',
-      'Retire',
+      'Retirement',
       'Home',
-      'Cash',
+      'Chase checking',
+      'Vanguard Cash Plus',
+      'Car',
       'Mortgage',
       'Net worth',
-    ]) {
-      expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
-    }
+    ])
+  })
+
+  it('gives an inactive account no column', async () => {
+    stubApi({
+      '/api/accounts': [
+        ...ACCOUNTS,
+        { ...ACCOUNTS[8], id: 11, name: 'Old boat', active: false },
+      ],
+      '/api/ledger': LEDGER,
+    })
+    render(<Ledger />)
+
+    await screen.findByRole('table')
+    expect(
+      screen.queryByRole('columnheader', { name: 'Old boat' }),
+    ).not.toBeInTheDocument()
   })
 
   it('renders one row per month, newest first, with the canonical balances', async () => {
@@ -42,19 +61,20 @@ describe('Ledger monthly balance table', () => {
     expect(within(rows[1]).getByText('$690,000')).toBeInTheDocument()
   })
 
-  it('sums the cash and cash-plus accounts into the single Cash column', async () => {
+  it('renders the two cash accounts as separate columns', async () => {
     render(<Ledger />)
 
     const rows = await screen.findAllByTestId('ledger-row')
-    expect(within(rows[0]).getByText('$29,000')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('$27,000')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$9,000')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$20,000')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('$7,000')).toBeInTheDocument()
   })
 
-  it('shows the mortgage as a negative figure', async () => {
+  it('shows the mortgage as a negative red figure', async () => {
     render(<Ledger />)
 
     const rows = await screen.findAllByTestId('ledger-row')
-    expect(within(rows[0]).getByText('-$150,000')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('-$150,000')).toHaveClass('text-red-text')
     expect(within(rows[1]).getByText('-$150,700')).toBeInTheDocument()
   })
 
