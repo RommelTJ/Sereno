@@ -4,6 +4,8 @@ import type {
   Account,
   Assumption,
   AssumptionInput,
+  CategoryInput,
+  CategoryPlanInput,
   Fund,
   LedgerMonth,
   SocialSecurityEntry,
@@ -61,6 +63,81 @@ export function fundRows(funds: Fund[]): BucketRow[] {
     value: formatUsd(fund.balance),
     negative: false,
   }))
+}
+
+// The curated emoji choices for the add-envelope select — the handoff
+// spreadsheet's envelopes first, then common extras. The backend keeps
+// emoji as free TEXT; this list constrains only the UI.
+export const EMOJI_OPTIONS = [
+  { emoji: '🛒', label: 'Groceries' },
+  { emoji: '🛢️', label: 'Gas' },
+  { emoji: '🤪', label: 'Entertainment' },
+  { emoji: '🍻', label: 'Vices' },
+  { emoji: '💵', label: 'Consumerism' },
+  { emoji: '✈️', label: 'Travel' },
+  { emoji: '🏠', label: 'Housing' },
+  { emoji: '🏡', label: 'House maintenance' },
+  { emoji: '🏥', label: 'Medical' },
+  { emoji: '💊', label: 'Pharmacy' },
+  { emoji: '🚗', label: 'Car' },
+  { emoji: '🚙', label: 'Car insurance' },
+  { emoji: '🔧', label: 'Car maintenance' },
+  { emoji: '🚰', label: 'Water' },
+  { emoji: '⚡', label: 'Electric' },
+  { emoji: '🌐', label: 'Internet' },
+  { emoji: '📱', label: 'Phone' },
+  { emoji: '🗞️', label: 'Subscriptions' },
+  { emoji: '👵', label: 'Family' },
+  { emoji: '🙏', label: 'Donations' },
+  { emoji: '🍽️', label: 'Dining out' },
+  { emoji: '☕', label: 'Coffee' },
+  { emoji: '🐕', label: 'Pets' },
+  { emoji: '🎁', label: 'Gifts' },
+  { emoji: '📚', label: 'Education' },
+  { emoji: '💇', label: 'Personal care' },
+  { emoji: '🏋️', label: 'Fitness' },
+  { emoji: '👕', label: 'Clothing' },
+  { emoji: '🎮', label: 'Games' },
+  { emoji: '🎬', label: 'Movies' },
+  { emoji: '🧾', label: 'Taxes & fees' },
+  { emoji: '🛡️', label: 'Insurance' },
+  { emoji: '👶', label: 'Kids' },
+  { emoji: '💰', label: 'Savings' },
+]
+
+// A planned amount must be a plain non-negative number — parseNumber is
+// too forgiving here (it strips the minus sign).
+function parsePlanned(raw: string): number | undefined {
+  if (raw.trim() === '') {
+    return undefined
+  }
+  const value = Number(raw)
+  return Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+// Build the POST /api/categories body, or null while the form is invalid
+// (blank name, or a planned amount that isn't a non-negative number).
+export function envelopeInput(values: {
+  name: string
+  emoji: string
+  planned: string
+}): CategoryInput | null {
+  const name = values.name.trim()
+  const planned = parsePlanned(values.planned)
+  if (name === '' || planned == null) {
+    return null
+  }
+  const input: CategoryInput = { name, planned }
+  if (values.emoji !== '') {
+    input.emoji = values.emoji
+  }
+  return input
+}
+
+// Build the POST /api/categories/{id}/plan body, or null while invalid.
+export function envelopePlanInput(planned: string): CategoryPlanInput | null {
+  const value = parsePlanned(planned)
+  return value == null ? null : { planned: value }
 }
 
 // 7 → "7.0%" — for values stored in percent units (return_pct, …).

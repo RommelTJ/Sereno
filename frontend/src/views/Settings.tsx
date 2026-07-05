@@ -3,6 +3,8 @@ import type {
   Account,
   Assumption,
   Category,
+  CategoryInput,
+  CategoryPlanInput,
   Fund,
   LedgerMonth,
   SocialSecurityEntry,
@@ -14,6 +16,7 @@ import type {
 } from '../api.ts'
 import {
   createAssumption,
+  createCategory,
   createSocialSecurity,
   createSpendPlan,
   createTaxParam,
@@ -25,6 +28,7 @@ import {
   fetchSocialSecurity,
   fetchSpendPlan,
   fetchTaxParams,
+  updateCategoryPlan,
   updateTaxParam,
 } from '../api.ts'
 import { FieldLabel } from '../components/SpendingForm.tsx'
@@ -39,6 +43,9 @@ import {
   assumptionsEdits,
   assumptionsFormValues,
   bracketLabel,
+  EMOJI_OPTIONS,
+  envelopeInput,
+  envelopePlanInput,
   formatPct,
   formatRate,
   fundRows,
@@ -195,11 +202,98 @@ function ConfigLine({
   )
 }
 
-function EnvelopesCard({ categories }: { categories: Category[] }) {
+function EnvelopeRow({
+  category,
+  onRevise,
+}: {
+  category: Category
+  onRevise: (categoryId: number, input: CategoryPlanInput) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [planned, setPlanned] = useState('')
+
+  const startEditing = () => {
+    setPlanned(String(category.planned))
+    setEditing(true)
+  }
+
+  const save = async () => {
+    const input = envelopePlanInput(planned)
+    if (!input) {
+      return
+    }
+    setSaving(true)
+    try {
+      await onRevise(category.id, input)
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid="settings-envelope-row"
+      className="flex items-center justify-between border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
+    >
+      <p className="font-semibold">
+        <span className="mr-2">{category.emoji ?? '🧾'}</span>
+        <span>{category.name}</span>
+      </p>
+      {editing ? (
+        <div className="flex items-end gap-2">
+          <EditField
+            id={`envelope-planned-${category.id}`}
+            label="$ / month"
+            value={planned}
+            onChange={setPlanned}
+          />
+          <SaveButton disabled={saving} onClick={() => void save()} />
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <p className="num font-bold">{formatUsd(category.planned)} / mo</p>
+          <EditButton onClick={startEditing} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EnvelopesCard({
+  categories,
+  onAdd,
+  onRevise,
+}: {
+  categories: Category[]
+  onAdd: (input: CategoryInput) => Promise<void>
+  onRevise: (categoryId: number, input: CategoryPlanInput) => Promise<void>
+}) {
+  const [values, setValues] = useState({ name: '', emoji: '', planned: '' })
+  const [adding, setAdding] = useState(false)
+
+  const set = (key: keyof typeof values) => (value: string) =>
+    setValues((current) => ({ ...current, [key]: value }))
+
+  const add = async () => {
+    const input = envelopeInput(values)
+    if (!input) {
+      return
+    }
+    setAdding(true)
+    try {
+      await onAdd(input)
+      setValues({ name: '', emoji: '', planned: '' })
+    } finally {
+      setAdding(false)
+    }
+  }
+
   return (
     <Card
       title="Envelopes"
-      hint="· planned $ / month"
+      hint="· planned $ / month, effective-dated"
       testId="envelopes-card"
     >
       <div className="mt-2">
@@ -209,18 +303,50 @@ function EnvelopesCard({ categories }: { categories: Category[] }) {
           </p>
         )}
         {categories.map((category) => (
-          <div
+          <EnvelopeRow
             key={category.id}
-            data-testid="settings-envelope-row"
-            className="flex items-center justify-between border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
-          >
-            <p className="font-semibold">
-              <span className="mr-2">{category.emoji ?? '🧾'}</span>
-              <span>{category.name}</span>
-            </p>
-            <p className="num font-bold">{formatUsd(category.planned)} / mo</p>
-          </div>
+            category={category}
+            onRevise={onRevise}
+          />
         ))}
+      </div>
+      <div className="mt-4 grid grid-cols-[1fr_1fr_1fr_auto] items-end gap-[11px] border-t border-hairline-2 pt-4">
+        <EditField
+          id="envelope-name"
+          label="Name"
+          value={values.name}
+          onChange={set('name')}
+        />
+        <label htmlFor="envelope-emoji" className="block">
+          <FieldLabel text="Emoji" />
+          <select
+            id="envelope-emoji"
+            className="mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+            value={values.emoji}
+            onChange={(event) => set('emoji')(event.target.value)}
+          >
+            <option value="">—</option>
+            {EMOJI_OPTIONS.map((option) => (
+              <option key={option.label} value={option.emoji}>
+                {option.emoji} {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <EditField
+          id="envelope-amount"
+          label="$ / month"
+          value={values.planned}
+          onChange={set('planned')}
+        />
+        <button
+          type="button"
+          disabled={adding}
+          onClick={() => void add()}
+          className="cursor-pointer rounded-[8px] bg-accent px-3 py-2 text-[11.5px] font-bold text-white disabled:opacity-60"
+        >
+          + Add
+        </button>
       </div>
     </Card>
   )
@@ -663,6 +789,21 @@ function Settings() {
     )
   }, [])
 
+  const refetchCategories = async () => {
+    const categories = await fetchCategories()
+    setData((current) => (current ? { ...current, categories } : current))
+  }
+
+  const addEnvelope = async (input: CategoryInput) => {
+    await createCategory(input)
+    await refetchCategories()
+  }
+
+  const reviseEnvelope = async (categoryId: number, input: CategoryPlanInput) => {
+    await updateCategoryPlan(categoryId, input)
+    await refetchCategories()
+  }
+
   const saveAssumptions = async (edit: AssumptionsEdit) => {
     if (edit.assumption) {
       await createAssumption(edit.assumption)
@@ -716,7 +857,11 @@ function Settings() {
           ))}
         </div>
       </Card>
-      <EnvelopesCard categories={data.categories} />
+      <EnvelopesCard
+        categories={data.categories}
+        onAdd={addEnvelope}
+        onRevise={reviseEnvelope}
+      />
       <div className="grid grid-cols-2 gap-5">
         <AssumptionsCard
           assumption={data.assumption}

@@ -258,6 +258,23 @@ export interface IncomeInput {
   note?: string
 }
 
+// POST /api/categories inserts the category and its initial plan row;
+// effective_month is omitted so the plan starts this month. A duplicate
+// active name is a 409.
+export interface CategoryInput {
+  name: string
+  emoji?: string
+  planned: number
+  effective_month?: string
+}
+
+// POST /api/categories/{id}/plan appends an effective-dated revision —
+// the latest row per month wins; nothing is updated in place.
+export interface CategoryPlanInput {
+  planned: number
+  effective_month?: string
+}
+
 // kind is derived server-side: a blank target_date means a sinking fund, a
 // set date means a goal; a blank target_amount is an open-ended fund.
 export interface FundInput {
@@ -387,6 +404,10 @@ export const fetchTaxParams = () => getJson<TaxParam[]>('/api/tax-params')
 
 export const createBalanceEntry = (input: BalanceEntryInput) =>
   postJson('/api/balance-entries', input)
+export const createCategory = (input: CategoryInput) =>
+  postJson('/api/categories', input)
+export const updateCategoryPlan = (categoryId: number, input: CategoryPlanInput) =>
+  postJson(`/api/categories/${categoryId}/plan`, input)
 export const createExpense = (input: ExpenseInput) =>
   postJson('/api/expenses', input)
 export const createIncome = (input: IncomeInput) =>
