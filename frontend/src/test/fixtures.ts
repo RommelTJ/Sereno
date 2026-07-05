@@ -7,11 +7,17 @@ const account = (
   id: number,
   name: string,
   kind: string,
-  overrides: Partial<{ is_liability: boolean; is_investable: boolean }> = {},
+  emoji: string | null = null,
+  overrides: Partial<{
+    is_liability: boolean
+    is_investable: boolean
+    active: boolean
+  }> = {},
 ) => ({
   id,
   name,
   kind,
+  emoji,
   tax_treatment: 'NONE',
   owner: null,
   is_liability: false,
@@ -21,16 +27,16 @@ const account = (
 })
 
 export const ACCOUNTS = [
-  account(1, 'Ethereum', 'eth', { is_investable: true }),
-  account(2, 'VFIAX', 'brokerage_fund', { is_investable: true }),
-  account(3, 'VTIAX', 'brokerage_fund', { is_investable: true }),
-  account(4, 'VGSH', 'brokerage_fund', { is_investable: true }),
-  account(5, 'Retirement', '401k', { is_investable: true }),
-  account(6, 'Home', 'home'),
-  account(7, 'Chase checking', 'cash'),
-  account(8, 'Vanguard Cash Plus', 'cash_plus'),
-  account(9, 'Car', 'car'),
-  account(10, 'Mortgage', 'mortgage', { is_liability: true }),
+  account(1, 'Ethereum', 'eth', '⚡', { is_investable: true }),
+  account(2, 'VFIAX', 'brokerage_fund', '📈', { is_investable: true }),
+  account(3, 'VTIAX', 'brokerage_fund', '🌍', { is_investable: true }),
+  account(4, 'VGSH', 'brokerage_fund', '🏦', { is_investable: true }),
+  account(5, 'Retirement', '401k', '🏖️', { is_investable: true }),
+  account(6, 'Home', 'home', '🏠'),
+  account(7, 'Chase checking', 'cash', '💵'),
+  account(8, 'Vanguard Cash Plus', 'cash_plus', '💵'),
+  account(9, 'Car', 'car', '🚗'),
+  account(10, 'Mortgage', 'mortgage', '🏡', { is_liability: true }),
 ]
 
 // Exactly as GET /api/net-worth returns it: last-12-months series (oldest
