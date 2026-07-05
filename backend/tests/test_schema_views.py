@@ -22,7 +22,9 @@ def add_account(db, name, kind="cash", is_liability=0, is_investable=0):
     return cursor.lastrowid
 
 
-def add_balance(db, account_id, as_of_date, balance_usd, quantity=None, unit_price=None, cost_basis=None):
+def add_balance(
+    db, account_id, as_of_date, balance_usd, quantity=None, unit_price=None, cost_basis=None
+):
     db.execute(
         "INSERT INTO balance_entry"
         " (account_id, as_of_date, balance_usd, quantity, unit_price, cost_basis)"
