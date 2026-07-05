@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.12.0**
+**v0.12.1**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -295,6 +295,13 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v0.12.1 — Bug fix: SQLite connections are now opened with
+`check_same_thread=False`, so a request's connection can be opened,
+used, and closed on different FastAPI threadpool threads. Concurrent
+dashboard API calls no longer hit intermittent 500s from
+`sqlite3.ProgrammingError`; each connection still serves exactly one
+request at a time.
 
 v0.12.0 — Guardrails. The first Plan engine lands: a pure, typed
 Guyton-Klinger module in `engine/guardrails.py` (the ±band around the

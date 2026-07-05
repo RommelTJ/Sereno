@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from pathlib import Path
 
 from sereno.db.connection import connect, db_path
@@ -28,6 +29,27 @@ def test_connect_returns_sqlite_rows(tmp_path):
         row = conn.execute("SELECT 1 AS one").fetchone()
         assert isinstance(row, sqlite3.Row)
         assert row["one"] == 1
+    finally:
+        conn.close()
+
+
+def test_connect_allows_use_from_another_thread(tmp_path):
+    # FastAPI may open, use, and close a request's connection on different
+    # threadpool threads; the connection must not enforce thread affinity.
+    conn = connect(tmp_path / "test.db")
+    errors: list[Exception] = []
+
+    def use_connection() -> None:
+        try:
+            conn.execute("SELECT 1").fetchone()
+        except Exception as exc:  # noqa: BLE001 - captured for assertion
+            errors.append(exc)
+
+    try:
+        thread = threading.Thread(target=use_connection)
+        thread.start()
+        thread.join()
+        assert errors == []
     finally:
         conn.close()
 
