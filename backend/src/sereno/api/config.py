@@ -83,10 +83,10 @@ class TaxParam(BaseModel):
     ordinary_brackets: list[Bracket] | None
 
 
-class TaxParamCreate(BaseModel):
-    """Defaults mirror the schema: MFJ, 3.8% NIIT, CA taxes gains as ordinary."""
+class TaxParamUpdate(BaseModel):
+    """A year's revision (CPA reconciliation). Defaults mirror the schema:
+    MFJ, 3.8% NIIT, CA taxes gains as ordinary."""
 
-    tax_year: int
     filing_status: str = "MFJ"
     ltcg_0_ceiling: float
     ltcg_15_ceiling: float | None = None
@@ -95,6 +95,10 @@ class TaxParamCreate(BaseModel):
     state_treatment: str = "CA_ordinary"
     std_deduction: float | None = None
     ordinary_brackets: list[Bracket] | None = None
+
+
+class TaxParamCreate(TaxParamUpdate):
+    tax_year: int
 
 
 _SOCIAL_SECURITY_QUERY = (
@@ -123,6 +127,10 @@ def _tax_param(row: sqlite3.Row) -> TaxParam:
     fields = dict(row)
     raw = fields.pop("ordinary_brackets")
     return TaxParam(**fields, ordinary_brackets=json.loads(raw) if raw is not None else None)
+
+
+def _brackets_json(brackets: list[Bracket] | None) -> str | None:
+    return json.dumps([b.model_dump() for b in brackets]) if brackets is not None else None
 
 
 @router.get("/assumptions")
@@ -233,7 +241,7 @@ def create_tax_param(param: TaxParamCreate, db: Db) -> TaxParam:
                 param.niit_threshold,
                 param.state_treatment,
                 param.std_deduction,
-                json.dumps([b.model_dump() for b in brackets]) if brackets is not None else None,
+                _brackets_json(brackets),
             ),
         )
     except sqlite3.IntegrityError as exc:
@@ -242,5 +250,34 @@ def create_tax_param(param: TaxParamCreate, db: Db) -> TaxParam:
     row = db.execute(
         f"SELECT {_TAX_PARAM_COLUMNS} FROM tax_param WHERE tax_year = ?",
         (param.tax_year,),
+    ).fetchone()
+    return _tax_param(row)
+
+
+@router.put("/tax-params/{tax_year}")
+def update_tax_param(tax_year: int, param: TaxParamUpdate, db: Db) -> TaxParam:
+    """Replace a year's row in place — the one config table keyed by year,
+    so a CPA reconciliation is a revision, not an append."""
+    cursor = db.execute(
+        "UPDATE tax_param SET filing_status = ?, ltcg_0_ceiling = ?, ltcg_15_ceiling = ?,"
+        " niit_rate = ?, niit_threshold = ?, state_treatment = ?, std_deduction = ?,"
+        " ordinary_brackets = ? WHERE tax_year = ?",
+        (
+            param.filing_status,
+            param.ltcg_0_ceiling,
+            param.ltcg_15_ceiling,
+            param.niit_rate,
+            param.niit_threshold,
+            param.state_treatment,
+            param.std_deduction,
+            _brackets_json(param.ordinary_brackets),
+            tax_year,
+        ),
+    )
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail=f"tax year {tax_year} not found")
+    db.commit()
+    row = db.execute(
+        f"SELECT {_TAX_PARAM_COLUMNS} FROM tax_param WHERE tax_year = ?", (tax_year,)
     ).fetchone()
     return _tax_param(row)
