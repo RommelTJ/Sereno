@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import NetWorthProvider from '../components/NetWorthProvider.tsx'
 import { markerLeftPct } from '../guardrails.ts'
-import { BUDGET_MONTH, FUNDS, GUARDRAILS, NET_WORTH } from '../test/fixtures.ts'
+import { BUDGET_MONTH, FORECAST, FUNDS, GUARDRAILS, NET_WORTH } from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import Dashboard from './Dashboard.tsx'
 
@@ -16,13 +16,14 @@ const renderDashboard = () =>
     </MemoryRouter>,
   )
 
-// The wired dashboard fetches all four APIs; tests override per route.
+// The wired dashboard fetches all five APIs; tests override per route.
 const stubDashboard = (routes: Record<string, unknown> = {}) =>
   stubApi({
     '/api/net-worth': NET_WORTH,
     '/api/budget-month': BUDGET_MONTH,
     '/api/funds': FUNDS,
     '/api/guardrails': GUARDRAILS,
+    '/api/forecast': FORECAST,
     ...routes,
   })
 
@@ -140,15 +141,38 @@ describe('Spend guardrail card', () => {
   })
 })
 
-describe('Placeholder cards', () => {
-  it('deep-links the longevity card with its placeholder verdict', () => {
+describe('Longevity card', () => {
+  it('deep-links and shows the live verdict, spend, and age-90 balance', async () => {
     stubDashboard()
     renderDashboard()
 
     const card = screen.getByRole('link', { name: /longevity/i })
     expect(card).toHaveAttribute('href', '/forecast')
-    expect(within(card).getByText("You don't run out.")).toBeInTheDocument()
-    expect(within(card).getByText('~$5.5M')).toBeInTheDocument()
+    expect(await within(card).findByText("You don't run out.")).toBeInTheDocument()
+    expect(within(card).getByText('at $45,000/yr')).toBeInTheDocument()
+    expect(within(card).getByText('~$5.51M')).toBeInTheDocument()
+    expect(within(card).getByText('projected at age 90')).toBeInTheDocument()
+  })
+
+  it('turns red when the money runs out early', async () => {
+    stubDashboard({
+      '/api/forecast': { ...FORECAST, spend: 90_000, run_out_age: 72, balance_at_90: 0 },
+    })
+    renderDashboard()
+
+    const card = screen.getByRole('link', { name: /longevity/i })
+    const headline = await within(card).findByText('Lasts to age 71')
+    expect(headline).toHaveClass('text-red')
+    expect(within(card).getByText('at $90,000/yr')).toBeInTheDocument()
+  })
+
+  it('keeps a muted placeholder before the forecast can run', async () => {
+    stubDashboard({ '/api/forecast': null })
+    renderDashboard()
+
+    const card = screen.getByRole('link', { name: /longevity/i })
+    expect(await within(card).findByText('no forecast yet')).toBeInTheDocument()
+    expect(within(card).queryByText("You don't run out.")).not.toBeInTheDocument()
   })
 })
 
