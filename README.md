@@ -217,6 +217,30 @@ The sourcing slice (the second Plan engine):
   and one-pass in v1: no state tax, no NIIT, and Social Security
   reduces the gap without counting as ordinary income.
 
+The forecast slice (the third Plan engine):
+
+- `GET /api/forecast` — the year-by-year longevity simulation, age 38
+  to 95 in today's dollars. Each year the buckets grow by the real
+  rate (return − inflation), Social Security (per person, from that
+  person's start age) and staking income (while the ETH stake stays
+  above $50k) reduce the year's need, and the remainder is withdrawn
+  through the sourcing waterfall — the 0% LTCG headroom, the
+  gross-ups, and the 59½ gate apply every simulated year. Growth is
+  all gain (basis stays put); sales reduce basis pro-rata. Spend
+  defaults to the plan's annual target, the rates to the assumptions
+  row, and Social Security to the stored rows; `?spend=`,
+  `?return_pct=`, `?inflation_pct=`, `?ss_you=`, `?ss_spouse=`, and
+  `?ss_start=` override each transiently — the Forecast screen's
+  sliders never persist. The response carries the resolved inputs,
+  the per-bucket series with each year's SS income, the run-out age
+  (the first unmeetable year; null when the money lasts), the age-90
+  balance, and the sensitivity table: whole percentages of the
+  latest month's net worth from 2% to 6% — the 4% rule of thumb dead
+  center — rounded to the nearest $1,000 and each simulated at the
+  same assumptions. The current tax year's parameters apply to every
+  simulated year; null until a tax year, balances, a spend target,
+  and return/inflation figures exist.
+
 ### Screens
 
 - **Dashboard** (<http://localhost:5173/>) — the landing view. The net-worth
@@ -233,9 +257,10 @@ The sourcing slice (the second Plan engine):
   and expenses whose envelope is over budget in red — and refreshes on
   every visit as items are added elsewhere. The Spend guardrail card
   shows the live withdrawal rate, mini band, and zone status from
-  `GET /api/guardrails` (muted until a spend plan exists); the
-  Longevity card remains a static placeholder until the forecast slice
-  lands.
+  `GET /api/guardrails` (muted until a spend plan exists), and the
+  Longevity card shows the live verdict, the resolved spend, and the
+  projected age-90 balance from `GET /api/forecast` (muted until the
+  forecast's inputs exist) — every dashboard card now reads the API.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
   table (one row per month, newest first, current month highlighted; the two
   cash accounts share one column and the mortgage shows as a negative figure)
@@ -297,6 +322,26 @@ The sourcing slice (the second Plan engine):
   and the engine rule: never 0.04 × balance per bucket; solve for
   net spendable. Until tax parameters, a spend target, and balances
   exist, the view points at Settings & data.
+- **Longevity forecast** (<http://localhost:5173/forecast>) — the
+  "does the money last?" view, every figure from `GET /api/forecast`.
+  The verdict hero ("You don't run out." / "Lasts to age N", red only
+  when the money dies before 90) carries the resolved spend and the
+  projected age-90 balance, beside the bridge-to-59½ card — how long
+  the taxable buckets last against the 21.5-year bridge to the
+  401(k). The balance-by-bucket chart samples twelve ages (38 → 93)
+  as CSS stacked bars: ETH, brokerage, 401(k), and the Social
+  Security income sliver at the base, enlarged to a 7px minimum so
+  the income stays visible against multi-million balances. The
+  sensitivity table shows the server's 2–6%-of-net-worth spend levels
+  with each outcome (never runs out / tight at 90+ / runs out early)
+  and highlights the row nearest the current spend. The assumptions
+  card — spend, return, and inflation sliders plus the editable
+  Social Security panel (You $/mo, Spouse $/mo, from age) — re-runs
+  the whole simulation server-side on every change; the spend
+  slider's floor widens so the resolved spend is always reachable.
+  All of it is transient what-if: Settings owns config writes. Until
+  a tax year, assumptions, a spend target, and balances exist, the
+  view points at Settings & data.
 - **Settings & data** (<http://localhost:5173/settings>) — the config
   home. Accounts & buckets lists every account's newest ledger balance
   (walking back through the months; liabilities negative in red) with
