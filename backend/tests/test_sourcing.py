@@ -9,7 +9,7 @@ The engine solves for net spendable; it never draws 4% per bucket.
 
 import pytest
 
-from sereno.engine.sourcing import Bucket, source_withdrawals
+from sereno.engine.sourcing import Bracket, Bucket, source_withdrawals
 
 
 def eth(balance=400_000.0, basis=4_000.0):
@@ -190,3 +190,128 @@ class TestBrokerageStep:
         assert result.draws[1].gross == pytest.approx(17_000 / 0.97)
         assert result.draws[1].tax == pytest.approx(17_000 / 0.97 * 0.2 * 0.15)
         assert result.shortfall == 0
+
+
+def four01k(balance=500_000.0):
+    return Bucket(name="401(k)", balance=balance, basis=0.0, treatment="ORDINARY", access_age=59.5)
+
+
+# The seed's 2026 MFJ brackets
+BRACKETS = [
+    Bracket(rate=0.10, upto=24_800),
+    Bracket(rate=0.12, upto=100_800),
+    Bracket(rate=0.22, upto=211_400),
+    Bracket(rate=0.24, upto=None),
+]
+
+
+class TestFour01kStep:
+    def test_blocked_under_the_access_age(self):
+        result = run(age=38, buckets=[four01k()], ordinary_brackets=BRACKETS)
+        draw = result.draws[0]
+        assert draw.gross == 0
+        assert draw.note == "locked until age 59.5"
+        assert result.shortfall == pytest.approx(37_000)
+
+    def test_the_access_age_itself_unlocks_the_bucket(self):
+        result = run(age=59.5, buckets=[four01k()], ordinary_brackets=BRACKETS)
+        assert result.draws[0].gross > 0
+        assert result.draws[0].note is None
+
+    def test_the_unused_standard_deduction_shelters_the_first_dollars(self):
+        # 3,000 ordinary income leaves 27,000 of the deduction: that
+        # much gross is tax-free, the last 10,000 net costs 10,000/0.9
+        result = run(age=60, buckets=[four01k()], ordinary_brackets=BRACKETS)
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(27_000 + 10_000 / 0.9)
+        assert draw.tax == pytest.approx(10_000 / 0.9 * 0.10)
+        assert draw.net == pytest.approx(37_000)
+        assert result.shortfall == 0
+
+    def test_a_draw_crossing_a_bracket_boundary_pays_each_rate(self):
+        # deduction fully used → the 10% bracket's 24,800 nets 22,320,
+        # and the remaining 37,680 net is grossed up at 12%
+        result = run(
+            target_spend=60_000,
+            income=0,
+            age=60,
+            ordinary_income=30_000,
+            buckets=[four01k()],
+            ordinary_brackets=BRACKETS,
+        )
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(24_800 + 37_680 / 0.88)
+        assert draw.tax == pytest.approx(2_480 + 37_680 / 0.88 * 0.12)
+        assert draw.net == pytest.approx(60_000)
+
+    def test_existing_taxable_income_starts_the_walk_mid_bracket(self):
+        # 54,800 ordinary − 30,000 deduction = 24,800 taxable: the 10%
+        # bracket is already full, so the whole draw is taxed at 12%
+        result = run(
+            age=60,
+            ordinary_income=54_800,
+            buckets=[four01k()],
+            ordinary_brackets=BRACKETS,
+        )
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(37_000 / 0.88)
+        assert draw.tax == pytest.approx(37_000 / 0.88 * 0.12)
+
+    def test_the_open_top_bracket_absorbs_any_remainder(self):
+        # the first three brackets net 175,468; the rest is at 24%
+        brackets_net = 24_800 * 0.9 + 76_000 * 0.88 + 110_600 * 0.78
+        result = run(
+            target_spend=400_000,
+            income=0,
+            age=60,
+            ordinary_income=30_000,
+            buckets=[four01k(balance=1_000_000)],
+            ordinary_brackets=BRACKETS,
+        )
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(211_400 + (400_000 - brackets_net) / 0.76)
+        assert draw.tax == pytest.approx(draw.gross - 400_000)
+        assert draw.net == pytest.approx(400_000)
+
+    def test_the_balance_caps_the_ordinary_draw(self):
+        result = run(
+            age=60,
+            ordinary_income=30_000,
+            buckets=[four01k(balance=10_000)],
+            ordinary_brackets=BRACKETS,
+        )
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(10_000)
+        assert draw.tax == pytest.approx(1_000)
+        assert draw.net == pytest.approx(9_000)
+        assert result.shortfall == pytest.approx(28_000)
+
+    def test_without_brackets_the_draw_is_untaxed(self):
+        # ordinary_brackets is a nullable config column; absent brackets
+        # mean no tax to model, not an error
+        result = run(age=60, buckets=[four01k()], ordinary_brackets=None)
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(37_000)
+        assert draw.tax == 0
+
+
+class TestUnfillableGap:
+    def test_the_waterfall_reports_what_it_could_not_deliver(self):
+        # ETH 5,000 + brokerage 10,000 inside the headroom, 401(k)
+        # gated at 38 → 22,000 of the 37,000 gap goes unfilled
+        result = run(
+            buckets=[
+                eth(balance=5_000),
+                brokerage(balance=10_000, basis=8_000),
+                four01k(),
+            ],
+            ordinary_brackets=BRACKETS,
+        )
+        assert [draw.net for draw in result.draws] == [
+            pytest.approx(5_000),
+            pytest.approx(10_000),
+            0,
+        ]
+        assert result.draws[2].note == "locked until age 59.5"
+        assert result.shortfall == pytest.approx(22_000)
+        assert result.net_delivered == pytest.approx(23_000)
