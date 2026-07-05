@@ -83,7 +83,7 @@ class Sourcing(BaseModel):
     shortfall: float
 
 
-def _current_tax_param(db: sqlite3.Connection) -> TaxParam | None:
+def current_tax_param(db: sqlite3.Connection) -> TaxParam | None:
     """The latest loaded year that has started; future years stay staged."""
     current = None
     for param in list_tax_params(db):
@@ -99,7 +99,7 @@ def _account_basis(db: sqlite3.Connection, account_id: int, cost_basis: float | 
     return cost_basis if cost_basis is not None else 0.0
 
 
-def _buckets(db: sqlite3.Connection) -> list[Bucket]:
+def load_buckets(db: sqlite3.Connection) -> list[Bucket]:
     grouped: dict[int, Bucket] = {}
     for row in db.execute(_LATEST_BALANCES):
         priority = row["priority"]
@@ -118,14 +118,14 @@ def _buckets(db: sqlite3.Connection) -> list[Bucket]:
 
 @router.get("/sourcing")
 def get_sourcing(db: Db, age: Age, spend: Spend = None) -> Sourcing | None:
-    tax = _current_tax_param(db)
+    tax = current_tax_param(db)
     if tax is None:
         return None
     plan = get_spend_plan(db)
     target = spend if spend is not None else (plan.annual_target if plan else None)
     if target is None:
         return None
-    buckets = _buckets(db)
+    buckets = load_buckets(db)
     if not buckets:
         return None
 

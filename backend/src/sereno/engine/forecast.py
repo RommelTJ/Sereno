@@ -84,9 +84,7 @@ def simulate_forecast(
             12 * benefit.monthly_amount for benefit in social_security if age >= benefit.start_age
         )
         series.append(
-            ForecastPoint(
-                age=age, balances=tuple(b.balance for b in current), ss_income=ss_income
-            )
+            ForecastPoint(age=age, balances=tuple(b.balance for b in current), ss_income=ss_income)
         )
         eth_balance = sum(b.balance for b in current if b.headroom_only)
         staking_income = STAKING_INCOME if eth_balance > STAKING_MIN_ETH_BALANCE else 0.0
