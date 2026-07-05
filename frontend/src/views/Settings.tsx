@@ -5,10 +5,14 @@ import type {
   Fund,
   LedgerMonth,
   SocialSecurityEntry,
+  SocialSecurityInput,
   SpendPlan,
   TaxParam,
 } from '../api.ts'
 import {
+  createAssumption,
+  createSocialSecurity,
+  createSpendPlan,
   fetchAccounts,
   fetchAssumptions,
   fetchFunds,
@@ -17,14 +21,19 @@ import {
   fetchSpendPlan,
   fetchTaxParams,
 } from '../api.ts'
-import { formatUsd } from '../ledger.ts'
-import type { BucketRow } from '../settings.ts'
+import { FieldLabel } from '../components/SpendingForm.tsx'
+import { formatUsd, todayIso } from '../ledger.ts'
+import type { AssumptionsEdit, BucketRow } from '../settings.ts'
 import {
   accountRows,
+  assumptionsEdits,
+  assumptionsFormValues,
   bracketLabel,
   formatPct,
   formatRate,
   fundRows,
+  socialSecurityEdits,
+  socialSecurityFormValues,
 } from '../settings.ts'
 
 interface SettingsData {
@@ -40,11 +49,13 @@ interface SettingsData {
 function Card({
   title,
   hint,
+  action,
   testId,
   children,
 }: {
   title: string
   hint?: string
+  action?: React.ReactNode
   testId?: string
   children: React.ReactNode
 }) {
@@ -53,14 +64,75 @@ function Card({
       data-testid={testId}
       className="rounded-card border border-card-border bg-card p-[22px]"
     >
-      <p className="text-[13px] font-bold">
-        {title}
-        {hint && (
-          <span className="font-medium text-[11.5px] text-muted-2"> {hint}</span>
-        )}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] font-bold">
+          {title}
+          {hint && (
+            <span className="font-medium text-[11.5px] text-muted-2">
+              {' '}
+              {hint}
+            </span>
+          )}
+        </p>
+        {action}
+      </div>
       {children}
     </div>
+  )
+}
+
+function EditButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="cursor-pointer rounded-[8px] border border-input-border bg-card px-3 py-1 text-[11.5px] font-semibold text-muted"
+    >
+      Edit
+    </button>
+  )
+}
+
+function SaveButton({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="cursor-pointer rounded-[8px] bg-accent px-3 py-1 text-[11.5px] font-bold text-white disabled:opacity-60"
+    >
+      Save
+    </button>
+  )
+}
+
+function EditField({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label htmlFor={id} className="block">
+      <FieldLabel text={label} />
+      <input
+        id={id}
+        className="num mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
   )
 }
 
@@ -103,57 +175,183 @@ function ConfigLine({
 function AssumptionsCard({
   assumption,
   spendPlan,
+  onSave,
 }: {
   assumption: Assumption | null
   spendPlan: SpendPlan | null
+  onSave: (edit: AssumptionsEdit) => Promise<void>
 }) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [values, setValues] = useState(() =>
+    assumptionsFormValues(assumption, spendPlan),
+  )
+
+  const startEditing = () => {
+    setValues(assumptionsFormValues(assumption, spendPlan))
+    setEditing(true)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await onSave(assumptionsEdits(values, assumption, spendPlan, todayIso()))
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const set = (key: keyof typeof values) => (value: string) =>
+    setValues((current) => ({ ...current, [key]: value }))
+
   return (
-    <Card title="Assumptions" testId="assumptions-card">
-      <div className="mt-3">
-        <ConfigLine label="Return" value={formatPct(assumption?.return_pct)} />
-        <ConfigLine
-          label="Inflation"
-          value={formatPct(assumption?.inflation_pct)}
-        />
-        <ConfigLine
-          label="ETH growth"
-          value={formatPct(assumption?.eth_growth_pct)}
-          hint="· refined from tracking"
-        />
-        <ConfigLine
-          label="Planned spend"
-          value={spendPlan ? `${formatUsd(spendPlan.annual_target)} / yr` : '—'}
-        />
-      </div>
+    <Card
+      title="Assumptions"
+      testId="assumptions-card"
+      action={
+        editing ? (
+          <SaveButton disabled={saving} onClick={() => void save()} />
+        ) : (
+          <EditButton onClick={startEditing} />
+        )
+      }
+    >
+      {editing ? (
+        <div className="mt-3 grid grid-cols-2 gap-[11px]">
+          <EditField
+            id="assumption-return"
+            label="Return %"
+            value={values.returnPct}
+            onChange={set('returnPct')}
+          />
+          <EditField
+            id="assumption-inflation"
+            label="Inflation %"
+            value={values.inflationPct}
+            onChange={set('inflationPct')}
+          />
+          <EditField
+            id="assumption-eth"
+            label="ETH growth %"
+            value={values.ethGrowthPct}
+            onChange={set('ethGrowthPct')}
+          />
+          <EditField
+            id="assumption-spend"
+            label="Spend $ / yr"
+            value={values.spend}
+            onChange={set('spend')}
+          />
+        </div>
+      ) : (
+        <div className="mt-3">
+          <ConfigLine
+            label="Return"
+            value={formatPct(assumption?.return_pct)}
+          />
+          <ConfigLine
+            label="Inflation"
+            value={formatPct(assumption?.inflation_pct)}
+          />
+          <ConfigLine
+            label="ETH growth"
+            value={formatPct(assumption?.eth_growth_pct)}
+            hint="· refined from tracking"
+          />
+          <ConfigLine
+            label="Planned spend"
+            value={
+              spendPlan ? `${formatUsd(spendPlan.annual_target)} / yr` : '—'
+            }
+          />
+        </div>
+      )}
     </Card>
   )
 }
 
 function SocialSecurityCard({
   socialSecurity,
+  onSave,
 }: {
   socialSecurity: SocialSecurityEntry[]
+  onSave: (inputs: SocialSecurityInput[]) => Promise<void>
 }) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [values, setValues] = useState(() =>
+    socialSecurityFormValues(socialSecurity),
+  )
+
+  const startEditing = () => {
+    setValues(socialSecurityFormValues(socialSecurity))
+    setEditing(true)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await onSave(socialSecurityEdits(values, socialSecurity, todayIso()))
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const set = (key: keyof typeof values) => (value: string) =>
+    setValues((current) => ({ ...current, [key]: value }))
+
   return (
     <Card
       title="Social Security"
       hint="· editable, dated"
       testId="social-security-card"
+      action={
+        editing ? (
+          <SaveButton disabled={saving} onClick={() => void save()} />
+        ) : (
+          <EditButton onClick={startEditing} />
+        )
+      }
     >
-      <div className="mt-3">
-        {socialSecurity.length === 0 && (
-          <p className="text-[12.5px] leading-8 text-muted-2">
-            no estimates yet
-          </p>
-        )}
-        {socialSecurity.map((entry) => (
-          <ConfigLine
-            key={entry.person}
-            label={`${entry.person === 'you' ? 'You' : 'Spouse'} — from ${entry.start_age}`}
-            value={`${formatUsd(entry.monthly_amount)}/mo`}
+      {editing ? (
+        <div className="mt-3 grid grid-cols-3 gap-[11px]">
+          <EditField
+            id="ss-you"
+            label="You $ / mo"
+            value={values.you}
+            onChange={set('you')}
           />
-        ))}
-      </div>
+          <EditField
+            id="ss-spouse"
+            label="Spouse $ / mo"
+            value={values.spouse}
+            onChange={set('spouse')}
+          />
+          <EditField
+            id="ss-start-age"
+            label="Start age"
+            value={values.startAge}
+            onChange={set('startAge')}
+          />
+        </div>
+      ) : (
+        <div className="mt-3">
+          {socialSecurity.length === 0 && (
+            <p className="text-[12.5px] leading-8 text-muted-2">
+              no estimates yet
+            </p>
+          )}
+          {socialSecurity.map((entry) => (
+            <ConfigLine
+              key={entry.person}
+              label={`${entry.person === 'you' ? 'You' : 'Spouse'} — from ${entry.start_age}`}
+              value={`${formatUsd(entry.monthly_amount)}/mo`}
+            />
+          ))}
+        </div>
+      )}
     </Card>
   )
 }
@@ -273,6 +471,28 @@ function Settings() {
     )
   }, [])
 
+  const saveAssumptions = async (edit: AssumptionsEdit) => {
+    if (edit.assumption) {
+      await createAssumption(edit.assumption)
+    }
+    if (edit.spendPlan) {
+      await createSpendPlan(edit.spendPlan)
+    }
+    const [assumption, spendPlan] = await Promise.all([
+      fetchAssumptions(),
+      fetchSpendPlan(),
+    ])
+    setData((current) => (current ? { ...current, assumption, spendPlan } : current))
+  }
+
+  const saveSocialSecurity = async (inputs: SocialSecurityInput[]) => {
+    for (const input of inputs) {
+      await createSocialSecurity(input)
+    }
+    const socialSecurity = await fetchSocialSecurity()
+    setData((current) => (current ? { ...current, socialSecurity } : current))
+  }
+
   if (!data) {
     return <div data-testid="view-settings" />
   }
@@ -293,8 +513,12 @@ function Settings() {
         <AssumptionsCard
           assumption={data.assumption}
           spendPlan={data.spendPlan}
+          onSave={saveAssumptions}
         />
-        <SocialSecurityCard socialSecurity={data.socialSecurity} />
+        <SocialSecurityCard
+          socialSecurity={data.socialSecurity}
+          onSave={saveSocialSecurity}
+        />
       </div>
       <TaxCard taxParam={data.taxParams.at(-1) ?? null} />
       <DataNote />

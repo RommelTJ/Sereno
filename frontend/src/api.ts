@@ -164,6 +164,29 @@ export interface FundInput {
   monthly_plan?: number
 }
 
+// Config edits append: each input becomes a new effective-dated row and
+// the GETs resolve to it. Blank optional fields are omitted, not nulled.
+export interface AssumptionInput {
+  effective_date: string
+  return_pct: number
+  inflation_pct: number
+  eth_growth_pct?: number
+}
+
+export interface SpendPlanInput {
+  effective_date: string
+  annual_target: number
+  initial_rate?: number
+  guardrail_band?: number
+}
+
+export interface SocialSecurityInput {
+  person: 'you' | 'spouse'
+  effective_date: string
+  start_age: number
+  monthly_amount: number
+}
+
 export interface FundEntryInput {
   fund_id: number
   as_of_date: string
@@ -219,3 +242,9 @@ export const createFund = (input: FundInput) =>
   postJsonReturning<Fund>('/api/funds', input)
 export const createFundEntry = (input: FundEntryInput) =>
   postJson('/api/fund-entries', input)
+export const createAssumption = (input: AssumptionInput) =>
+  postJson('/api/assumptions', input)
+export const createSpendPlan = (input: SpendPlanInput) =>
+  postJson('/api/spend-plan', input)
+export const createSocialSecurity = (input: SocialSecurityInput) =>
+  postJson('/api/social-security', input)
