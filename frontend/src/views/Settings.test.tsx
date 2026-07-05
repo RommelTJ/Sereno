@@ -4,6 +4,7 @@ import { todayIso } from '../ledger.ts'
 import {
   ACCOUNTS,
   ASSUMPTION,
+  CATEGORIES,
   FUNDS,
   LEDGER,
   SOCIAL_SECURITY,
@@ -17,6 +18,7 @@ const routes = () => ({
   '/api/accounts': ACCOUNTS,
   '/api/ledger': LEDGER,
   '/api/funds': FUNDS,
+  '/api/categories': CATEGORIES,
   '/api/assumptions': ASSUMPTION,
   '/api/spend-plan': SPEND_PLAN,
   '/api/social-security': SOCIAL_SECURITY,
@@ -72,6 +74,28 @@ describe('Accounts & buckets card', () => {
     expect(within(rows[0]).getByText('Emergency fund')).toBeInTheDocument()
     expect(within(rows[0]).getByText('· fund · sinking')).toBeInTheDocument()
     expect(within(rows[0]).getByText('$10,000')).toBeInTheDocument()
+  })
+})
+
+describe('Envelopes card', () => {
+  it('lists each envelope with its emoji, name, and planned amount', async () => {
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    expect(rows).toHaveLength(4)
+    expect(within(rows[0]).getByText('🛒')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Groceries')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$500 / mo')).toBeInTheDocument()
+    expect(within(rows[3]).getByText('Travel')).toBeInTheDocument()
+    expect(within(rows[3]).getByText('$0 / mo')).toBeInTheDocument()
+  })
+
+  it('says so when no envelopes exist yet', async () => {
+    stubApi({ ...routes(), '/api/categories': [] })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('envelopes-card')
+    expect(within(card).getByText('no envelopes yet')).toBeInTheDocument()
   })
 })
 
