@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.13.0**
+**v0.14.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -378,6 +378,21 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
+v0.14.0 — Longevity forecast. The third and final Plan engine lands:
+a pure, typed year-by-year simulation in `engine/forecast.py` — ages
+38 through 95 in today's dollars, buckets grown by the real rate,
+each year's need reduced by Social Security and staking income and
+withdrawn through the sourcing waterfall, so the 0% LTCG headroom
+and the 59½ gate apply every simulated year — exposed through
+`GET /api/forecast` with transient override params and a
+2–6%-of-net-worth sensitivity table. The Longevity forecast screen
+replaces the last stub (see [Screens](#screens)): the verdict hero,
+the bridge-to-59½ card, the balance-by-bucket chart, the sensitivity
+table, and live assumptions sliders with the editable Social
+Security panel. The Dashboard's Longevity card now reads the same
+simulation, completing the dashboard — every card is live. This
+closes out the design handoff's screen list.
+
 v0.13.0 — Withdrawal sourcing. The second Plan engine lands: a pure,
 typed waterfall in `engine/sourcing.py` — target net spend minus
 non-portfolio income, then ETH inside the 0% LTCG headroom, taxable
@@ -413,9 +428,8 @@ Planning config, the Dashboard v2 landing view, the Funds & goals
 screen, the Safe-to-spend screen, the budget API, the Ledger entries
 screen, the balances API, seed data, the append-only schema
 (migrations at startup), the typed SQLite connection module, and the
-app shell landed in earlier releases. Remaining work:
-
-1. Longevity forecast (simulating with the sourcing engine)
+app shell landed in earlier releases. No remaining roadmap items —
+the design handoff is fully implemented.
 
 ## License
 
