@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.10.0**
+**v0.11.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -269,18 +269,21 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.10.0 — Dashboard v2. The landing view is now a true at-a-glance
-overview for the Track half (see [Screens](#screens)): the
-Safe-to-spend card reads its live headline and baseline progress bar
-from `GET /api/budget-month`, the Funds & goals card shows the total
-parked and a top-3 mini list from `GET /api/funds`, and Recent
-activity lists the month's five newest spending and funding items as
-emoji-tile rows with signed, color-coded amounts. The Guardrail and
-Longevity cards stay placeholders until Phase 2. The Funds & goals
-screen, the Safe-to-spend screen, the budget API, the Ledger entries
-screen, the balances API, seed data, the append-only schema
-(migrations at startup), the typed SQLite connection module, and the
-app shell landed in earlier releases. Remaining work:
+v0.11.0 — Planning config. The four config tables now have typed
+endpoints — assumptions, spend plan, and Social Security resolve the
+latest effective-dated row on or before today (per person for Social
+Security) and only ever append; tax parameters are per-year rows with
+POST to load a year and PUT to reconcile it against the CPA's numbers.
+The Settings & data screen replaces its stub (see
+[Screens](#screens)): accounts & buckets with live balances, editable
+Assumptions and Social Security cards that append dated rows, the
+tax-parameter editor, and the append-only data-model note. This gives
+the three Plan engines one tested input source. The Dashboard v2
+landing view, the Funds & goals screen, the Safe-to-spend screen, the
+budget API, the Ledger entries screen, the balances API, seed data,
+the append-only schema (migrations at startup), the typed SQLite
+connection module, and the app shell landed in earlier releases.
+Remaining work:
 
 1. Guardrails → withdrawal sourcing engine → longevity forecast
 
