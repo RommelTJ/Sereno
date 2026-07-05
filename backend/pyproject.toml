@@ -1,6 +1,6 @@
 [project]
 name = "sereno"
-version = "0.13.0"
+version = "0.14.0"
 description = "Sereno backend — a private, LAN-only personal finance tracker"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -45,6 +45,11 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ANN"]
+
+[tool.ruff.lint.isort]
+# By name, not by resolution: a red TDD test imports the module it is
+# about to force into existence, which must still sort as first-party.
+known-first-party = ["sereno"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

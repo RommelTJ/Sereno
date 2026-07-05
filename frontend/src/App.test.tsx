@@ -18,6 +18,7 @@ beforeEach(() => {
     },
     '/api/funds': [],
     '/api/guardrails': null,
+    '/api/forecast': null,
   })
 })
 

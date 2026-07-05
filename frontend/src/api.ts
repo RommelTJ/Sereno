@@ -176,6 +176,51 @@ export interface Sourcing {
   shortfall: number
 }
 
+// GET /api/forecast: the longevity simulation. Spend, rates, and the
+// Social Security figures resolve from stored config unless a query
+// override stands in; the series carries per-bucket balances and each
+// year's SS income. Null until a tax year, balances, a spend target,
+// and return/inflation figures exist.
+export interface ForecastPoint {
+  age: number
+  eth: number
+  brokerage: number
+  retirement: number
+  ss_income: number
+}
+
+export interface SensitivityRow {
+  spend: number
+  run_out_age: number | null
+  balance_at_90: number
+}
+
+export interface Forecast {
+  spend: number
+  annual_target: number | null
+  return_pct: number
+  inflation_pct: number
+  ss_you: number
+  ss_spouse: number
+  ss_start: number
+  tax_year: number
+  series: ForecastPoint[]
+  run_out_age: number | null
+  balance_at_90: number
+  sensitivity: SensitivityRow[]
+}
+
+// The Forecast screen's transient what-ifs — never persisted; Settings
+// owns config writes.
+export interface ForecastOverrides {
+  spend?: number
+  return_pct?: number
+  inflation_pct?: number
+  ss_you?: number
+  ss_spouse?: number
+  ss_start?: number
+}
+
 export type IncomeSource =
   | 'paycheck'
   | 'transfer_in'
@@ -315,6 +360,16 @@ export const fetchSourcing = (age: number, spend?: number) =>
       ? `/api/sourcing?age=${age}&spend=${spend}`
       : `/api/sourcing?age=${age}`,
   )
+export const fetchForecast = (overrides: ForecastOverrides = {}) => {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value != null) {
+      params.set(key, String(value))
+    }
+  }
+  const query = params.toString()
+  return getJson<Forecast | null>(query ? `/api/forecast?${query}` : '/api/forecast')
+}
 export const fetchSocialSecurity = () =>
   getJson<SocialSecurityEntry[]>('/api/social-security')
 export const fetchTaxParams = () => getJson<TaxParam[]>('/api/tax-params')

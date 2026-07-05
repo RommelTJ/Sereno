@@ -26,6 +26,11 @@ BucketTreatment = Literal["LTCG", "ORDINARY"]
 # (tax_param.ltcg_15_ceiling) is out of scope for v1.
 LTCG_RATE = 0.15
 
+# The handoff's staking rule: ~3,000/yr while the ETH stake stays
+# meaningful. Promote to config if the rule ever needs tuning.
+STAKING_INCOME = 3_000.0
+STAKING_MIN_ETH_BALANCE = 50_000.0
+
 
 @dataclass(frozen=True)
 class Bracket:
