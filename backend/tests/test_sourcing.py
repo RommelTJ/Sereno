@@ -8,6 +8,7 @@ The engine solves for net spendable; it never draws 4% per bucket.
 """
 
 import pytest
+
 from sereno.engine.sourcing import Bucket, source_withdrawals
 
 
