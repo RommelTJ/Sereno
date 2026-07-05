@@ -43,6 +43,14 @@ def execute(sql, params):
         conn.close()
 
 
+def count_rows(table):
+    conn = connect()
+    try:
+        return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+    finally:
+        conn.close()
+
+
 def insert_assumption(effective_date, return_pct=7.0, inflation_pct=3.0, eth_growth_pct=None):
     return execute(
         "INSERT INTO assumption (effective_date, return_pct, inflation_pct, eth_growth_pct)"
@@ -239,3 +247,117 @@ class TestGetTaxParams:
                 "ordinary_brackets": None,
             },
         ]
+
+
+class TestPostAssumptions:
+    def test_appends_a_new_row_and_returns_it(self, client):
+        insert_assumption(days_ago(365), return_pct=7.0)
+        response = client.post(
+            "/api/assumptions",
+            json={"effective_date": TODAY.isoformat(), "return_pct": 6.5, "inflation_pct": 2.8},
+        )
+        assert response.status_code == 201
+        created = response.json()
+        assert created == {
+            "id": created["id"],
+            "effective_date": TODAY.isoformat(),
+            "return_pct": 6.5,
+            "inflation_pct": 2.8,
+            "eth_growth_pct": None,
+        }
+        assert client.get("/api/assumptions").json() == created
+        assert count_rows("assumption") == 2  # append-only: the old row remains
+
+
+class TestPostSpendPlan:
+    def test_appends_a_new_row_and_returns_it(self, client):
+        insert_spend_plan(days_ago(365), annual_target=42000)
+        response = client.post(
+            "/api/spend-plan",
+            json={
+                "effective_date": TODAY.isoformat(),
+                "annual_target": 48000,
+                "initial_rate": 0.0294,
+            },
+        )
+        assert response.status_code == 201
+        created = response.json()
+        assert created["annual_target"] == 48000
+        assert created["guardrail_band"] == 0.2  # schema default carried by the API
+        assert client.get("/api/spend-plan").json() == created
+        assert count_rows("spend_plan") == 2
+
+
+class TestPostSocialSecurity:
+    def test_appends_a_row_for_one_person(self, client):
+        response = client.post(
+            "/api/social-security",
+            json={
+                "person": "you",
+                "effective_date": TODAY.isoformat(),
+                "start_age": 67,
+                "monthly_amount": 1550,
+            },
+        )
+        assert response.status_code == 201
+        created = response.json()
+        assert created["person"] == "you"
+        assert created["monthly_amount"] == 1550
+        assert client.get("/api/social-security").json() == [created]
+
+    def test_rejects_an_unknown_person(self, client):
+        response = client.post(
+            "/api/social-security",
+            json={
+                "person": "kid",
+                "effective_date": TODAY.isoformat(),
+                "start_age": 67,
+                "monthly_amount": 100,
+            },
+        )
+        assert response.status_code == 422
+        assert count_rows("social_security") == 0
+
+
+class TestPostTaxParams:
+    def test_creates_a_new_tax_year(self, client):
+        brackets = [{"rate": 0.10, "upto": 24800}, {"rate": 0.12, "upto": None}]
+        response = client.post(
+            "/api/tax-params",
+            json={
+                "tax_year": 2027,
+                "filing_status": "MFJ",
+                "ltcg_0_ceiling": 99000,
+                "ltcg_15_ceiling": 615000,
+                "niit_rate": 0.038,
+                "niit_threshold": 250000,
+                "state_treatment": "CA_ordinary",
+                "std_deduction": 30500,
+                "ordinary_brackets": brackets,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["tax_year"] == 2027
+        assert response.json()["ordinary_brackets"] == brackets
+        assert client.get("/api/tax-params").json() == [response.json()]
+
+    def test_defaults_match_the_schema(self, client):
+        response = client.post("/api/tax-params", json={"tax_year": 2027, "ltcg_0_ceiling": 99000})
+        assert response.status_code == 201
+        assert response.json() == {
+            "tax_year": 2027,
+            "filing_status": "MFJ",
+            "ltcg_0_ceiling": 99000,
+            "ltcg_15_ceiling": None,
+            "niit_rate": 0.038,
+            "niit_threshold": None,
+            "state_treatment": "CA_ordinary",
+            "std_deduction": None,
+            "ordinary_brackets": None,
+        }
+
+    def test_a_duplicate_year_conflicts(self, client):
+        insert_tax_param(2026)
+        response = client.post("/api/tax-params", json={"tax_year": 2026, "ltcg_0_ceiling": 96700})
+        assert response.status_code == 409
+        assert count_rows("tax_param") == 1
