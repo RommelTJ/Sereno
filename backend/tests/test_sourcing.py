@@ -116,3 +116,77 @@ class TestEthStep:
         result = run(buckets=[eth(balance=0)])
         assert result.draws[0].gross == 0
         assert result.shortfall == pytest.approx(37_000)
+
+
+def brokerage(balance=600_000.0, basis=480_000.0):
+    # basis 80% of balance → a fifth of every sale is gain
+    return Bucket(name="Brokerage", balance=balance, basis=basis, treatment="LTCG")
+
+
+class TestBrokerageStep:
+    def test_inherits_the_headroom_eth_left_behind(self):
+        # ETH is all basis, so its 10,000 sale spends no headroom and
+        # the brokerage's 27,000 remainder still fits the 0% bracket.
+        result = run(buckets=[eth(balance=10_000, basis=10_000), brokerage()])
+        draw = result.draws[1]
+        assert draw.name == "Brokerage"
+        assert draw.gross == pytest.approx(27_000)
+        assert draw.tax == 0
+        assert result.shortfall == 0
+
+    def test_grosses_up_at_fifteen_percent_beyond_the_headroom(self):
+        # taxable ordinary income eats the whole ceiling → every gain
+        # dollar is taxed at 15%, so net N costs N / (1 − 0.15·g)
+        result = run(buckets=[brokerage()], ordinary_income=126_700)
+        draw = result.draws[0]
+        assert result.headroom == 0
+        assert draw.gross == pytest.approx(37_000 / 0.97)
+        assert draw.tax == pytest.approx(37_000 / 0.97 * 0.2 * 0.15)
+        assert draw.net == pytest.approx(37_000)
+        assert result.shortfall == 0
+        assert result.net_delivered == pytest.approx(45_000)
+
+    def test_a_draw_straddling_the_headroom_taxes_only_the_excess(self):
+        # headroom 10,000 → the first 50,000 of proceeds (gain 10,000)
+        # is tax-free; the remaining 50,000 net is grossed up at 15%.
+        result = run(
+            target_spend=100_000,
+            income=0,
+            buckets=[brokerage()],
+            ordinary_income=116_700,  # taxable 86,700 → headroom 10,000
+        )
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(50_000 + 50_000 / 0.97)
+        assert draw.tax == pytest.approx(50_000 / 0.97 * 0.2 * 0.15)
+        assert draw.net == pytest.approx(100_000)
+        assert result.shortfall == 0
+
+    def test_the_balance_caps_a_taxed_draw_and_its_net(self):
+        result = run(
+            buckets=[brokerage(balance=20_000, basis=16_000)],
+            ordinary_income=126_700,  # headroom 0
+        )
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(20_000)
+        assert draw.tax == pytest.approx(20_000 * 0.2 * 0.15)
+        assert draw.net == pytest.approx(19_400)
+        assert result.shortfall == pytest.approx(37_000 - 19_400)
+        assert result.net_delivered == pytest.approx(45_000 - result.shortfall)
+
+    def test_draws_nothing_when_eth_already_filled_the_gap(self):
+        result = run(buckets=[eth(), brokerage()])
+        assert result.draws[1].gross == 0
+        assert result.shortfall == 0
+
+    def test_headroom_spent_by_eth_is_gone_for_the_brokerage(self):
+        # ETH's 20,000 sale carries 16,000 of gain — exactly the
+        # headroom — so the brokerage's 17,000 remainder is all taxed.
+        result = run(
+            buckets=[eth(balance=20_000), brokerage()],
+            ordinary_income=110_700,  # taxable 80,700 → headroom 16,000
+        )
+        assert result.draws[0].gross == pytest.approx(20_000)
+        assert result.draws[0].tax == 0
+        assert result.draws[1].gross == pytest.approx(17_000 / 0.97)
+        assert result.draws[1].tax == pytest.approx(17_000 / 0.97 * 0.2 * 0.15)
+        assert result.shortfall == 0
