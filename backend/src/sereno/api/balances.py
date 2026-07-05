@@ -9,7 +9,7 @@ from datetime import date, datetime
 from typing import Annotated, Self
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from sereno.db.connection import get_db
 
@@ -28,6 +28,17 @@ class Account(BaseModel):
     is_investable: bool
     active: bool
     emoji: str | None
+
+
+class AccountCreate(BaseModel):
+    """The initial value is set here only — subsequent values go through the
+    ledger's append-only entries. Liabilities are stored positive (the views
+    subtract them), so a negative initial value is rejected."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    emoji: str | None = None
+    is_liability: bool = False
+    initial_value: float = Field(ge=0)
 
 
 class BalanceEntryCreate(BaseModel):
@@ -92,6 +103,39 @@ def list_accounts(db: Db) -> list[Account]:
         " FROM account ORDER BY id"
     )
     return [Account(**dict(row)) for row in rows]
+
+
+@router.post("/accounts", status_code=201)
+def create_account(account: AccountCreate, db: Db) -> Account:
+    """Inserts the dimension row plus its initial balance_entry for today.
+
+    New accounts are net-worth-only: kind 'other', not investable, no
+    withdrawal priority — planner wiring for arbitrary accounts is its own
+    slice."""
+    duplicate = db.execute(
+        "SELECT 1 FROM account WHERE active = 1 AND LOWER(name) = LOWER(?)",
+        (account.name,),
+    ).fetchone()
+    if duplicate:
+        raise HTTPException(status_code=409, detail=f"account {account.name!r} exists")
+    cursor = db.execute(
+        "INSERT INTO account (name, emoji, kind, tax_treatment, is_liability, is_investable)"
+        " VALUES (?, ?, 'other', 'NONE', ?, 0)",
+        (account.name, account.emoji, account.is_liability),
+    )
+    account_id = cursor.lastrowid
+    db.execute(
+        "INSERT INTO balance_entry (account_id, as_of_date, balance_usd, source)"
+        " VALUES (?, ?, ?, 'manual')",
+        (account_id, date.today().isoformat(), account.initial_value),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, name, kind, tax_treatment, owner, is_liability, is_investable, active, emoji"
+        " FROM account WHERE id = ?",
+        (account_id,),
+    ).fetchone()
+    return Account(**dict(row))
 
 
 @router.get("/ledger")
