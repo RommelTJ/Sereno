@@ -278,3 +278,31 @@ describe('Recent activity', () => {
     ).toBeInTheDocument()
   })
 })
+
+describe('Responsive layout', () => {
+  it('stacks both dashboard grids into one column on narrow screens', async () => {
+    stubDashboard()
+    renderDashboard()
+    await screen.findByText('$1,744,000')
+
+    const view = screen.getByTestId('view-dashboard')
+    expect(view.children[0]).toHaveClass(
+      'grid-cols-1',
+      'lg:grid-cols-[1.5fr_1fr]',
+    )
+    expect(view.children[1]).toHaveClass('grid-cols-1', 'sm:grid-cols-3')
+  })
+
+  it('scales the hero figures down on narrow screens', async () => {
+    stubDashboard()
+    renderDashboard()
+
+    const netWorth = await screen.findByText('$1,744,000')
+    expect(netWorth).toHaveClass('text-4xl', 'sm:text-[52px]')
+    const card = screen.getByRole('link', { name: /safe-to-spend/i })
+    expect(within(card).getByText('$3,670')).toHaveClass(
+      'text-3xl',
+      'sm:text-[44px]',
+    )
+  })
+})

@@ -39,7 +39,7 @@ function FundingForm({
       <p className="mt-0.5 text-[11.5px] text-muted-2">
         A credit tagged to the month it funds.
       </p>
-      <div className="mt-3.5 grid grid-cols-2 gap-[11px]">
+      <div className="mt-3.5 grid grid-cols-1 gap-[11px] sm:grid-cols-2">
         <label htmlFor="fund-amount" className="block">
           <FieldLabel text="Amount" />
           <input

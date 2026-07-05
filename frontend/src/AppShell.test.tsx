@@ -91,6 +91,70 @@ describe('App shell navigation', () => {
   })
 })
 
+describe('Responsive shell', () => {
+  it('centers the main column and pads it responsively', () => {
+    render(<App />)
+
+    const main = screen.getByRole('main')
+    expect(main).toHaveClass('mx-auto', 'px-4', 'sm:px-9')
+  })
+
+  it('pads the header responsively', () => {
+    render(<App />)
+
+    expect(screen.getByRole('banner')).toHaveClass('px-4', 'sm:px-9')
+  })
+})
+
+describe('Mobile nav drawer', () => {
+  it('hides the desktop sidebar below the lg breakpoint', () => {
+    render(<App />)
+
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toHaveClass(
+      'hidden',
+      'lg:flex',
+    )
+  })
+
+  it('exposes a menu button and no drawer until it is opened', () => {
+    render(<App />)
+
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass(
+      'lg:hidden',
+    )
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
+  })
+
+  it('opens the drawer with the nav links when the menu button is clicked', () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+
+    const drawer = screen.getByRole('dialog', { name: 'Menu' })
+    expect(within(drawer).getByRole('link', { name: 'Guardrails' })).toBeInTheDocument()
+  })
+
+  it('navigates and closes the drawer when a drawer link is clicked', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+
+    const drawer = screen.getByRole('dialog', { name: 'Menu' })
+    fireEvent.click(within(drawer).getByRole('link', { name: 'Guardrails' }))
+
+    expect(screen.getByTestId('view-guardrails')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
+  })
+
+  it('closes the drawer when the backdrop is clicked', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument()
+  })
+})
+
 describe('Header net worth', () => {
   it('shows the live net worth from the API', async () => {
     stubApi({

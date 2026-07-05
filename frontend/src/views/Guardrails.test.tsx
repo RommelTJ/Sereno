@@ -131,3 +131,12 @@ describe('empty state', () => {
     expect(screen.queryByTestId('guardrails-rate')).not.toBeInTheDocument()
   })
 })
+
+describe('responsive layout', () => {
+  it('stacks the trigger cards into one column on narrow screens', async () => {
+    render(<Guardrails />)
+
+    const raise = await screen.findByTestId('guardrails-raise-trigger')
+    expect(raise.parentElement).toHaveClass('grid-cols-1', 'sm:grid-cols-2')
+  })
+})

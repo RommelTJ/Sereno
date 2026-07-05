@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.15.0**
+**v0.16.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -391,6 +391,16 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v0.16.0 — Responsive layout. The frontend is now mobile-first rather
+than a fixed ~1180px desktop shell. The capped main column is centered
+(`mx-auto`) so ultra-wide screens no longer leave a right-side dead
+zone, and its padding tightens on small screens. Every view and form
+grid stacks into a single column below its breakpoint (`sm`/`lg`), the
+net-worth and Safe-to-spend hero figures scale down on narrow screens,
+and the 248px sidebar collapses below `lg` behind a hamburger button in
+the header that opens it as a slide-over drawer (closing on navigation
+or a backdrop tap).
 
 v0.15.0 — Envelope management. Spending categories can now be created
 and revised on a real database, not just seeded: `POST /api/categories`

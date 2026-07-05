@@ -230,3 +230,23 @@ describe('empty state', () => {
     expect(screen.queryByTestId('forecast-chart')).not.toBeInTheDocument()
   })
 })
+
+describe('responsive layout', () => {
+  it('stacks the forecast grids into one column on narrow screens', async () => {
+    render(<Forecast />)
+
+    const view = await screen.findByTestId('view-forecast')
+    expect(view.children[0]).toHaveClass(
+      'grid-cols-1',
+      'lg:grid-cols-[1.4fr_1fr]',
+    )
+    expect(view.children[2]).toHaveClass(
+      'grid-cols-1',
+      'lg:grid-cols-[1.3fr_1fr]',
+    )
+    expect(screen.getByTestId('forecast-ss-you').closest('.grid')).toHaveClass(
+      'grid-cols-1',
+      'sm:grid-cols-3',
+    )
+  })
+})

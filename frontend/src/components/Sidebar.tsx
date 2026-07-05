@@ -1,17 +1,24 @@
 import { NavLink } from 'react-router'
 import { NAV_GROUPS } from '../nav.ts'
 
-function Sidebar() {
+interface SidebarProps {
+  variant?: 'desktop' | 'drawer'
+  onNavigate?: () => void
+}
+
+function Sidebar({ variant = 'desktop', onNavigate }: SidebarProps) {
   const month = new Date().toLocaleDateString('en-US', {
     month: 'long',
     year: 'numeric',
   })
 
+  const layout =
+    variant === 'drawer'
+      ? 'flex h-full w-[248px] flex-col bg-sidebar px-4 py-5'
+      : 'sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col bg-sidebar px-4 py-5 lg:flex'
+
   return (
-    <nav
-      aria-label="Primary"
-      className="sticky top-0 flex h-screen w-[248px] shrink-0 flex-col bg-sidebar px-4 py-5"
-    >
+    <nav aria-label="Primary" className={layout}>
       <div className="flex items-center gap-2.5 px-2">
         <div className="flex size-[30px] items-center justify-center rounded-tile bg-accent font-bold text-white">
           S
@@ -30,6 +37,7 @@ function Sidebar() {
                   <NavLink
                     to={item.path}
                     end={item.path === '/'}
+                    onClick={onNavigate}
                     className={({ isActive }) =>
                       `flex items-center gap-2.5 border-l-[3px] px-3 py-2 text-sm ${
                         isActive

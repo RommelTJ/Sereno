@@ -3,17 +3,37 @@ import { formatUsd } from '../ledger.ts'
 import { NAV_ITEMS } from '../nav.ts'
 import { useNetWorth } from '../netWorth.ts'
 
-function Header() {
+function Header({ onMenuOpen }: { onMenuOpen: () => void }) {
   const { pathname } = useLocation()
   const item = NAV_ITEMS.find((navItem) => navItem.path === pathname)
   const { netWorth } = useNetWorth()
 
   return (
-    <header className="sticky top-0 z-10 border-b border-card-border bg-header px-9 py-4">
+    <header className="sticky top-0 z-10 border-b border-card-border bg-header px-4 py-4 sm:px-9">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-[21px] font-bold">{item?.title ?? 'Sereno'}</h1>
-          <p className="text-sm text-muted">{item?.subtitle}</p>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            aria-label="Open menu"
+            onClick={onMenuOpen}
+            className="flex size-9 items-center justify-center rounded-input text-ink lg:hidden"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="size-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div>
+            <h1 className="text-[21px] font-bold">{item?.title ?? 'Sereno'}</h1>
+            <p className="text-sm text-muted">{item?.subtitle}</p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">

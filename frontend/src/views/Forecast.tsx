@@ -177,7 +177,7 @@ function Forecast() {
 
   return (
     <div data-testid="view-forecast" className="max-w-[1000px]">
-      <div className="grid grid-cols-[1.4fr_1fr] gap-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div
           data-testid="forecast-verdict"
           className={`rounded-card border p-6 ${
@@ -245,7 +245,7 @@ function Forecast() {
         </p>
       </div>
 
-      <div className="mt-5 grid grid-cols-[1.3fr_1fr] items-start gap-5">
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.3fr_1fr]">
         <div
           data-testid="forecast-sensitivity"
           className="overflow-hidden rounded-card border border-card-border bg-card"
@@ -296,7 +296,7 @@ function Forecast() {
               </span>
               <span className="num font-bold text-accent">{formatUsd(ssAnnual)}/yr</span>
             </div>
-            <div className="mt-2 grid grid-cols-3 gap-2">
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <SsField
                 label="You $/mo"
                 value={ssYou}

@@ -60,7 +60,7 @@ function NetWorthHero() {
       <p className="text-[11px] font-semibold tracking-[1.4px] text-sidebar-muted-2 uppercase">
         Net worth
       </p>
-      <p className="num mt-1.5 text-[52px] leading-none font-extrabold tracking-[-1.5px] text-hero-green">
+      <p className="num mt-1.5 text-4xl leading-none font-extrabold tracking-[-1.5px] text-hero-green sm:text-[52px]">
         {netWorth?.current != null ? formatUsd(netWorth.current) : '$—'}
       </p>
       {netWorth?.yoy != null && (
@@ -115,7 +115,7 @@ function SafeToSpendCard({ budget }: { budget: BudgetMonth | null }) {
       className="flex flex-col justify-between rounded-hero p-[26px]"
     >
       <div>
-        <p className="num mt-1.5 text-[44px] leading-none font-extrabold tracking-[-1px] text-accent">
+        <p className="num mt-1.5 text-3xl leading-none font-extrabold tracking-[-1px] text-accent sm:text-[44px]">
           {budget != null ? formatUsd(budget.safe_to_spend) : '$—'}
         </p>
         <p className="mt-2 text-[12.5px] text-muted">free after bills & funds</p>
@@ -294,11 +294,11 @@ function Dashboard() {
 
   return (
     <div data-testid="view-dashboard">
-      <div className="grid grid-cols-[1.5fr_1fr] gap-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
         <NetWorthHero />
         <SafeToSpendCard budget={budget} />
       </div>
-      <div className="mt-5 grid grid-cols-3 gap-5">
+      <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
         <GuardrailCard guardrails={guardrails} />
         <LongevityCard forecast={forecast} />
         <FundsCard funds={funds} />

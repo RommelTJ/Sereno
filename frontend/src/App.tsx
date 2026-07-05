@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router'
 import Header from './components/Header.tsx'
 import Sidebar from './components/Sidebar.tsx'
@@ -12,14 +13,34 @@ import Settings from './views/Settings.tsx'
 import Withdrawals from './views/Withdrawals.tsx'
 
 function App() {
+  const [menuOpen, setMenuOpen] = useState(false)
+
   return (
     <BrowserRouter>
       <NetWorthProvider>
         <div className="flex min-h-screen">
           <Sidebar />
+          {menuOpen && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Menu"
+              className="fixed inset-0 z-20 flex lg:hidden"
+            >
+              <button
+                type="button"
+                aria-label="Close menu"
+                onClick={() => setMenuOpen(false)}
+                className="absolute inset-0 bg-black/40"
+              />
+              <div className="relative">
+                <Sidebar variant="drawer" onNavigate={() => setMenuOpen(false)} />
+              </div>
+            </div>
+          )}
           <div className="flex min-w-0 flex-1 flex-col">
-            <Header />
-            <main className="w-full max-w-[1180px] px-9 pt-[30px] pb-[60px]">
+            <Header onMenuOpen={() => setMenuOpen(true)} />
+            <main className="mx-auto w-full max-w-[1180px] px-4 pt-[30px] pb-[60px] sm:px-9">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/ledger" element={<Ledger />} />
