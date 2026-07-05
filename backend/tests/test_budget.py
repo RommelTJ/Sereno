@@ -219,6 +219,58 @@ class TestPostCategories:
         assert response.status_code == 201
 
 
+class TestPostCategoryPlan:
+    def test_appends_a_plan_row(self, client):
+        groceries_id = insert_category("Groceries")
+        insert_plan(groceries_id, "2026-01", 500)
+        response = client.post(
+            f"/api/categories/{groceries_id}/plan",
+            json={"planned": 550, "effective_month": "2026-06"},
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["id"] > 0
+        assert {k: body[k] for k in body if k != "id"} == {
+            "category_id": groceries_id,
+            "effective_month": "2026-06",
+            "planned": 550,
+        }
+        assert query("SELECT effective_month, planned FROM category_plan") == [
+            {"effective_month": "2026-01", "planned": 500},
+            {"effective_month": "2026-06", "planned": 550},
+        ]
+
+    def test_the_latest_row_wins_and_earlier_months_keep_history(self, client):
+        groceries_id = insert_category("Groceries")
+        insert_plan(groceries_id, "2026-01", 500)
+        for planned in (525, 550):
+            payload = {"planned": planned, "effective_month": "2026-06"}
+            response = client.post(f"/api/categories/{groceries_id}/plan", json=payload)
+            assert response.status_code == 201
+
+        june = client.get("/api/categories", params={"month": "2026-06"}).json()
+        assert june[0]["planned"] == 550
+
+        may = client.get("/api/categories", params={"month": "2026-05"}).json()
+        assert may[0]["planned"] == 500
+
+    def test_effective_month_defaults_to_the_current_month(self, client):
+        gas_id = insert_category("Gas")
+        response = client.post(f"/api/categories/{gas_id}/plan", json={"planned": 120})
+        assert response.status_code == 201
+        assert response.json()["effective_month"] == date.today().strftime("%Y-%m")
+
+    def test_unknown_category_returns_404(self, client):
+        response = client.post("/api/categories/999/plan", json={"planned": 120})
+        assert response.status_code == 404
+
+    def test_rejects_a_negative_planned(self, client):
+        gas_id = insert_category("Gas")
+        response = client.post(f"/api/categories/{gas_id}/plan", json={"planned": -1})
+        assert response.status_code == 422
+        assert query("SELECT id FROM category_plan") == []
+
+
 class TestPostExpenses:
     def test_appends_an_expense_line(self, client):
         groceries_id = insert_category("Groceries")
