@@ -138,6 +138,23 @@ def create_account(account: AccountCreate, db: Db) -> Account:
     return Account(**dict(row))
 
 
+@router.post("/accounts/{account_id}/deactivate")
+def deactivate_account(account_id: int, db: Db) -> Account:
+    """Soft remove: the account drops out of listings and stops carrying
+    forward, but its append-only history keeps counting in the months it
+    was really entered. There is no hard delete."""
+    if db.execute("SELECT 1 FROM account WHERE id = ?", (account_id,)).fetchone() is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    db.execute("UPDATE account SET active = 0 WHERE id = ?", (account_id,))
+    db.commit()
+    row = db.execute(
+        "SELECT id, name, kind, tax_treatment, owner, is_liability, is_investable, active, emoji"
+        " FROM account WHERE id = ?",
+        (account_id,),
+    ).fetchone()
+    return Account(**dict(row))
+
+
 @router.get("/ledger")
 def ledger(db: Db) -> list[LedgerMonth]:
     net_worth = {
