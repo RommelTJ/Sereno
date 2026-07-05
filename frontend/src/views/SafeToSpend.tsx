@@ -17,7 +17,7 @@ function Hero({ safeToSpend }: { safeToSpend: number }) {
       <p className="text-[11px] font-semibold tracking-[1.4px] text-sidebar-muted-2 uppercase">
         Safe-to-spend
       </p>
-      <p className="num mt-1 text-[56px] leading-none font-extrabold tracking-[-1.5px] text-hero-green">
+      <p className="num mt-1 text-4xl leading-none font-extrabold tracking-[-1.5px] text-hero-green sm:text-[56px]">
         {formatUsd(safeToSpend)}
       </p>
       <p className="mt-2.5 inline-block rounded-pill border border-sidebar-active px-3.5 py-[5px] text-[11.5px] text-sidebar-muted">
