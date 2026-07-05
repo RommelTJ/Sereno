@@ -83,6 +83,51 @@ export interface Fund {
   note: string
 }
 
+// The planning config: effective-dated, append-only rows. Each GET
+// resolves the effective row (latest effective_date on or before today),
+// so a null means no row exists yet. Percents (return_pct) are stored in
+// percent units; rates (initial_rate, niit_rate) as fractions.
+export interface Assumption {
+  id: number
+  effective_date: string
+  return_pct: number
+  inflation_pct: number
+  eth_growth_pct: number | null
+}
+
+export interface SpendPlan {
+  id: number
+  effective_date: string
+  annual_target: number
+  initial_rate: number | null
+  guardrail_band: number
+}
+
+export interface SocialSecurityEntry {
+  id: number
+  person: 'you' | 'spouse'
+  effective_date: string
+  start_age: number
+  monthly_amount: number
+}
+
+export interface TaxBracket {
+  rate: number
+  upto: number | null
+}
+
+export interface TaxParam {
+  tax_year: number
+  filing_status: string
+  ltcg_0_ceiling: number
+  ltcg_15_ceiling: number | null
+  niit_rate: number
+  niit_threshold: number | null
+  state_treatment: string
+  std_deduction: number | null
+  ordinary_brackets: TaxBracket[] | null
+}
+
 export type IncomeSource =
   | 'paycheck'
   | 'transfer_in'
@@ -157,6 +202,12 @@ export const fetchBudgetMonth = (month?: string) =>
     month ? `/api/budget-month?month=${month}` : '/api/budget-month',
   )
 export const fetchFunds = () => getJson<Fund[]>('/api/funds')
+export const fetchAssumptions = () =>
+  getJson<Assumption | null>('/api/assumptions')
+export const fetchSpendPlan = () => getJson<SpendPlan | null>('/api/spend-plan')
+export const fetchSocialSecurity = () =>
+  getJson<SocialSecurityEntry[]>('/api/social-security')
+export const fetchTaxParams = () => getJson<TaxParam[]>('/api/tax-params')
 
 export const createBalanceEntry = (input: BalanceEntryInput) =>
   postJson('/api/balance-entries', input)
