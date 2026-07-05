@@ -124,6 +124,101 @@ class TestGetCategories:
         assert response.status_code == 422
 
 
+class TestPostCategories:
+    def test_creates_a_category_with_its_initial_plan(self, client):
+        response = client.post(
+            "/api/categories",
+            json={"name": "Groceries", "emoji": "🛒", "planned": 500},
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["id"] > 0
+        assert {k: body[k] for k in body if k != "id"} == {
+            "name": "Groceries",
+            "emoji": "🛒",
+            "is_fixed": False,
+            "planned": 500,
+        }
+        assert query("SELECT name, emoji, is_fixed, active FROM category") == [
+            {"name": "Groceries", "emoji": "🛒", "is_fixed": 0, "active": 1}
+        ]
+        assert query("SELECT category_id, effective_month, planned FROM category_plan") == [
+            {
+                "category_id": body["id"],
+                "effective_month": date.today().strftime("%Y-%m"),
+                "planned": 500,
+            }
+        ]
+
+    def test_the_new_envelope_surfaces_in_categories_and_the_budget_month(self, client):
+        month = date.today().strftime("%Y-%m")
+        created = client.post(
+            "/api/categories", json={"name": "Travel", "emoji": "✈️", "planned": 100}
+        ).json()
+
+        categories = client.get("/api/categories", params={"month": month}).json()
+        assert categories == [
+            {"id": created["id"], "name": "Travel", "emoji": "✈️", "is_fixed": False, "planned": 100}
+        ]
+
+        budget = client.get("/api/budget-month", params={"month": month}).json()
+        assert budget["categories"] == [
+            {
+                "id": created["id"],
+                "name": "Travel",
+                "emoji": "✈️",
+                "planned": 100,
+                "spent": 0,
+                "remaining": 100,
+            }
+        ]
+
+    def test_effective_month_override(self, client):
+        response = client.post(
+            "/api/categories",
+            json={"name": "Gas", "planned": 120, "effective_month": "2026-09"},
+        )
+        assert response.status_code == 201
+        assert query("SELECT effective_month FROM category_plan") == [
+            {"effective_month": "2026-09"}
+        ]
+
+    def test_rejects_a_malformed_effective_month(self, client):
+        response = client.post(
+            "/api/categories",
+            json={"name": "Gas", "planned": 120, "effective_month": "September"},
+        )
+        assert response.status_code == 422
+
+    def test_rejects_a_blank_name(self, client):
+        for name in ("", "   "):
+            response = client.post("/api/categories", json={"name": name, "planned": 100})
+            assert response.status_code == 422
+        assert query("SELECT id FROM category") == []
+
+    def test_rejects_a_negative_planned(self, client):
+        response = client.post("/api/categories", json={"name": "Gas", "planned": -1})
+        assert response.status_code == 422
+        assert query("SELECT id FROM category") == []
+
+    def test_allows_a_zero_planned(self, client):
+        response = client.post("/api/categories", json={"name": "Gifts", "planned": 0})
+        assert response.status_code == 201
+        assert response.json()["planned"] == 0
+
+    def test_rejects_a_duplicate_active_name(self, client):
+        insert_category("Groceries", emoji="🛒")
+        for name in ("Groceries", "groceries", "  Groceries  "):
+            response = client.post("/api/categories", json={"name": name, "planned": 500})
+            assert response.status_code == 409
+        assert len(query("SELECT id FROM category")) == 1
+
+    def test_a_name_matching_an_inactive_category_is_allowed(self, client):
+        insert_category("Vices", active=0)
+        response = client.post("/api/categories", json={"name": "Vices", "planned": 150})
+        assert response.status_code == 201
+
+
 class TestPostExpenses:
     def test_appends_an_expense_line(self, client):
         groceries_id = insert_category("Groceries")
