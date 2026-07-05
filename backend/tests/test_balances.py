@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -88,6 +90,81 @@ class TestGetAccounts:
             conn.close()
         (account,) = client.get("/api/accounts").json()
         assert account["emoji"] == "⚡"
+
+
+class TestPostAccounts:
+    def test_creates_an_asset_with_defaults_and_its_initial_balance(self, client):
+        response = client.post(
+            "/api/accounts",
+            json={"name": "Robinhood", "emoji": "🪙", "initial_value": 12000},
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["id"] > 0
+        assert body["name"] == "Robinhood"
+        assert body["emoji"] == "🪙"
+        assert body["kind"] == "other"
+        assert body["is_liability"] is False
+        assert body["is_investable"] is False
+        assert body["active"] is True
+        entries = query(
+            "SELECT as_of_date, balance_usd, source FROM balance_entry WHERE account_id = ?",
+            body["id"],
+        )
+        assert entries == [
+            {
+                "as_of_date": date.today().isoformat(),
+                "balance_usd": 12000,
+                "source": "manual",
+            }
+        ]
+
+    def test_new_account_surfaces_in_accounts_and_ledger(self, client):
+        created = client.post(
+            "/api/accounts", json={"name": "Valuables", "initial_value": 5000}
+        ).json()
+        accounts = client.get("/api/accounts").json()
+        assert [account["name"] for account in accounts] == ["Valuables"]
+        assert accounts[0]["emoji"] is None
+        (month,) = client.get("/api/ledger").json()
+        assert month["month"] == date.today().strftime("%Y-%m")
+        assert month["net_worth"] == 5000
+        assert month["balances"][0]["account_id"] == created["id"]
+
+    def test_creates_a_liability_stored_positive(self, client):
+        response = client.post(
+            "/api/accounts",
+            json={
+                "name": "Student loan",
+                "emoji": "🎓",
+                "is_liability": True,
+                "initial_value": 20000,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["is_liability"] is True
+        (month,) = client.get("/api/ledger").json()
+        assert month["balances"][0]["balance_usd"] == 20000
+        assert month["net_worth"] == -20000
+
+    def test_blank_name_is_rejected(self, client):
+        response = client.post("/api/accounts", json={"name": "   ", "initial_value": 100})
+        assert response.status_code == 422
+
+    def test_duplicate_active_name_is_rejected_case_insensitively(self, client):
+        assert (
+            client.post(
+                "/api/accounts", json={"name": "Robinhood", "initial_value": 100}
+            ).status_code
+            == 201
+        )
+        response = client.post("/api/accounts", json={"name": "robinhood", "initial_value": 100})
+        assert response.status_code == 409
+
+    def test_negative_initial_value_is_rejected(self, client):
+        response = client.post("/api/accounts", json={"name": "Robinhood", "initial_value": -5})
+        assert response.status_code == 422
+        assert query("SELECT COUNT(*) AS n FROM account")[0]["n"] == 0
 
 
 class TestPostBalanceEntries:
