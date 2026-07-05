@@ -361,3 +361,41 @@ class TestPostTaxParams:
         response = client.post("/api/tax-params", json={"tax_year": 2026, "ltcg_0_ceiling": 96700})
         assert response.status_code == 409
         assert count_rows("tax_param") == 1
+
+
+class TestPutTaxParams:
+    def test_replaces_the_rows_for_that_year(self, client):
+        insert_tax_param(2026, std_deduction=30000)
+        brackets = [{"rate": 0.10, "upto": 24800}, {"rate": 0.12, "upto": None}]
+        response = client.put(
+            "/api/tax-params/2026",
+            json={
+                "filing_status": "MFJ",
+                "ltcg_0_ceiling": 97350,
+                "ltcg_15_ceiling": 605000,
+                "niit_rate": 0.038,
+                "niit_threshold": 250000,
+                "state_treatment": "CA_ordinary",
+                "std_deduction": 30250,
+                "ordinary_brackets": brackets,
+            },
+        )
+        assert response.status_code == 200
+        assert response.json() == {
+            "tax_year": 2026,
+            "filing_status": "MFJ",
+            "ltcg_0_ceiling": 97350,
+            "ltcg_15_ceiling": 605000,
+            "niit_rate": 0.038,
+            "niit_threshold": 250000,
+            "state_treatment": "CA_ordinary",
+            "std_deduction": 30250,
+            "ordinary_brackets": brackets,
+        }
+        assert client.get("/api/tax-params").json() == [response.json()]
+        assert count_rows("tax_param") == 1  # a revision, not a second row
+
+    def test_an_unknown_year_is_a_404(self, client):
+        response = client.put("/api/tax-params/2031", json={"ltcg_0_ceiling": 99000})
+        assert response.status_code == 404
+        assert response.json()["detail"] == "tax year 2031 not found"
