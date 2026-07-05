@@ -24,6 +24,7 @@ beforeEach(() => {
     '/api/funds': [],
     '/api/guardrails': null,
     '/api/sourcing': null,
+    '/api/forecast': null,
     // The Settings view's config fetches, as a fresh database answers.
     '/api/assumptions': null,
     '/api/spend-plan': null,
