@@ -98,6 +98,7 @@ describe('Header net worth', () => {
       '/api/budget-month': EMPTY_BUDGET_MONTH,
       '/api/funds': [],
       '/api/guardrails': null,
+      '/api/forecast': null,
     })
 
     render(<App />)
@@ -116,6 +117,7 @@ describe('Header net worth', () => {
       '/api/budget-month': EMPTY_BUDGET_MONTH,
       '/api/funds': [],
       '/api/guardrails': null,
+      '/api/forecast': null,
       '/api/balance-entries': { id: 999 },
     }
     stubApi(routes)

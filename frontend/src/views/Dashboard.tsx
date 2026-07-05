@@ -7,8 +7,20 @@ import { totalParked } from '../funds.ts'
 import { formatRate, markerLeftPct, zoneCopy } from '../guardrails.ts'
 import { formatUsd } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
-import type { BudgetMonth, Fund, Guardrails, NetWorthPoint } from '../api.ts'
-import { fetchBudgetMonth, fetchFunds, fetchGuardrails } from '../api.ts'
+import type {
+  BudgetMonth,
+  Forecast,
+  Fund,
+  Guardrails,
+  NetWorthPoint,
+} from '../api.ts'
+import {
+  fetchBudgetMonth,
+  fetchForecast,
+  fetchFunds,
+  fetchGuardrails,
+} from '../api.ts'
+import { formatMillions, verdict } from '../forecast.ts'
 
 // "▲ 5.7%" / "▼ 2.3%" — the API's yoy is a fraction vs. the same month a
 // year earlier (null until 12 months of history exist).
@@ -70,8 +82,7 @@ function NetWorthHero() {
   )
 }
 
-// Deep-link card shell. The Longevity values are static, sanitized
-// illustrations from the design handoff until the forecast slice lands.
+// Deep-link card shell.
 function CardLink({
   to,
   label,
@@ -160,15 +171,35 @@ function GuardrailCard({ guardrails }: { guardrails: Guardrails | null }) {
   )
 }
 
-function LongevityCard() {
+function LongevityCard({ forecast }: { forecast: Forecast | null }) {
+  if (forecast == null) {
+    return (
+      <CardLink to="/forecast" label="Longevity">
+        <p className="mt-1.5 text-[22px] leading-tight font-extrabold text-muted-2">
+          —
+        </p>
+        <p className="mt-2 text-[12.5px] font-bold text-muted-2">
+          no forecast yet
+        </p>
+      </CardLink>
+    )
+  }
+  const outcome = verdict(forecast.run_out_age)
   return (
     <CardLink to="/forecast" label="Longevity">
-      <p className="mt-1.5 text-[22px] leading-tight font-extrabold text-accent">
-        You don't run out.
+      <p
+        className={`mt-1.5 text-[22px] leading-tight font-extrabold ${
+          outcome.ok ? 'text-accent' : 'text-red'
+        }`}
+      >
+        {outcome.headline}
       </p>
-      <p className="mt-2 text-[12.5px] text-muted">at $45,000/yr</p>
+      <p className="mt-2 text-[12.5px] text-muted">
+        at {formatUsd(forecast.spend)}/yr
+      </p>
       <p className="num mt-2.5 text-[13px]">
-        ~$5.5M <span className="text-muted-2">projected at age 90</span>
+        ~{formatMillions(forecast.balance_at_90)}{' '}
+        <span className="text-muted-2">projected at age 90</span>
       </p>
     </CardLink>
   )
@@ -252,11 +283,13 @@ function Dashboard() {
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
   const [funds, setFunds] = useState<Fund[] | null>(null)
   const [guardrails, setGuardrails] = useState<Guardrails | null>(null)
+  const [forecast, setForecast] = useState<Forecast | null>(null)
 
   useEffect(() => {
     void fetchBudgetMonth().then(setBudget)
     void fetchFunds().then(setFunds)
     void fetchGuardrails().then(setGuardrails)
+    void fetchForecast().then(setForecast)
   }, [])
 
   return (
@@ -267,7 +300,7 @@ function Dashboard() {
       </div>
       <div className="mt-5 grid grid-cols-3 gap-5">
         <GuardrailCard guardrails={guardrails} />
-        <LongevityCard />
+        <LongevityCard forecast={forecast} />
         <FundsCard funds={funds} />
       </div>
       <RecentActivity budget={budget} />
