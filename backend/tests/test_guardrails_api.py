@@ -127,11 +127,14 @@ class TestGuardrails:
         insert_spend_plan()
         assert client.get("/api/guardrails").json()["investable"] == 1_500_000.0
 
-    def test_the_latest_month_wins(self, client):
+    def test_old_entries_carry_forward_into_the_latest_month(self, client):
+        # An investable account entered a year ago and never re-entered
+        # still counts at its carried value (v_account_monthly carries the
+        # latest entry on or before each month's end).
         seed_portfolio()
         insert_balance(insert_account("Old brokerage", "fund", is_investable=1), 400_000, LAST_YEAR)
         insert_spend_plan()
-        assert client.get("/api/guardrails").json()["investable"] == 1_500_000.0
+        assert client.get("/api/guardrails").json()["investable"] == 1_900_000.0
 
     def test_rejects_a_non_positive_spend(self, client):
         seed_portfolio()

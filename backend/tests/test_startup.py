@@ -22,6 +22,7 @@ def test_startup_applies_migrations(monkeypatch, tmp_path):
         "0001_initial_schema.sql",
         "0002_category_plan.sql",
         "0003_account_emoji.sql",
+        "0004_carry_forward_views.sql",
     ]
 
 
