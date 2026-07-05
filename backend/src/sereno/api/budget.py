@@ -11,7 +11,7 @@ from datetime import date, datetime
 from typing import Annotated, Literal, Self
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, PositiveFloat, model_validator
+from pydantic import BaseModel, Field, PositiveFloat, StringConstraints, model_validator
 
 from sereno.db.connection import get_db
 
@@ -31,6 +31,16 @@ class Category(BaseModel):
     emoji: str | None
     is_fixed: bool
     planned: float
+
+
+class CategoryCreate(BaseModel):
+    """effective_month dates the initial plan row; it defaults to the current
+    month. planned may be 0 — an envelope can exist before it's funded."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    emoji: str | None = None
+    planned: float = Field(ge=0)
+    effective_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
 
 
 class ExpenseCreate(BaseModel):
@@ -139,6 +149,30 @@ def list_categories(db: Db, month: Month = None) -> list[Category]:
         (month or _current_month(),),
     )
     return [Category(**dict(row)) for row in rows]
+
+
+@router.post("/categories", status_code=201)
+def create_category(category: CategoryCreate, db: Db) -> Category:
+    duplicate = db.execute(
+        "SELECT 1 FROM category WHERE active = 1 AND LOWER(name) = LOWER(?)",
+        (category.name,),
+    ).fetchone()
+    if duplicate:
+        raise HTTPException(status_code=409, detail=f"category {category.name!r} exists")
+    cursor = db.execute(
+        "INSERT INTO category (name, emoji) VALUES (?, ?)",
+        (category.name, category.emoji),
+    )
+    category_id = cursor.lastrowid
+    db.execute(
+        "INSERT INTO category_plan (category_id, effective_month, planned) VALUES (?, ?, ?)",
+        (category_id, category.effective_month or _current_month(), category.planned),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, name, emoji, is_fixed FROM category WHERE id = ?", (category_id,)
+    ).fetchone()
+    return Category(**dict(row), planned=category.planned)
 
 
 @router.post("/expenses", status_code=201)
