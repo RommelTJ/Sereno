@@ -11,7 +11,7 @@ import sqlite3
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from sereno.db.connection import get_db
@@ -45,6 +45,27 @@ class SocialSecurity(BaseModel):
     monthly_amount: float
 
 
+class AssumptionCreate(BaseModel):
+    effective_date: date
+    return_pct: float
+    inflation_pct: float
+    eth_growth_pct: float | None = None
+
+
+class SpendPlanCreate(BaseModel):
+    effective_date: date
+    annual_target: float
+    initial_rate: float | None = None
+    guardrail_band: float = 0.20
+
+
+class SocialSecurityCreate(BaseModel):
+    person: Literal["you", "spouse"]
+    effective_date: date
+    start_age: float
+    monthly_amount: float
+
+
 class Bracket(BaseModel):
     rate: float
     upto: float | None
@@ -62,6 +83,20 @@ class TaxParam(BaseModel):
     ordinary_brackets: list[Bracket] | None
 
 
+class TaxParamCreate(BaseModel):
+    """Defaults mirror the schema: MFJ, 3.8% NIIT, CA taxes gains as ordinary."""
+
+    tax_year: int
+    filing_status: str = "MFJ"
+    ltcg_0_ceiling: float
+    ltcg_15_ceiling: float | None = None
+    niit_rate: float = 0.038
+    niit_threshold: float | None = None
+    state_treatment: str = "CA_ordinary"
+    std_deduction: float | None = None
+    ordinary_brackets: list[Bracket] | None = None
+
+
 _SOCIAL_SECURITY_QUERY = (
     "SELECT id, person, effective_date, start_age, monthly_amount FROM ("
     "  SELECT s.*, ROW_NUMBER() OVER ("
@@ -70,10 +105,9 @@ _SOCIAL_SECURITY_QUERY = (
     " WHERE rn = 1 ORDER BY person = 'you' DESC"
 )
 
-_TAX_PARAM_QUERY = (
-    "SELECT tax_year, filing_status, ltcg_0_ceiling, ltcg_15_ceiling, niit_rate,"
+_TAX_PARAM_COLUMNS = (
+    "tax_year, filing_status, ltcg_0_ceiling, ltcg_15_ceiling, niit_rate,"
     " niit_threshold, state_treatment, std_deduction, ordinary_brackets"
-    " FROM tax_param ORDER BY tax_year"
 )
 
 
@@ -115,4 +149,98 @@ def get_social_security(db: Db) -> list[SocialSecurity]:
 
 @router.get("/tax-params")
 def list_tax_params(db: Db) -> list[TaxParam]:
-    return [_tax_param(row) for row in db.execute(_TAX_PARAM_QUERY)]
+    rows = db.execute(f"SELECT {_TAX_PARAM_COLUMNS} FROM tax_param ORDER BY tax_year")
+    return [_tax_param(row) for row in rows]
+
+
+@router.post("/assumptions", status_code=201)
+def create_assumption(assumption: AssumptionCreate, db: Db) -> Assumption:
+    cursor = db.execute(
+        "INSERT INTO assumption (effective_date, return_pct, inflation_pct, eth_growth_pct)"
+        " VALUES (?, ?, ?, ?)",
+        (
+            assumption.effective_date.isoformat(),
+            assumption.return_pct,
+            assumption.inflation_pct,
+            assumption.eth_growth_pct,
+        ),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, effective_date, return_pct, inflation_pct, eth_growth_pct"
+        " FROM assumption WHERE id = ?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    return Assumption(**dict(row))
+
+
+@router.post("/spend-plan", status_code=201)
+def create_spend_plan(plan: SpendPlanCreate, db: Db) -> SpendPlan:
+    cursor = db.execute(
+        "INSERT INTO spend_plan (effective_date, annual_target, initial_rate, guardrail_band)"
+        " VALUES (?, ?, ?, ?)",
+        (
+            plan.effective_date.isoformat(),
+            plan.annual_target,
+            plan.initial_rate,
+            plan.guardrail_band,
+        ),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, effective_date, annual_target, initial_rate, guardrail_band"
+        " FROM spend_plan WHERE id = ?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    return SpendPlan(**dict(row))
+
+
+@router.post("/social-security", status_code=201)
+def create_social_security(entry: SocialSecurityCreate, db: Db) -> SocialSecurity:
+    cursor = db.execute(
+        "INSERT INTO social_security (person, effective_date, start_age, monthly_amount)"
+        " VALUES (?, ?, ?, ?)",
+        (
+            entry.person,
+            entry.effective_date.isoformat(),
+            entry.start_age,
+            entry.monthly_amount,
+        ),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, person, effective_date, start_age, monthly_amount"
+        " FROM social_security WHERE id = ?",
+        (cursor.lastrowid,),
+    ).fetchone()
+    return SocialSecurity(**dict(row))
+
+
+@router.post("/tax-params", status_code=201)
+def create_tax_param(param: TaxParamCreate, db: Db) -> TaxParam:
+    brackets = param.ordinary_brackets
+    try:
+        db.execute(
+            "INSERT INTO tax_param (tax_year, filing_status, ltcg_0_ceiling, ltcg_15_ceiling,"
+            " niit_rate, niit_threshold, state_treatment, std_deduction, ordinary_brackets)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                param.tax_year,
+                param.filing_status,
+                param.ltcg_0_ceiling,
+                param.ltcg_15_ceiling,
+                param.niit_rate,
+                param.niit_threshold,
+                param.state_treatment,
+                param.std_deduction,
+                json.dumps([b.model_dump() for b in brackets]) if brackets is not None else None,
+            ),
+        )
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=409, detail=f"tax year {param.tax_year} exists") from exc
+    db.commit()
+    row = db.execute(
+        f"SELECT {_TAX_PARAM_COLUMNS} FROM tax_param WHERE tax_year = ?",
+        (param.tax_year,),
+    ).fetchone()
+    return _tax_param(row)
