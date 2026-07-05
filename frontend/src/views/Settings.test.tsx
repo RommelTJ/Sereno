@@ -270,3 +270,123 @@ describe('Editing appends new config rows', () => {
     })
   })
 })
+
+describe('Tax parameter editing', () => {
+  it('revises the displayed year in place', async () => {
+    const revised = {
+      ...TAX_PARAMS[0],
+      ltcg_0_ceiling: 97_350,
+      std_deduction: 30_250,
+      ordinary_brackets: [
+        { rate: 0.1, upto: 25_000 },
+        ...TAX_PARAMS[0].ordinary_brackets.slice(1),
+      ],
+    }
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'PUT /api/tax-params/2026': revised,
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('tax-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('0% LTCG up to $'), {
+      target: { value: '97,350' },
+    })
+    fireEvent.change(within(card).getByLabelText('Std deduction $'), {
+      target: { value: '30,250' },
+    })
+    fireEvent.change(within(card).getByLabelText('Bracket 1 up to $'), {
+      target: { value: '25,000' },
+    })
+    r['/api/tax-params'] = [revised]
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('$97,350')).toBeInTheDocument()
+    expect(within(card).getByText('10% to $25,000')).toBeInTheDocument()
+    const puts = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        input === '/api/tax-params/2026' && init?.method === 'PUT',
+    )
+    expect(puts).toHaveLength(1)
+    expect(JSON.parse(puts[0][1]?.body as string)).toEqual({
+      filing_status: 'MFJ',
+      ltcg_0_ceiling: 97_350,
+      ltcg_15_ceiling: 600_050,
+      niit_rate: 0.038,
+      niit_threshold: 250_000,
+      state_treatment: 'CA_ordinary',
+      std_deduction: 30_250,
+      ordinary_brackets: [
+        { rate: 0.1, upto: 25_000 },
+        { rate: 0.12, upto: 100_800 },
+        { rate: 0.22, upto: 211_400 },
+        { rate: 0.24, upto: null },
+      ],
+    })
+  })
+
+  it('adds the next year prefilled from the current one', async () => {
+    const added = { ...TAX_PARAMS[0], tax_year: 2027, ltcg_0_ceiling: 99_000 }
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/tax-params': added,
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('tax-card')
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add 2027' }))
+    fireEvent.change(within(card).getByLabelText('0% LTCG up to $'), {
+      target: { value: '99,000' },
+    })
+    r['/api/tax-params'] = [TAX_PARAMS[0], added]
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('2027 · MFJ')).toBeInTheDocument()
+    const calls = postCalls(fetchMock, '/api/tax-params')
+    expect(calls).toHaveLength(1)
+    expect(JSON.parse(calls[0][1]?.body as string)).toEqual({
+      tax_year: 2027,
+      filing_status: 'MFJ',
+      ltcg_0_ceiling: 99_000,
+      ltcg_15_ceiling: 600_050,
+      niit_rate: 0.038,
+      niit_threshold: 250_000,
+      state_treatment: 'CA_ordinary',
+      std_deduction: 30_000,
+      ordinary_brackets: TAX_PARAMS[0].ordinary_brackets,
+    })
+  })
+
+  it('adds the first year on a fresh database', async () => {
+    const first = { ...TAX_PARAMS[0] }
+    const r: Record<string, unknown> = {
+      ...routes(),
+      '/api/tax-params': [],
+      'POST /api/tax-params': first,
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('tax-card')
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add 2026' }))
+    fireEvent.change(within(card).getByLabelText('0% LTCG up to $'), {
+      target: { value: '96,700' },
+    })
+    r['/api/tax-params'] = [first]
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('2026 · MFJ')).toBeInTheDocument()
+    const calls = postCalls(fetchMock, '/api/tax-params')
+    expect(calls).toHaveLength(1)
+    expect(JSON.parse(calls[0][1]?.body as string)).toEqual({
+      tax_year: 2026,
+      filing_status: 'MFJ',
+      ltcg_0_ceiling: 96_700,
+      niit_rate: 0.038,
+      state_treatment: 'CA_ordinary',
+    })
+  })
+})
