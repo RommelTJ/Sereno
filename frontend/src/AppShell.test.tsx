@@ -188,11 +188,11 @@ describe('Header net worth', () => {
     stubApi(routes)
     render(<App />)
     fireEvent.click(screen.getByRole('link', { name: 'Ledger entries' }))
-    await screen.findByRole('button', { name: 'Save balances' })
+    await screen.findByRole('button', { name: 'Save balance' })
 
-    // The server's net worth moves once the new entries land.
+    // The server's net worth moves once the new entry lands.
     routes['/api/net-worth'] = { current: 1_754_000, yoy: 0.023, series: [] }
-    fireEvent.click(screen.getByRole('button', { name: 'Save balances' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save balance' }))
 
     expect(await screen.findByText('$1,754,000')).toBeInTheDocument()
   })

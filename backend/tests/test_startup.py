@@ -18,7 +18,12 @@ def test_startup_applies_migrations(monkeypatch, tmp_path):
         names = [row[0] for row in conn.execute("SELECT name FROM schema_migration")]
     finally:
         conn.close()
-    assert names == ["0001_initial_schema.sql", "0002_category_plan.sql"]
+    assert names == [
+        "0001_initial_schema.sql",
+        "0002_category_plan.sql",
+        "0003_account_emoji.sql",
+        "0004_carry_forward_views.sql",
+    ]
 
 
 def test_startup_is_idempotent(monkeypatch, tmp_path):

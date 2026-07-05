@@ -22,10 +22,14 @@ def add_account(db, name, kind="cash", is_liability=0, is_investable=0):
     return cursor.lastrowid
 
 
-def add_balance(db, account_id, as_of_date, balance_usd):
+def add_balance(
+    db, account_id, as_of_date, balance_usd, quantity=None, unit_price=None, cost_basis=None
+):
     db.execute(
-        "INSERT INTO balance_entry (account_id, as_of_date, balance_usd) VALUES (?, ?, ?)",
-        (account_id, as_of_date, balance_usd),
+        "INSERT INTO balance_entry"
+        " (account_id, as_of_date, balance_usd, quantity, unit_price, cost_basis)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (account_id, as_of_date, balance_usd, quantity, unit_price, cost_basis),
     )
 
 
@@ -68,6 +72,78 @@ class TestAccountMonthly:
         ]
 
 
+class TestCarryForward:
+    """A month's balance for an account is the latest entry on or before the
+    month's end — an account entered in January still counts in February."""
+
+    def test_missing_months_carry_the_latest_earlier_entry(self, db):
+        home = add_account(db, "Home", kind="home")
+        cash = add_account(db, "Cash")
+        add_balance(db, home, "2026-01-15", 300_000)
+        add_balance(db, cash, "2026-01-20", 1000)
+        add_balance(db, cash, "2026-02-20", 1100)
+        add_balance(db, cash, "2026-03-20", 1200)
+        rows = db.execute(
+            "SELECT month, as_of_date, balance_usd FROM v_account_monthly"
+            " WHERE account_id = ? ORDER BY month",
+            (home,),
+        ).fetchall()
+        assert [(r["month"], r["as_of_date"], r["balance_usd"]) for r in rows] == [
+            ("2026-01", "2026-01-15", 300_000),
+            ("2026-02", "2026-01-15", 300_000),
+            ("2026-03", "2026-01-15", 300_000),
+        ]
+
+    def test_a_real_entry_supersedes_the_carried_value(self, db):
+        cash = add_account(db, "Cash")
+        other = add_account(db, "Other")
+        add_balance(db, other, "2026-02-10", 50)
+        add_balance(db, cash, "2026-01-20", 1000)
+        add_balance(db, cash, "2026-02-05", 1100)
+        add_balance(db, cash, "2026-02-25", 1200)
+        row = db.execute(
+            "SELECT as_of_date, balance_usd FROM v_account_monthly"
+            " WHERE account_id = ? AND month = '2026-02'",
+            (cash,),
+        ).fetchone()
+        assert (row["as_of_date"], row["balance_usd"]) == ("2026-02-25", 1200)
+
+    def test_carried_rows_keep_quantity_price_and_basis(self, db):
+        eth = add_account(db, "Ethereum", kind="eth")
+        cash = add_account(db, "Cash")
+        add_balance(db, eth, "2026-01-15", 70_000, quantity=20, unit_price=3500, cost_basis=24_000)
+        add_balance(db, cash, "2026-02-20", 1000)
+        row = db.execute(
+            "SELECT balance_usd, quantity, unit_price, cost_basis FROM v_account_monthly"
+            " WHERE account_id = ? AND month = '2026-02'",
+            (eth,),
+        ).fetchone()
+        assert dict(row) == {
+            "balance_usd": 70_000,
+            "quantity": 20,
+            "unit_price": 3500,
+            "cost_basis": 24_000,
+        }
+
+    def test_inactive_accounts_do_not_carry_forward(self, db):
+        # No deactivation date exists, so a deactivated account reports only
+        # the months it was really entered — carried months drop out.
+        boat = add_account(db, "Boat")
+        cash = add_account(db, "Cash")
+        add_balance(db, boat, "2026-01-15", 9000)
+        add_balance(db, cash, "2026-01-20", 1000)
+        add_balance(db, cash, "2026-02-20", 1000)
+        db.execute("UPDATE account SET active = 0 WHERE id = ?", (boat,))
+        months = [
+            row["month"]
+            for row in db.execute(
+                "SELECT month FROM v_account_monthly WHERE account_id = ? ORDER BY month",
+                (boat,),
+            )
+        ]
+        assert months == ["2026-01"]
+
+
 class TestNetWorth:
     def test_subtracts_positive_liability_balances(self, db):
         checking = add_account(db, "Checking")
@@ -87,6 +163,22 @@ class TestNetWorth:
         ).fetchone()
         assert row["net_worth"] == 1_200_000
         assert row["investable"] == 400_000
+
+    def test_net_worth_sums_carried_balances(self, db):
+        # Only the brokerage was re-entered in February; the home, mortgage,
+        # and investable totals still count at their carried January values.
+        home = add_account(db, "Home", kind="home")
+        mortgage = add_account(db, "Mortgage", kind="mortgage", is_liability=1)
+        brokerage = add_account(db, "VFIAX", kind="brokerage_fund", is_investable=1)
+        add_balance(db, home, "2026-01-15", 300_000)
+        add_balance(db, mortgage, "2026-01-15", 100_000)
+        add_balance(db, brokerage, "2026-01-15", 50_000)
+        add_balance(db, brokerage, "2026-02-15", 60_000)
+        row = db.execute(
+            "SELECT net_worth, investable FROM v_net_worth WHERE month = '2026-02'"
+        ).fetchone()
+        assert row["net_worth"] == 260_000
+        assert row["investable"] == 60_000
 
 
 class TestBudgetMonth:

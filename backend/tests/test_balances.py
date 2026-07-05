@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -63,6 +65,7 @@ class TestGetAccounts:
                 "is_liability": False,
                 "is_investable": True,
                 "active": True,
+                "emoji": None,
             },
             {
                 "id": mortgage_id,
@@ -73,8 +76,133 @@ class TestGetAccounts:
                 "is_liability": True,
                 "is_investable": False,
                 "active": True,
+                "emoji": None,
             },
         ]
+
+    def test_returns_the_account_emoji(self, client):
+        eth_id = insert_account("Ethereum", "eth", tax_treatment="LTCG")
+        conn = connect()
+        try:
+            conn.execute("UPDATE account SET emoji = '⚡' WHERE id = ?", (eth_id,))
+            conn.commit()
+        finally:
+            conn.close()
+        (account,) = client.get("/api/accounts").json()
+        assert account["emoji"] == "⚡"
+
+
+class TestPostAccounts:
+    def test_creates_an_asset_with_defaults_and_its_initial_balance(self, client):
+        response = client.post(
+            "/api/accounts",
+            json={"name": "Robinhood", "emoji": "🪙", "initial_value": 12000},
+        )
+        assert response.status_code == 201
+        body = response.json()
+        assert body["id"] > 0
+        assert body["name"] == "Robinhood"
+        assert body["emoji"] == "🪙"
+        assert body["kind"] == "other"
+        assert body["is_liability"] is False
+        assert body["is_investable"] is False
+        assert body["active"] is True
+        entries = query(
+            "SELECT as_of_date, balance_usd, source FROM balance_entry WHERE account_id = ?",
+            body["id"],
+        )
+        assert entries == [
+            {
+                "as_of_date": date.today().isoformat(),
+                "balance_usd": 12000,
+                "source": "manual",
+            }
+        ]
+
+    def test_new_account_surfaces_in_accounts_and_ledger(self, client):
+        created = client.post(
+            "/api/accounts", json={"name": "Valuables", "initial_value": 5000}
+        ).json()
+        accounts = client.get("/api/accounts").json()
+        assert [account["name"] for account in accounts] == ["Valuables"]
+        assert accounts[0]["emoji"] is None
+        (month,) = client.get("/api/ledger").json()
+        assert month["month"] == date.today().strftime("%Y-%m")
+        assert month["net_worth"] == 5000
+        assert month["balances"][0]["account_id"] == created["id"]
+
+    def test_creates_a_liability_stored_positive(self, client):
+        response = client.post(
+            "/api/accounts",
+            json={
+                "name": "Student loan",
+                "emoji": "🎓",
+                "is_liability": True,
+                "initial_value": 20000,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["is_liability"] is True
+        (month,) = client.get("/api/ledger").json()
+        assert month["balances"][0]["balance_usd"] == 20000
+        assert month["net_worth"] == -20000
+
+    def test_blank_name_is_rejected(self, client):
+        response = client.post("/api/accounts", json={"name": "   ", "initial_value": 100})
+        assert response.status_code == 422
+
+    def test_duplicate_active_name_is_rejected_case_insensitively(self, client):
+        assert (
+            client.post(
+                "/api/accounts", json={"name": "Robinhood", "initial_value": 100}
+            ).status_code
+            == 201
+        )
+        response = client.post("/api/accounts", json={"name": "robinhood", "initial_value": 100})
+        assert response.status_code == 409
+
+    def test_negative_initial_value_is_rejected(self, client):
+        response = client.post("/api/accounts", json={"name": "Robinhood", "initial_value": -5})
+        assert response.status_code == 422
+        assert query("SELECT COUNT(*) AS n FROM account")[0]["n"] == 0
+
+
+class TestDeactivateAccount:
+    def create(self, client, name):
+        response = client.post("/api/accounts", json={"name": name, "initial_value": 100})
+        assert response.status_code == 201
+        return response.json()
+
+    def test_deactivate_flips_active_off(self, client):
+        created = self.create(client, "Robinhood")
+        response = client.post(f"/api/accounts/{created['id']}/deactivate")
+        assert response.status_code == 200
+        assert response.json()["active"] is False
+        (account,) = client.get("/api/accounts").json()
+        assert account["active"] is False
+
+    def test_unknown_account_returns_404(self, client):
+        response = client.post("/api/accounts/999/deactivate")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "account not found"
+
+    def test_entered_months_stay_in_net_worth_after_deactivation(self, client):
+        # Soft-deactivation preserves the append-only history: months where
+        # the account really had entries keep counting in net worth.
+        cash_id = insert_account("Chase checking", "cash")
+        boat_id = insert_account("Boat", "other")
+        post_entry(client, cash_id, "2026-05-28", balance_usd=1000)
+        post_entry(client, boat_id, "2026-05-28", balance_usd=9000)
+        post_entry(client, cash_id, "2026-06-28", balance_usd=1000)
+        assert client.post(f"/api/accounts/{boat_id}/deactivate").status_code == 200
+        months = {m["month"]: m["net_worth"] for m in client.get("/api/ledger").json()}
+        assert months["2026-05"] == 10000
+
+    def test_deactivated_name_is_reusable(self, client):
+        created = self.create(client, "Robinhood")
+        client.post(f"/api/accounts/{created['id']}/deactivate")
+        response = client.post("/api/accounts", json={"name": "Robinhood", "initial_value": 200})
+        assert response.status_code == 201
 
 
 class TestPostBalanceEntries:

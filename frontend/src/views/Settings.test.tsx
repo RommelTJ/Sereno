@@ -4,8 +4,8 @@ import { todayIso } from '../ledger.ts'
 import {
   ACCOUNTS,
   ASSUMPTION,
+  balance,
   CATEGORIES,
-  FUNDS,
   LEDGER,
   SOCIAL_SECURITY,
   SPEND_PLAN,
@@ -17,7 +17,6 @@ import Settings from './Settings.tsx'
 const routes = () => ({
   '/api/accounts': ACCOUNTS,
   '/api/ledger': LEDGER,
-  '/api/funds': FUNDS,
   '/api/categories': CATEGORIES,
   '/api/assumptions': ASSUMPTION,
   '/api/spend-plan': SPEND_PLAN,
@@ -36,25 +35,17 @@ beforeEach(() => {
   stubApi(routes())
 })
 
-describe('Accounts & buckets card', () => {
-  it('lists each account with its latest ledger balance', async () => {
+describe('Assets card', () => {
+  it('lists active assets with emoji, name, and latest ledger value', async () => {
     render(<Settings />)
 
-    const rows = await screen.findAllByTestId('settings-account-row')
-    expect(rows).toHaveLength(10)
+    const rows = await screen.findAllByTestId('settings-asset-row')
+    expect(rows).toHaveLength(9)
+    expect(within(rows[0]).getByText('⚡')).toBeInTheDocument()
     expect(within(rows[0]).getByText('Ethereum')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('· eth')).toBeInTheDocument()
     expect(within(rows[0]).getByText('$70,000')).toBeInTheDocument()
     expect(within(rows[4]).getByText('Retirement')).toBeInTheDocument()
     expect(within(rows[4]).getByText('$350,000')).toBeInTheDocument()
-  })
-
-  it('shows a liability as a negative red figure', async () => {
-    render(<Settings />)
-
-    const rows = await screen.findAllByTestId('settings-account-row')
-    const amount = within(rows[9]).getByText('-$150,000')
-    expect(amount).toHaveClass('text-red')
   })
 
   it('falls back to an older month when the latest lacks an entry', async () => {
@@ -68,19 +59,149 @@ describe('Accounts & buckets card', () => {
     stubApi({ ...routes(), '/api/ledger': ledger })
     render(<Settings />)
 
-    const rows = await screen.findAllByTestId('settings-account-row')
+    const rows = await screen.findAllByTestId('settings-asset-row')
     expect(within(rows[8]).getByText('Car')).toBeInTheDocument()
     expect(within(rows[8]).getByText('$15,000')).toBeInTheDocument()
   })
 
-  it('lists each fund with its balance', async () => {
+  it('hides inactive accounts', async () => {
+    stubApi({
+      ...routes(),
+      '/api/accounts': [
+        ...ACCOUNTS,
+        { ...ACCOUNTS[8], id: 11, name: 'Old boat', active: false },
+      ],
+    })
     render(<Settings />)
 
-    const rows = await screen.findAllByTestId('settings-fund-row')
-    expect(rows).toHaveLength(3)
-    expect(within(rows[0]).getByText('Emergency fund')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('· fund · sinking')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('$10,000')).toBeInTheDocument()
+    const rows = await screen.findAllByTestId('settings-asset-row')
+    expect(rows).toHaveLength(9)
+    expect(screen.queryByText('Old boat')).not.toBeInTheDocument()
+  })
+
+  it('adds an asset and refreshes the lists', async () => {
+    const liveRoutes: Record<string, unknown> = routes()
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    await screen.findAllByTestId('settings-asset-row')
+
+    const card = screen.getByTestId('assets-card')
+    fireEvent.change(within(card).getByLabelText('Name'), {
+      target: { value: 'Gold coins' },
+    })
+    fireEvent.change(within(card).getByLabelText('Emoji'), {
+      target: { value: '💎' },
+    })
+    fireEvent.change(within(card).getByLabelText('Initial value'), {
+      target: { value: '2,500' },
+    })
+
+    const created = { ...ACCOUNTS[8], id: 11, name: 'Gold coins', emoji: '💎' }
+    liveRoutes['POST /api/accounts'] = created
+    liveRoutes['/api/accounts'] = [...ACCOUNTS, created]
+    liveRoutes['/api/ledger'] = [
+      {
+        ...LEDGER[0],
+        balances: [...LEDGER[0].balances, balance(11, '2026-06-15', 2_500)],
+      },
+      LEDGER[1],
+    ]
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('settings-asset-row')).toHaveLength(10),
+    )
+    expect(screen.getByText('Gold coins')).toBeInTheDocument()
+    expect(screen.getByText('$2,500')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/accounts')).toEqual({
+      name: 'Gold coins',
+      emoji: '💎',
+      is_liability: false,
+      initial_value: 2500,
+    })
+  })
+
+  it('deactivates an account and removes its row', async () => {
+    const liveRoutes: Record<string, unknown> = routes()
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    const rows = await screen.findAllByTestId('settings-asset-row')
+
+    liveRoutes['POST /api/accounts/9/deactivate'] = {
+      ...ACCOUNTS[8],
+      active: false,
+    }
+    liveRoutes['/api/accounts'] = ACCOUNTS.map((account) =>
+      account.id === 9 ? { ...account, active: false } : account,
+    )
+    fireEvent.click(within(rows[8]).getByRole('button', { name: 'Deactivate' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('settings-asset-row')).toHaveLength(8),
+    )
+    expect(screen.queryByText('Car')).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          input === '/api/accounts/9/deactivate' && init?.method === 'POST',
+      ),
+    ).toBe(true)
+  })
+})
+
+describe('Liabilities card', () => {
+  it('lists liabilities separately as negative red figures', async () => {
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-liability-row')
+    expect(rows).toHaveLength(1)
+    expect(within(rows[0]).getByText('🏡')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Mortgage')).toBeInTheDocument()
+    const amount = within(rows[0]).getByText('-$150,000')
+    expect(amount).toHaveClass('text-red')
+  })
+
+  it('adds a liability with is_liability true', async () => {
+    const liveRoutes: Record<string, unknown> = routes()
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    await screen.findAllByTestId('settings-liability-row')
+
+    const card = screen.getByTestId('liabilities-card')
+    fireEvent.change(within(card).getByLabelText('Name'), {
+      target: { value: 'Student loan' },
+    })
+    fireEvent.change(within(card).getByLabelText('Emoji'), {
+      target: { value: '🎓' },
+    })
+    fireEvent.change(within(card).getByLabelText('Initial value'), {
+      target: { value: '20,000' },
+    })
+    liveRoutes['POST /api/accounts'] = {
+      ...ACCOUNTS[9],
+      id: 11,
+      name: 'Student loan',
+    }
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/accounts')).toEqual({
+        name: 'Student loan',
+        emoji: '🎓',
+        is_liability: true,
+        initial_value: 20000,
+      }),
+    )
+  })
+})
+
+describe('Fund rows', () => {
+  it('no longer render on Settings — funds live on Funds & Goals', async () => {
+    render(<Settings />)
+
+    await screen.findAllByTestId('settings-asset-row')
+    expect(screen.queryAllByTestId('settings-fund-row')).toHaveLength(0)
+    expect(screen.queryByText('Emergency fund')).not.toBeInTheDocument()
   })
 })
 

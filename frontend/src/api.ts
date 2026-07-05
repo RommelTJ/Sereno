@@ -12,6 +12,7 @@ export interface Account {
   is_liability: boolean
   is_investable: boolean
   active: boolean
+  emoji: string | null
 }
 
 export interface LedgerBalance {
@@ -45,6 +46,17 @@ export type BalanceEntryInput = { account_id: number; as_of_date: string } & (
   | { balance_usd: number }
   | { quantity: number; unit_price: number }
 )
+
+// POST /api/accounts inserts the dimension row (kind 'other',
+// net-worth-only) plus an initial balance_entry dated today — later values
+// go through the ledger. Liabilities are stored positive; a duplicate
+// active name is a 409.
+export interface AccountInput {
+  name: string
+  emoji?: string
+  is_liability: boolean
+  initial_value: number
+}
 
 // GET /api/categories: the category dimension with each envelope's planned
 // amount resolved for a month (default: the current one).
@@ -402,6 +414,10 @@ export const fetchSocialSecurity = () =>
   getJson<SocialSecurityEntry[]>('/api/social-security')
 export const fetchTaxParams = () => getJson<TaxParam[]>('/api/tax-params')
 
+export const createAccount = (input: AccountInput) =>
+  postJsonReturning<Account>('/api/accounts', input)
+export const deactivateAccount = (accountId: number) =>
+  postJson(`/api/accounts/${accountId}/deactivate`, {})
 export const createBalanceEntry = (input: BalanceEntryInput) =>
   postJson('/api/balance-entries', input)
 export const createCategory = (input: CategoryInput) =>

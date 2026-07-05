@@ -53,6 +53,23 @@ class TestSeedPopulatesEveryTable:
             "Mortgage",
         }
 
+    def test_seeds_an_emoji_per_account(self, db):
+        seed(db)
+        rows = db.execute("SELECT name, emoji FROM account")
+        emojis = {row["name"]: row["emoji"] for row in rows}
+        assert emojis == {
+            "Ethereum": "⚡",
+            "VFIAX": "📈",
+            "VTIAX": "🌍",
+            "VGSH": "🏦",
+            "Retirement": "🏖️",
+            "Home": "🏠",
+            "Chase checking": "💵",
+            "Vanguard Cash Plus": "💵",
+            "Car": "🚗",
+            "Mortgage": "🏡",
+        }
+
 
 class TestSeedSatisfiesTheViews:
     def test_net_worth_covers_twelve_months(self, db):

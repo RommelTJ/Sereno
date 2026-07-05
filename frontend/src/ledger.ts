@@ -1,23 +1,29 @@
-// Pure helpers for the Ledger screen: mapping API months onto the handoff's
-// table columns and formatting. Columns map by account kind — except the
-// three brokerage funds, which share a kind and map by name. Car has no
-// column but is still inside the API's net worth; the two cash accounts
-// share the single Cash column; the mortgage (stored positive, per the
-// schema) displays as a negative figure.
+// Pure helpers for the Ledger screen: one table column per active account
+// (assets first, then liabilities), each month's cells aligned to those
+// columns. Liabilities are stored positive (per the schema) and display
+// as negative figures.
 
-import type { Account, BalanceEntryInput, LedgerMonth } from './api.ts'
+import type {
+  Account,
+  BalanceEntryInput,
+  LedgerBalance,
+  LedgerMonth,
+} from './api.ts'
+
+// The table's column accounts: active only, assets then liabilities,
+// in id order within each group.
+export function ledgerColumns(accounts: Account[]): Account[] {
+  const active = accounts.filter((account) => account.active)
+  return [
+    ...active.filter((account) => !account.is_liability),
+    ...active.filter((account) => account.is_liability),
+  ]
+}
 
 export interface LedgerRow {
   month: string
   date: string
-  eth: number
-  vfiax: number
-  vtiax: number
-  vgsh: number
-  retire: number
-  home: number
-  cash: number
-  mortgage: number
+  values: number[] // aligned to the columns; liabilities negative
   netWorth: number
 }
 
@@ -36,116 +42,87 @@ export function formatDate(isoDate: string): string {
   })
 }
 
-// The balances the form edits: the three brokerage funds (by name, they
-// share a kind), retirement, and ETH as quantity × price.
-export interface BalanceFormValues {
-  vfiax: number
-  vtiax: number
-  vgsh: number
-  retire: number
-  ethQty: number
-  ethPrice: number
+// The draft the form edits for one selected account: a USD value, or
+// quantity + price for the ETH-style kind.
+export interface BalanceDraft {
+  value: string
+  qty: string
+  price: string
 }
 
-const FUND_NAMES = new Set(['VFIAX', 'VTIAX', 'VGSH'])
-const FORM_KINDS = new Set(['eth', '401k'])
-
-const isFormAccount = (account: Account) =>
-  FORM_KINDS.has(account.kind) || FUND_NAMES.has(account.name)
-
-export function initialFormValues(
+// An account's newest ledger entry, walking back through the months.
+export function latestBalance(
   months: LedgerMonth[],
-  accounts: Account[],
-): BalanceFormValues {
-  const values: BalanceFormValues = {
-    vfiax: 0,
-    vtiax: 0,
-    vgsh: 0,
-    retire: 0,
-    ethQty: 0,
-    ethPrice: 0,
+  accountId: number,
+): LedgerBalance | undefined {
+  for (const month of months) {
+    const balance = month.balances.find(
+      (entry) => entry.account_id === accountId,
+    )
+    if (balance) return balance
   }
-  const newest = months[0]
-  if (!newest) return values
-  const byId = new Map(accounts.map((account) => [account.id, account]))
-  for (const balance of newest.balances) {
-    const account = byId.get(balance.account_id)
-    if (!account) continue
-    if (account.kind === 'eth') {
-      values.ethQty = balance.quantity ?? 0
-      values.ethPrice = balance.unit_price ?? 0
-    } else if (account.name === 'VFIAX') values.vfiax = balance.balance_usd
-    else if (account.name === 'VTIAX') values.vtiax = balance.balance_usd
-    else if (account.name === 'VGSH') values.vgsh = balance.balance_usd
-    else if (account.kind === '401k') values.retire = balance.balance_usd
-  }
-  return values
+  return undefined
 }
 
-// Newest-month total of everything the form does not edit (home, cash
-// accounts, car; liabilities negative), so the live net worth can be
-// recomputed as form values + this constant.
-export function otherBalancesTotal(
+// Prefill the draft from the account's newest ledger entry.
+export function draftFor(
+  account: Account,
   months: LedgerMonth[],
-  accounts: Account[],
-): number {
-  const newest = months[0]
-  if (!newest) return 0
-  const byId = new Map(accounts.map((account) => [account.id, account]))
-  let total = 0
-  for (const balance of newest.balances) {
-    const account = byId.get(balance.account_id)
-    if (!account || isFormAccount(account)) continue
-    total += account.is_liability ? -balance.balance_usd : balance.balance_usd
-  }
-  return total
-}
-
-export function computeLiveNetWorth(
-  values: BalanceFormValues,
-  otherBalances: number,
-): number {
-  return (
-    values.ethQty * values.ethPrice +
-    values.vfiax +
-    values.vtiax +
-    values.vgsh +
-    values.retire +
-    otherBalances
-  )
-}
-
-// One append-only entry per form account: the funds and retirement as USD,
-// ETH as quantity + price (the server derives its USD value).
-export function balanceEntryInputs(
-  values: BalanceFormValues,
-  accounts: Account[],
-  asOfDate: string,
-): BalanceEntryInput[] {
-  const byName = new Map(accounts.map((account) => [account.name, account]))
-  const inputs: BalanceEntryInput[] = []
-  const eth = accounts.find((account) => account.kind === 'eth')
-  if (eth) {
-    inputs.push({
-      account_id: eth.id,
-      as_of_date: asOfDate,
-      quantity: values.ethQty,
-      unit_price: values.ethPrice,
-    })
-  }
-  const usd = (account: Account | undefined, balance_usd: number) => {
-    if (account) {
-      inputs.push({ account_id: account.id, as_of_date: asOfDate, balance_usd })
+): BalanceDraft {
+  const balance = latestBalance(months, account.id)
+  if (account.kind === 'eth') {
+    return {
+      value: '',
+      qty: formatAmount(balance?.quantity ?? 0),
+      price: formatAmount(balance?.unit_price ?? 0),
     }
   }
-  usd(byName.get('VFIAX'), values.vfiax)
-  usd(byName.get('VTIAX'), values.vtiax)
-  usd(byName.get('VGSH'), values.vgsh)
-  usd(
-    accounts.find((account) => account.kind === '401k'),
-    values.retire,
-  )
-  return inputs
+  return { value: formatAmount(balance?.balance_usd ?? 0), qty: '', price: '' }
+}
+
+// The draft's USD figure: quantity × price for ETH, else the value.
+export function draftUsd(account: Account, draft: BalanceDraft): number {
+  return account.kind === 'eth'
+    ? parseAmount(draft.qty) * parseAmount(draft.price)
+    : parseAmount(draft.value)
+}
+
+// Newest-month net worth with the selected account's draft substituted —
+// liabilities contribute negatively, so paying one down raises the figure.
+export function liveNetWorth(
+  months: LedgerMonth[],
+  account: Account,
+  draft: BalanceDraft,
+): number {
+  const newest = months[0]
+  if (!newest) return draftUsd(account, draft)
+  const current =
+    newest.balances.find((entry) => entry.account_id === account.id)
+      ?.balance_usd ?? 0
+  const sign = account.is_liability ? -1 : 1
+  return newest.net_worth + sign * (draftUsd(account, draft) - current)
+}
+
+// The one append-only entry the Save posts: quantity + price for ETH (the
+// server derives its USD value), else the USD value.
+export function entryInput(
+  account: Account,
+  draft: BalanceDraft,
+  asOfDate: string,
+): BalanceEntryInput {
+  if (account.kind === 'eth') {
+    return {
+      account_id: account.id,
+      as_of_date: asOfDate,
+      quantity: parseAmount(draft.qty),
+      unit_price: parseAmount(draft.price),
+    }
+  }
+  return {
+    account_id: account.id,
+    as_of_date: asOfDate,
+    balance_usd: parseAmount(draft.value),
+  }
 }
 
 export function todayIso(): string {
@@ -162,39 +139,27 @@ export function formatAmount(value: number): string {
 
 export function ledgerRows(
   months: LedgerMonth[],
-  accounts: Account[],
+  columns: Account[],
 ): LedgerRow[] {
-  const byId = new Map(accounts.map((account) => [account.id, account]))
   return months.map((month) => {
-    const row: LedgerRow = {
-      month: month.month,
-      date: '',
-      eth: 0,
-      vfiax: 0,
-      vtiax: 0,
-      vgsh: 0,
-      retire: 0,
-      home: 0,
-      cash: 0,
-      mortgage: 0,
-      netWorth: month.net_worth,
-    }
+    const byAccount = new Map(
+      month.balances.map((balance) => [balance.account_id, balance]),
+    )
     let latest = ''
     for (const balance of month.balances) {
-      const account = byId.get(balance.account_id)
-      if (!account) continue
       if (balance.as_of_date > latest) latest = balance.as_of_date
-      if (account.kind === 'eth') row.eth += balance.balance_usd
-      else if (account.name === 'VFIAX') row.vfiax += balance.balance_usd
-      else if (account.name === 'VTIAX') row.vtiax += balance.balance_usd
-      else if (account.name === 'VGSH') row.vgsh += balance.balance_usd
-      else if (account.kind === '401k') row.retire += balance.balance_usd
-      else if (account.kind === 'home') row.home += balance.balance_usd
-      else if (account.kind === 'cash' || account.kind === 'cash_plus')
-        row.cash += balance.balance_usd
-      else if (account.kind === 'mortgage') row.mortgage -= balance.balance_usd
     }
-    row.date = latest ? formatDate(latest) : month.month
-    return row
+    return {
+      month: month.month,
+      date: latest ? formatDate(latest) : month.month,
+      values: columns.map((account) => {
+        const balance = byAccount.get(account.id)
+        if (!balance) return 0
+        return account.is_liability
+          ? -balance.balance_usd
+          : balance.balance_usd
+      }),
+      netWorth: month.net_worth,
+    }
   })
 }

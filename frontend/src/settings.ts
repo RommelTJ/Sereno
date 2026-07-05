@@ -2,11 +2,11 @@
 
 import type {
   Account,
+  AccountInput,
   Assumption,
   AssumptionInput,
   CategoryInput,
   CategoryPlanInput,
-  Fund,
   LedgerMonth,
   SocialSecurityEntry,
   SocialSecurityInput,
@@ -18,21 +18,23 @@ import type {
 } from './api.ts'
 import { formatUsd } from './ledger.ts'
 
-export interface BucketRow {
-  key: string
+export interface AccountRow {
+  id: number
   name: string
-  tag: string
+  emoji: string
   value: string
   negative: boolean
 }
 
+// One Assets or Liabilities section: the active accounts on that side.
 // The ledger is newest-first; an account's current value is the first
 // balance found walking back through the months. Liabilities are stored
 // positive and shown negative.
 export function accountRows(
   accounts: Account[],
   ledger: LedgerMonth[],
-): BucketRow[] {
+  isLiability: boolean,
+): AccountRow[] {
   const latest = new Map<number, number>()
   for (const month of ledger) {
     for (const entry of month.balances) {
@@ -42,28 +44,41 @@ export function accountRows(
     }
   }
   return accounts
-    .filter((account) => account.active)
+    .filter(
+      (account) => account.active && account.is_liability === isLiability,
+    )
     .map((account) => {
       const balance = latest.get(account.id) ?? 0
       return {
-        key: `account-${account.id}`,
+        id: account.id,
         name: account.name,
-        tag: account.kind,
-        value: formatUsd(account.is_liability ? -balance : balance),
-        negative: account.is_liability,
+        emoji: account.emoji ?? '💰',
+        value: formatUsd(isLiability ? -balance : balance),
+        negative: isLiability,
       }
     })
 }
 
-export function fundRows(funds: Fund[]): BucketRow[] {
-  return funds.map((fund) => ({
-    key: `fund-${fund.id}`,
-    name: fund.name,
-    tag: `fund · ${fund.kind}`,
-    value: formatUsd(fund.balance),
-    negative: false,
-  }))
-}
+// The curated emoji choices for the account add forms — an asset- and
+// liability-flavored set, like the envelope list below. The backend keeps
+// emoji as free TEXT; this list constrains only the UI.
+export const ASSET_EMOJI_OPTIONS = [
+  { emoji: '⚡', label: 'Ethereum' },
+  { emoji: '📈', label: 'Index fund' },
+  { emoji: '🌍', label: 'International fund' },
+  { emoji: '🏦', label: 'Bonds' },
+  { emoji: '🏖️', label: 'Retirement' },
+  { emoji: '🏠', label: 'Home' },
+  { emoji: '🚗', label: 'Car' },
+  { emoji: '💵', label: 'Cash' },
+  { emoji: '💳', label: 'Checking' },
+  { emoji: '🪙', label: 'Crypto' },
+  { emoji: '💎', label: 'Valuables' },
+  { emoji: '🏢', label: 'Real estate' },
+  { emoji: '🏡', label: 'Mortgage' },
+  { emoji: '🎓', label: 'Student loan' },
+  { emoji: '🧾', label: 'Loan' },
+]
 
 // The curated emoji choices for the add-envelope select — the handoff
 // spreadsheet's envelopes first, then common extras. The backend keeps
@@ -106,13 +121,37 @@ export const EMOJI_OPTIONS = [
 ]
 
 // A planned amount must be a plain non-negative number — parseNumber is
-// too forgiving here (it strips the minus sign).
+// too forgiving here (it strips the minus sign). Commas are formatting,
+// not sign, so "2,500" parses.
 function parsePlanned(raw: string): number | undefined {
   if (raw.trim() === '') {
     return undefined
   }
-  const value = Number(raw)
+  const value = Number(raw.replace(/,/g, ''))
   return Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+// Build the POST /api/accounts body, or null while the form is invalid
+// (blank name, or an initial value that isn't a non-negative number —
+// liabilities are stored positive).
+export function accountInput(
+  values: { name: string; emoji: string; initialValue: string },
+  isLiability: boolean,
+): AccountInput | null {
+  const name = values.name.trim()
+  const initialValue = parsePlanned(values.initialValue)
+  if (name === '' || initialValue == null) {
+    return null
+  }
+  const input: AccountInput = {
+    name,
+    is_liability: isLiability,
+    initial_value: initialValue,
+  }
+  if (values.emoji !== '') {
+    input.emoji = values.emoji
+  }
+  return input
 }
 
 // Build the POST /api/categories body, or null while the form is invalid

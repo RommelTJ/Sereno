@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from sereno.db.migrations import migrate
+from sereno.db.migrations import MIGRATIONS_DIR, migrate
 
 
 @pytest.fixture
@@ -49,3 +49,20 @@ def test_new_file_applied_on_next_run(conn, tmp_path):
 
 def test_empty_directory_applies_nothing(conn, tmp_path):
     assert migrate(conn, tmp_path) == []
+
+
+def test_account_emoji_backfills_existing_seed_accounts(conn, tmp_path):
+    # A database migrated before 0003 existed, already holding the
+    # seed-named accounts, gets its emojis backfilled by name.
+    for name in ("0001_initial_schema.sql", "0002_category_plan.sql"):
+        (tmp_path / name).write_text((MIGRATIONS_DIR / name).read_text())
+    migrate(conn, tmp_path)
+    conn.execute("INSERT INTO account (name, kind) VALUES ('Ethereum', 'eth')")
+    conn.execute(
+        "INSERT INTO account (name, kind, is_liability) VALUES ('Mortgage', 'mortgage', 1)"
+    )
+    emoji_migration = "0003_account_emoji.sql"
+    (tmp_path / emoji_migration).write_text((MIGRATIONS_DIR / emoji_migration).read_text())
+    assert migrate(conn, tmp_path) == [emoji_migration]
+    emojis = dict(conn.execute("SELECT name, emoji FROM account"))
+    assert emojis == {"Ethereum": "⚡", "Mortgage": "🏡"}

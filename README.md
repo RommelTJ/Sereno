@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.16.0**
+**v1.0.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -18,9 +18,10 @@ whole thing in plain SQL.
 
 - **Net worth dashboard** — at-a-glance hero number with year-over-year change and a
   monthly sparkline, computed live from every account and liability.
-- **Ledger entries** — one row per month per account. Enter fund balances, retirement,
-  and ETH holdings (quantity × price auto-translates to USD); the latest entry in a month
-  wins, and earlier rows are kept as history.
+- **Ledger entries** — one row per month per account. Pick any active account and
+  enter its value (ETH as quantity × price, auto-translated to USD); the latest entry
+  in a month wins, earlier rows are kept as history, and balances carry forward until
+  the next entry.
 - **Safe-to-spend** — total cash − bills due − money in funds. Monthly category envelopes
   with progress bars; overspending is allowed and simply reduces the headline number.
 - **Funds & goals** — sinking funds and dated goals as one concept. Notes are
@@ -117,15 +118,29 @@ Interactive docs at <http://localhost:8000/docs>.
 
 The balances slice:
 
-- `GET /api/accounts` — the account dimension rows (name, kind, liability and
-  investable flags).
+- `GET /api/accounts` — the account dimension rows (name, emoji, kind,
+  liability and investable flags; inactive accounts stay listed with
+  `active: false` so history keeps its labels).
+- `POST /api/accounts` — creates an asset or liability: inserts the
+  `account` row (name, emoji, `is_liability`; kind `other`, net-worth-only)
+  plus an initial `balance_entry` dated today. The initial value is set
+  here only — later values go through the ledger. A blank name or negative
+  initial value is a 422; a name matching an active account
+  (case-insensitive) is a 409. Liabilities are stored positive and
+  displayed negative.
+- `POST /api/accounts/{id}/deactivate` — soft remove: the account drops out
+  of the pickers and stops carrying forward, but the months it was really
+  entered keep counting in net worth and its name frees up for reuse. No
+  hard delete — history is append-only.
 - `POST /api/balance-entries` — appends a dated balance row for an account.
   Send `balance_usd` for USD accounts, or `quantity` + `unit_price` for
   ETH-style holdings (USD is derived as quantity × price). Rows are never
   updated — history is kept.
 - `GET /api/ledger` — one group per month, newest first, with the canonical
-  per-account balances (latest entry in a month wins) and that month's net
-  worth.
+  per-account balances and that month's net worth. A month's balance for an
+  account is the latest entry **on or before** the month's end
+  (carry-forward), so an account entered in January still counts in March;
+  within a month the latest entry wins.
 - `GET /api/net-worth` — current net worth, year-over-year change vs. the same
   month a year earlier (`null` until 12 months of history exist), and the
   last-12-months series for the sparkline.
@@ -271,12 +286,14 @@ The forecast slice (the third Plan engine):
   projected age-90 balance from `GET /api/forecast` (muted until the
   forecast's inputs exist) — every dashboard card now reads the API.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
-  table (one row per month, newest first, current month highlighted; the two
-  cash accounts share one column and the mortgage shows as a negative figure)
-  beside the "Update this month's balances" form. Fund and retirement balances
-  are entered in USD; ETH is entered as quantity + $/ETH with a live
-  quantity × price readout, and every edit recomputes the displayed net worth
-  before anything is saved. Saving appends one dated row per account via
+  table (one row per month, newest first, current month highlighted) with one
+  column per active account — assets then liabilities, liabilities negative
+  in red — plus the net-worth column, horizontally scrollable as accounts
+  grow. Beside it, the "Update this month's balances" form: an account picker
+  over the active accounts with a single value input prefilled from the
+  newest month (the ETH account swaps to quantity + $/ETH inputs with a live
+  quantity × price readout), and a live net-worth figure that tracks the
+  draft before anything is saved. Saving appends one dated row via
   `POST /api/balance-entries` — the latest entry in a month wins and earlier
   rows are kept as history — then the table and the header net-worth readout
   refresh from the API.
@@ -352,9 +369,15 @@ The forecast slice (the third Plan engine):
   a tax year, assumptions, a spend target, and balances exist, the
   view points at Settings & data.
 - **Settings & data** (<http://localhost:5173/settings>) — the config
-  home. Accounts & buckets lists every account's newest ledger balance
-  (walking back through the months; liabilities negative in red) with
-  each fund beneath, above the Envelopes card, the Assumptions summary
+  home. The Assets and Liabilities cards list every active account's
+  emoji, name, and newest ledger balance (walking back through the
+  months; liabilities negative in red), each with an add form (name, a
+  curated emoji select, and the initial value — later values go through
+  the Ledger) and a per-row Deactivate that soft-removes the account
+  while its entered history keeps counting. Fund rows no longer appear
+  on Settings — funds live on Funds & Goals, where their targets and
+  progress already are. Below them sit the Envelopes card, the
+  Assumptions summary
   (return, inflation, ETH growth, planned spend), the Social Security
   panel (You/Spouse $/mo and start age), the latest year's tax
   parameters (LTCG ceilings, NIIT, standard deduction, ordinary
@@ -391,6 +414,20 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.0.0 — Asset & liability management. Accounts are no longer
+seed-only: `POST /api/accounts` creates an asset or liability — name,
+emoji, and an initial balance entry dated today — and
+`POST /api/accounts/{id}/deactivate` soft-removes one with its history
+intact. Settings replaces the mixed Accounts & buckets card with
+separate Assets and Liabilities cards (add form, curated emoji select,
+per-row Deactivate; fund rows moved off to Funds & Goals). The Ledger's
+fixed-field form becomes an account picker — one value input, or
+quantity + $/ETH for the ETH account — the table grows one column per
+active account, and migration 0004 makes the SQL views carry balances
+forward: a month's balance is the latest entry on or before that
+month's end, so single-entry accounts like Home keep counting in every
+later month.
 
 v0.16.0 — Responsive layout. The frontend is now mobile-first rather
 than a fixed ~1180px desktop shell. The capped main column is centered
