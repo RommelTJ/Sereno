@@ -1,6 +1,8 @@
 // Typed client for the backend API. Shapes mirror the pydantic models in
 // backend/src/sereno/api/balances.py, budget.py, and funds.py.
 
+import type { Zone } from './guardrails.ts'
+
 export interface Account {
   id: number
   name: string
@@ -101,6 +103,25 @@ export interface SpendPlan {
   annual_target: number
   initial_rate: number | null
   guardrail_band: number
+}
+
+// GET /api/guardrails: the Guyton-Klinger engine evaluated at ?spend=
+// (default: the plan's annual target) against the latest month's
+// investable total. Null until a spend plan with an initial rate and a
+// balance month exist.
+export interface Guardrails {
+  investable: number
+  spend: number
+  annual_target: number
+  rate: number
+  initial_rate: number
+  band: number
+  lower: number
+  upper: number
+  zone: Zone
+  raise_trigger: number
+  cut_trigger: number
+  four_percent_spend: number
 }
 
 export interface SocialSecurityEntry {
@@ -257,6 +278,10 @@ export const fetchFunds = () => getJson<Fund[]>('/api/funds')
 export const fetchAssumptions = () =>
   getJson<Assumption | null>('/api/assumptions')
 export const fetchSpendPlan = () => getJson<SpendPlan | null>('/api/spend-plan')
+export const fetchGuardrails = (spend?: number) =>
+  getJson<Guardrails | null>(
+    spend != null ? `/api/guardrails?spend=${spend}` : '/api/guardrails',
+  )
 export const fetchSocialSecurity = () =>
   getJson<SocialSecurityEntry[]>('/api/social-security')
 export const fetchTaxParams = () => getJson<TaxParam[]>('/api/tax-params')

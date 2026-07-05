@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.11.0**
+**v0.12.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -182,6 +182,19 @@ The config slice (the one input source for the Plan engines):
   `tax_param` is keyed by year, the one config table that replaces
   rather than appends.
 
+The guardrails slice (the first Plan engine):
+
+- `GET /api/guardrails` — the Guyton-Klinger evaluation: the withdrawal
+  rate (spend ÷ the latest month's investable total, every
+  `is_investable` account), the guardrails at the stored at-retirement
+  `initial_rate` × (1 ± the configured band), the zone (`cut` above the
+  upper rail, `raise` below the lower, else `hold` — the ±band is the
+  trigger, the ~10% change is the response, never a reset to the band),
+  the raise/cut trigger portfolios, and the 4% rate as a sanity
+  ceiling, not a binding rule. `?spend=` evaluates a what-if level
+  instead of the plan's annual target. `null` until a spend plan with
+  an initial rate and at least one balance month exist.
+
 ### Screens
 
 - **Dashboard** (<http://localhost:5173/>) — the landing view. The net-worth
@@ -196,9 +209,11 @@ The config slice (the one input source for the Plan engines):
   activity lists the month's five newest spending and funding items as
   emoji-tile rows with signed amounts — credits in green, debits in ink,
   and expenses whose envelope is over budget in red — and refreshes on
-  every visit as items are added elsewhere. The Spend guardrail and
-  Longevity cards remain static placeholders until their Phase 2 slices
-  land.
+  every visit as items are added elsewhere. The Spend guardrail card
+  shows the live withdrawal rate, mini band, and zone status from
+  `GET /api/guardrails` (muted until a spend plan exists); the
+  Longevity card remains a static placeholder until the forecast slice
+  lands.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
   table (one row per month, newest first, current month highlighted; the two
   cash accounts share one column and the mortgage shows as a negative figure)
@@ -233,6 +248,18 @@ The config slice (the one input source for the Plan engines):
   show just their balance, with no bar. Submitting the form posts the
   dimension row to `POST /api/funds`, appends any initial saved amount via
   `POST /api/fund-entries`, and refetches the list.
+- **Guardrails** (<http://localhost:5173/guardrails>) — the "how much
+  can we spend?" view, every figure from `GET /api/guardrails`: KPIs
+  (investable portfolio, planned spend, and the withdrawal rate —
+  colored by zone — beside the ±band and 4% ceiling), the three-zone
+  Cut / Hold / Raise band with a marker at the current rate, the
+  recommendation banner (trim ~10% above the upper guardrail, raise
+  ~10% below the lower, hold steady inside), a spend slider that
+  re-evaluates everything server-side at each level, and raise/cut
+  trigger cards naming the portfolio levels where the next rule fires.
+  The slider's bounds derive from the band edges, so both rails are
+  always reachable whatever the portfolio and plan sizes are. Until a
+  spend plan and balances exist, the view points at Settings & data.
 - **Settings & data** (<http://localhost:5173/settings>) — the config
   home. Accounts & buckets lists every account's newest ledger balance
   (walking back through the months; liabilities negative in red) with
@@ -269,23 +296,23 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.11.0 — Planning config. The four config tables now have typed
-endpoints — assumptions, spend plan, and Social Security resolve the
-latest effective-dated row on or before today (per person for Social
-Security) and only ever append; tax parameters are per-year rows with
-POST to load a year and PUT to reconcile it against the CPA's numbers.
-The Settings & data screen replaces its stub (see
-[Screens](#screens)): accounts & buckets with live balances, editable
-Assumptions and Social Security cards that append dated rows, the
-tax-parameter editor, and the append-only data-model note. This gives
-the three Plan engines one tested input source. The Dashboard v2
-landing view, the Funds & goals screen, the Safe-to-spend screen, the
-budget API, the Ledger entries screen, the balances API, seed data,
-the append-only schema (migrations at startup), the typed SQLite
-connection module, and the app shell landed in earlier releases.
-Remaining work:
+v0.12.0 — Guardrails. The first Plan engine lands: a pure, typed
+Guyton-Klinger module in `engine/guardrails.py` (the ±band around the
+stored at-retirement rate is the trigger, the ~10% change is the
+response) exposed through `GET /api/guardrails`, which evaluates the
+plan's annual target — or a `?spend=` what-if — against the latest
+month's investable total. The Guardrails screen replaces its stub
+(see [Screens](#screens)): KPIs, the three-zone Cut / Hold / Raise
+band with a marker at the current rate, the recommendation banner,
+band-derived spend slider, and raise/cut trigger cards; the
+Dashboard's Spend guardrail card now reads the same evaluation live.
+Planning config, the Dashboard v2 landing view, the Funds & goals
+screen, the Safe-to-spend screen, the budget API, the Ledger entries
+screen, the balances API, seed data, the append-only schema
+(migrations at startup), the typed SQLite connection module, and the
+app shell landed in earlier releases. Remaining work:
 
-1. Guardrails → withdrawal sourcing engine → longevity forecast
+1. Withdrawal sourcing engine → longevity forecast
 
 ## License
 

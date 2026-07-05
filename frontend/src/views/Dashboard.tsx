@@ -4,10 +4,11 @@ import { Link } from 'react-router'
 import type { ActivityTone } from '../dashboard.ts'
 import { fundsMini, recentActivity, stsBarPct } from '../dashboard.ts'
 import { totalParked } from '../funds.ts'
+import { formatRate, markerLeftPct, zoneCopy } from '../guardrails.ts'
 import { formatUsd } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
-import type { BudgetMonth, Fund, NetWorthPoint } from '../api.ts'
-import { fetchBudgetMonth, fetchFunds } from '../api.ts'
+import type { BudgetMonth, Fund, Guardrails, NetWorthPoint } from '../api.ts'
+import { fetchBudgetMonth, fetchFunds, fetchGuardrails } from '../api.ts'
 
 // "▲ 5.7%" / "▼ 2.3%" — the API's yoy is a fraction vs. the same month a
 // year earlier (null until 12 months of history exist).
@@ -69,8 +70,8 @@ function NetWorthHero() {
   )
 }
 
-// Deep-link card shell. The Guardrail and Longevity values are static,
-// sanitized illustrations from the design handoff until Phase 2 lands.
+// Deep-link card shell. The Longevity values are static, sanitized
+// illustrations from the design handoff until the forecast slice lands.
 function CardLink({
   to,
   label,
@@ -120,18 +121,41 @@ function SafeToSpendCard({ budget }: { budget: BudgetMonth | null }) {
   )
 }
 
-function GuardrailCard() {
+function GuardrailCard({ guardrails }: { guardrails: Guardrails | null }) {
+  const cut = guardrails?.zone === 'cut'
   return (
     <CardLink to="/guardrails" label="Spend guardrail">
-      <p className="num mt-1.5 text-[30px] font-extrabold">3.0%</p>
+      <p
+        className={`num mt-1.5 text-[30px] font-extrabold ${
+          guardrails != null ? (cut ? 'text-red' : 'text-accent') : 'text-muted-2'
+        }`}
+      >
+        {guardrails != null ? formatRate(guardrails.rate) : '—'}
+      </p>
       <p className="text-xs text-muted">withdrawal rate</p>
       <div className="relative mt-3.5 flex h-[9px] overflow-hidden rounded-[6px] border border-card-border">
         <div className="flex-1 bg-red-soft-2" />
         <div className="flex-2 bg-green-soft-2" />
         <div className="flex-1 bg-amber-soft" />
-        <div className="absolute top-[-3px] h-3.5 w-0.5 bg-ink" style={{ left: '55%' }} />
+        {guardrails != null && (
+          <div
+            data-testid="guardrail-marker"
+            className="absolute top-0 h-full w-0.5 bg-ink"
+            style={{
+              left: `${markerLeftPct(guardrails.rate, guardrails.lower, guardrails.upper)}%`,
+            }}
+          />
+        )}
       </div>
-      <p className="mt-3 text-[13px] font-bold text-accent">Hold steady</p>
+      <p
+        className={`mt-3 text-[13px] font-bold ${
+          guardrails != null ? (cut ? 'text-red' : 'text-accent') : 'text-muted-2'
+        }`}
+      >
+        {guardrails != null
+          ? zoneCopy(guardrails.zone, guardrails.spend).status
+          : 'no spend plan yet'}
+      </p>
     </CardLink>
   )
 }
@@ -227,10 +251,12 @@ function RecentActivity({ budget }: { budget: BudgetMonth | null }) {
 function Dashboard() {
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
   const [funds, setFunds] = useState<Fund[] | null>(null)
+  const [guardrails, setGuardrails] = useState<Guardrails | null>(null)
 
   useEffect(() => {
     void fetchBudgetMonth().then(setBudget)
     void fetchFunds().then(setFunds)
+    void fetchGuardrails().then(setGuardrails)
   }, [])
 
   return (
@@ -240,7 +266,7 @@ function Dashboard() {
         <SafeToSpendCard budget={budget} />
       </div>
       <div className="mt-5 grid grid-cols-3 gap-5">
-        <GuardrailCard />
+        <GuardrailCard guardrails={guardrails} />
         <LongevityCard />
         <FundsCard funds={funds} />
       </div>

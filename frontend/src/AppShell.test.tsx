@@ -22,6 +22,7 @@ beforeEach(() => {
     '/api/net-worth': { current: null, yoy: null, series: [] },
     '/api/budget-month': EMPTY_BUDGET_MONTH,
     '/api/funds': [],
+    '/api/guardrails': null,
     // The Settings view's config fetches, as a fresh database answers.
     '/api/assumptions': null,
     '/api/spend-plan': null,
@@ -94,6 +95,7 @@ describe('Header net worth', () => {
       '/api/net-worth': { current: 1_744_000, yoy: 0.017, series: [] },
       '/api/budget-month': EMPTY_BUDGET_MONTH,
       '/api/funds': [],
+      '/api/guardrails': null,
     })
 
     render(<App />)
@@ -111,6 +113,7 @@ describe('Header net worth', () => {
       '/api/net-worth': { current: 1_744_000, yoy: 0.017, series: [] },
       '/api/budget-month': EMPTY_BUDGET_MONTH,
       '/api/funds': [],
+      '/api/guardrails': null,
       '/api/balance-entries': { id: 999 },
     }
     stubApi(routes)

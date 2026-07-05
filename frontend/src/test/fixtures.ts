@@ -212,6 +212,24 @@ export const SPEND_PLAN = {
   guardrail_band: 0.2,
 }
 
+// GET /api/guardrails evaluated at the plan's annual target: June's
+// 1.5M investable at $45,000/yr is a 3.00% rate, inside the ±20% band
+// around the 2.94% anchor.
+export const GUARDRAILS = {
+  investable: 1_500_000,
+  spend: 45_000,
+  annual_target: 45_000,
+  rate: 0.03,
+  initial_rate: 0.0294,
+  band: 0.2,
+  lower: 0.02352,
+  upper: 0.03528,
+  zone: 'hold',
+  raise_trigger: 1_913_265.31,
+  cut_trigger: 1_275_510.2,
+  four_percent_spend: 60_000,
+}
+
 // GET /api/social-security resolves the latest row per person, 'you' first.
 export const SOCIAL_SECURITY = [
   {
