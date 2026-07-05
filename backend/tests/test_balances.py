@@ -167,6 +167,44 @@ class TestPostAccounts:
         assert query("SELECT COUNT(*) AS n FROM account")[0]["n"] == 0
 
 
+class TestDeactivateAccount:
+    def create(self, client, name):
+        response = client.post("/api/accounts", json={"name": name, "initial_value": 100})
+        assert response.status_code == 201
+        return response.json()
+
+    def test_deactivate_flips_active_off(self, client):
+        created = self.create(client, "Robinhood")
+        response = client.post(f"/api/accounts/{created['id']}/deactivate")
+        assert response.status_code == 200
+        assert response.json()["active"] is False
+        (account,) = client.get("/api/accounts").json()
+        assert account["active"] is False
+
+    def test_unknown_account_returns_404(self, client):
+        response = client.post("/api/accounts/999/deactivate")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "account not found"
+
+    def test_entered_months_stay_in_net_worth_after_deactivation(self, client):
+        # Soft-deactivation preserves the append-only history: months where
+        # the account really had entries keep counting in net worth.
+        cash_id = insert_account("Chase checking", "cash")
+        boat_id = insert_account("Boat", "other")
+        post_entry(client, cash_id, "2026-05-28", balance_usd=1000)
+        post_entry(client, boat_id, "2026-05-28", balance_usd=9000)
+        post_entry(client, cash_id, "2026-06-28", balance_usd=1000)
+        assert client.post(f"/api/accounts/{boat_id}/deactivate").status_code == 200
+        months = {m["month"]: m["net_worth"] for m in client.get("/api/ledger").json()}
+        assert months["2026-05"] == 10000
+
+    def test_deactivated_name_is_reusable(self, client):
+        created = self.create(client, "Robinhood")
+        client.post(f"/api/accounts/{created['id']}/deactivate")
+        response = client.post("/api/accounts", json={"name": "Robinhood", "initial_value": 200})
+        assert response.status_code == 201
+
+
 class TestPostBalanceEntries:
     def test_usd_entry_is_created_as_sent(self, client):
         account_id = insert_account("Chase checking", "cash")
