@@ -1,7 +1,7 @@
 // Shared API fixtures. Accounts mirror the seed dimension rows: table
 // columns map by kind, except the three brokerage funds, which map by name.
 
-import type { Sourcing } from '../api.ts'
+import type { Forecast, Sourcing } from '../api.ts'
 
 const account = (
   id: number,
@@ -269,6 +269,36 @@ export const TAX_PARAMS = [
     ],
   },
 ]
+
+// GET /api/forecast with the seeded config: a flat 1.6M across the
+// buckets at $45,000/yr that never runs out, Social Security joining
+// at 67. Flat balances keep chart heights easy to reason about.
+export const FORECAST: Forecast = {
+  spend: 45_000,
+  annual_target: 45_000,
+  return_pct: 7,
+  inflation_pct: 3,
+  ss_you: 1_500,
+  ss_spouse: 1_400,
+  ss_start: 67,
+  tax_year: 2026,
+  series: Array.from({ length: 95 - 38 + 1 }, (_, i) => ({
+    age: 38 + i,
+    eth: 200_000,
+    brokerage: 800_000,
+    retirement: 600_000,
+    ss_income: 38 + i >= 67 ? 34_800 : 0,
+  })),
+  run_out_age: null,
+  balance_at_90: 5_512_345,
+  sensitivity: [
+    { spend: 30_000, run_out_age: null, balance_at_90: 7_200_000 },
+    { spend: 45_000, run_out_age: null, balance_at_90: 5_512_345 },
+    { spend: 60_000, run_out_age: null, balance_at_90: 3_100_000 },
+    { spend: 75_000, run_out_age: 92, balance_at_90: 350_000 },
+    { spend: 90_000, run_out_age: 71, balance_at_90: 0 },
+  ],
+}
 
 // GET /api/sourcing at age 38: staking is the only income, the whole
 // gap fits ETH's 0% headroom, and the 401(k) reports its gate.
