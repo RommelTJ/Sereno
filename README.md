@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.10.0**
+**v0.11.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -164,6 +164,24 @@ The funds slice:
   (append-only, like `balance_entry`); the latest entry is the fund's
   balance and earlier rows are kept as history.
 
+The config slice (the one input source for the Plan engines):
+
+- `GET /api/assumptions` / `GET /api/spend-plan` — the effective
+  planning config: the latest effective-dated row on or before today
+  wins, ties break by insertion order, and future-dated rows can be
+  staged without taking effect early. `null` until a row exists.
+- `GET /api/social-security` — the same rule resolved per person
+  (`you` first, then `spouse`).
+- `GET /api/tax-params` — every tax year ascending, with
+  `ordinary_brackets` parsed into typed `{rate, upto}` pairs.
+- `POST /api/assumptions` / `/api/spend-plan` / `/api/social-security` —
+  appends a new effective-dated row; config rows are never updated, so
+  every raise, cut, and revised estimate stays queryable history.
+- `POST /api/tax-params` — loads a new tax year (a duplicate year is a
+  409). `PUT /api/tax-params/{year}` revises that year in place —
+  `tax_param` is keyed by year, the one config table that replaces
+  rather than appends.
+
 ### Screens
 
 - **Dashboard** (<http://localhost:5173/>) — the landing view. The net-worth
@@ -215,6 +233,20 @@ The funds slice:
   show just their balance, with no bar. Submitting the form posts the
   dimension row to `POST /api/funds`, appends any initial saved amount via
   `POST /api/fund-entries`, and refetches the list.
+- **Settings & data** (<http://localhost:5173/settings>) — the config
+  home. Accounts & buckets lists every account's newest ledger balance
+  (walking back through the months; liabilities negative in red) with
+  each fund beneath, above the Assumptions summary (return, inflation,
+  ETH growth, planned spend), the Social Security panel (You/Spouse
+  $/mo and start age), the latest year's tax parameters (LTCG ceilings,
+  NIIT, standard deduction, ordinary brackets), and the dark append-only
+  data-model note pointing at `docs/design/schema.sql`. Settings is
+  where config changes are *persisted*: saving the Assumptions or
+  Social Security cards appends new rows effective today (only configs
+  whose values actually changed are posted), the tax card's Edit
+  revises the displayed year in place, and + Add creates the next year
+  prefilled from the current one. The Forecast screen's future sliders
+  stay transient what-if overrides.
 
 ### Tests, linters, and type checkers
 
@@ -237,18 +269,21 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.10.0 — Dashboard v2. The landing view is now a true at-a-glance
-overview for the Track half (see [Screens](#screens)): the
-Safe-to-spend card reads its live headline and baseline progress bar
-from `GET /api/budget-month`, the Funds & goals card shows the total
-parked and a top-3 mini list from `GET /api/funds`, and Recent
-activity lists the month's five newest spending and funding items as
-emoji-tile rows with signed, color-coded amounts. The Guardrail and
-Longevity cards stay placeholders until Phase 2. The Funds & goals
-screen, the Safe-to-spend screen, the budget API, the Ledger entries
-screen, the balances API, seed data, the append-only schema
-(migrations at startup), the typed SQLite connection module, and the
-app shell landed in earlier releases. Remaining work:
+v0.11.0 — Planning config. The four config tables now have typed
+endpoints — assumptions, spend plan, and Social Security resolve the
+latest effective-dated row on or before today (per person for Social
+Security) and only ever append; tax parameters are per-year rows with
+POST to load a year and PUT to reconcile it against the CPA's numbers.
+The Settings & data screen replaces its stub (see
+[Screens](#screens)): accounts & buckets with live balances, editable
+Assumptions and Social Security cards that append dated rows, the
+tax-parameter editor, and the append-only data-model note. This gives
+the three Plan engines one tested input source. The Dashboard v2
+landing view, the Funds & goals screen, the Safe-to-spend screen, the
+budget API, the Ledger entries screen, the balances API, seed data,
+the append-only schema (migrations at startup), the typed SQLite
+connection module, and the app shell landed in earlier releases.
+Remaining work:
 
 1. Guardrails → withdrawal sourcing engine → longevity forecast
 

@@ -83,6 +83,51 @@ export interface Fund {
   note: string
 }
 
+// The planning config: effective-dated, append-only rows. Each GET
+// resolves the effective row (latest effective_date on or before today),
+// so a null means no row exists yet. Percents (return_pct) are stored in
+// percent units; rates (initial_rate, niit_rate) as fractions.
+export interface Assumption {
+  id: number
+  effective_date: string
+  return_pct: number
+  inflation_pct: number
+  eth_growth_pct: number | null
+}
+
+export interface SpendPlan {
+  id: number
+  effective_date: string
+  annual_target: number
+  initial_rate: number | null
+  guardrail_band: number
+}
+
+export interface SocialSecurityEntry {
+  id: number
+  person: 'you' | 'spouse'
+  effective_date: string
+  start_age: number
+  monthly_amount: number
+}
+
+export interface TaxBracket {
+  rate: number
+  upto: number | null
+}
+
+export interface TaxParam {
+  tax_year: number
+  filing_status: string
+  ltcg_0_ceiling: number
+  ltcg_15_ceiling: number | null
+  niit_rate: number
+  niit_threshold: number | null
+  state_treatment: string
+  std_deduction: number | null
+  ordinary_brackets: TaxBracket[] | null
+}
+
 export type IncomeSource =
   | 'paycheck'
   | 'transfer_in'
@@ -119,6 +164,47 @@ export interface FundInput {
   monthly_plan?: number
 }
 
+// Config edits append: each input becomes a new effective-dated row and
+// the GETs resolve to it. Blank optional fields are omitted, not nulled.
+export interface AssumptionInput {
+  effective_date: string
+  return_pct: number
+  inflation_pct: number
+  eth_growth_pct?: number
+}
+
+export interface SpendPlanInput {
+  effective_date: string
+  annual_target: number
+  initial_rate?: number
+  guardrail_band?: number
+}
+
+export interface SocialSecurityInput {
+  person: 'you' | 'spouse'
+  effective_date: string
+  start_age: number
+  monthly_amount: number
+}
+
+// The shared tax-param write body: POST adds a year (tax_year included),
+// PUT revises one in place (the year comes from the path — it's the
+// table's primary key, so a revision replaces rather than appends).
+export interface TaxParamBody {
+  filing_status: string
+  ltcg_0_ceiling: number
+  ltcg_15_ceiling?: number
+  niit_rate: number
+  niit_threshold?: number
+  state_treatment: string
+  std_deduction?: number
+  ordinary_brackets?: TaxBracket[]
+}
+
+export interface TaxParamInput extends TaxParamBody {
+  tax_year: number
+}
+
 export interface FundEntryInput {
   fund_id: number
   as_of_date: string
@@ -149,6 +235,17 @@ async function postJson(path: string, body: unknown): Promise<void> {
   await postJsonReturning<unknown>(path, body)
 }
 
+async function putJson(path: string, body: unknown): Promise<void> {
+  const res = await fetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(`PUT ${path} failed: ${res.status}`)
+  }
+}
+
 export const fetchAccounts = () => getJson<Account[]>('/api/accounts')
 export const fetchLedger = () => getJson<LedgerMonth[]>('/api/ledger')
 export const fetchNetWorth = () => getJson<NetWorth>('/api/net-worth')
@@ -157,6 +254,12 @@ export const fetchBudgetMonth = (month?: string) =>
     month ? `/api/budget-month?month=${month}` : '/api/budget-month',
   )
 export const fetchFunds = () => getJson<Fund[]>('/api/funds')
+export const fetchAssumptions = () =>
+  getJson<Assumption | null>('/api/assumptions')
+export const fetchSpendPlan = () => getJson<SpendPlan | null>('/api/spend-plan')
+export const fetchSocialSecurity = () =>
+  getJson<SocialSecurityEntry[]>('/api/social-security')
+export const fetchTaxParams = () => getJson<TaxParam[]>('/api/tax-params')
 
 export const createBalanceEntry = (input: BalanceEntryInput) =>
   postJson('/api/balance-entries', input)
@@ -168,3 +271,13 @@ export const createFund = (input: FundInput) =>
   postJsonReturning<Fund>('/api/funds', input)
 export const createFundEntry = (input: FundEntryInput) =>
   postJson('/api/fund-entries', input)
+export const createAssumption = (input: AssumptionInput) =>
+  postJson('/api/assumptions', input)
+export const createSpendPlan = (input: SpendPlanInput) =>
+  postJson('/api/spend-plan', input)
+export const createSocialSecurity = (input: SocialSecurityInput) =>
+  postJson('/api/social-security', input)
+export const createTaxParam = (input: TaxParamInput) =>
+  postJson('/api/tax-params', input)
+export const updateTaxParam = (taxYear: number, body: TaxParamBody) =>
+  putJson(`/api/tax-params/${taxYear}`, body)

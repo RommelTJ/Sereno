@@ -192,3 +192,60 @@ export const LEDGER = [
     ],
   },
 ]
+
+// Planning config, exactly as the config GETs resolve it: the effective
+// row (latest effective_date on or before today). Values mirror the seed —
+// sanitized handoff placeholders, never real finances.
+export const ASSUMPTION = {
+  id: 1,
+  effective_date: '2026-01-01',
+  return_pct: 7,
+  inflation_pct: 3,
+  eth_growth_pct: null,
+}
+
+export const SPEND_PLAN = {
+  id: 1,
+  effective_date: '2026-01-01',
+  annual_target: 45_000,
+  initial_rate: 0.0294,
+  guardrail_band: 0.2,
+}
+
+// GET /api/social-security resolves the latest row per person, 'you' first.
+export const SOCIAL_SECURITY = [
+  {
+    id: 1,
+    person: 'you',
+    effective_date: '2026-01-01',
+    start_age: 67,
+    monthly_amount: 1_500,
+  },
+  {
+    id: 2,
+    person: 'spouse',
+    effective_date: '2026-01-01',
+    start_age: 67,
+    monthly_amount: 1_400,
+  },
+]
+
+// GET /api/tax-params returns every year ascending, brackets parsed.
+export const TAX_PARAMS = [
+  {
+    tax_year: 2026,
+    filing_status: 'MFJ',
+    ltcg_0_ceiling: 96_700,
+    ltcg_15_ceiling: 600_050,
+    niit_rate: 0.038,
+    niit_threshold: 250_000,
+    state_treatment: 'CA_ordinary',
+    std_deduction: 30_000,
+    ordinary_brackets: [
+      { rate: 0.1, upto: 24_800 },
+      { rate: 0.12, upto: 100_800 },
+      { rate: 0.22, upto: 211_400 },
+      { rate: 0.24, upto: null },
+    ],
+  },
+]
