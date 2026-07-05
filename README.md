@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.14.0**
+**v0.15.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -391,6 +391,18 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v0.15.0 — Envelope management. Spending categories can now be created
+and revised on a real database, not just seeded: `POST /api/categories`
+inserts the category with its initial effective-dated plan row
+(blank/duplicate active names and negative amounts rejected), and
+`POST /api/categories/{id}/plan` appends a plan revision — the
+append-only pattern, with an id tiebreak so same-month revisions
+resolve to the latest row. The Settings & data screen gains the
+Envelopes card (see [Screens](#screens)): the envelope list with
+per-row planned-amount edits and an add form with a curated emoji
+select. New envelopes flow into Safe-to-spend, the envelope bars, and
+the budget-month math with no further wiring.
 
 v0.14.0 — Longevity forecast. The third and final Plan engine lands:
 a pure, typed year-by-year simulation in `engine/forecast.py` — ages
