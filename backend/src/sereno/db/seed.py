@@ -13,19 +13,19 @@ import sqlite3
 from sereno.db.connection import connect, db_path
 from sereno.db.migrations import migrate
 
-# (name, kind, tax_treatment, is_liability, is_investable,
+# (name, emoji, kind, tax_treatment, is_liability, is_investable,
 #  withdrawal_priority, access_age, penalty_rate)
 ACCOUNTS = [
-    ("Ethereum", "eth", "LTCG", 0, 1, 1, None, None),
-    ("VFIAX", "brokerage_fund", "LTCG", 0, 1, 2, None, None),
-    ("VTIAX", "brokerage_fund", "LTCG", 0, 1, 2, None, None),
-    ("VGSH", "brokerage_fund", "LTCG", 0, 1, 2, None, None),
-    ("Retirement", "401k", "ORDINARY", 0, 1, 3, 59.5, 0.10),
-    ("Home", "home", "NONE", 0, 0, None, None, None),
-    ("Chase checking", "cash", "NONE", 0, 0, None, None, None),
-    ("Vanguard Cash Plus", "cash_plus", "NONE", 0, 0, None, None, None),
-    ("Car", "car", "NONE", 0, 0, None, None, None),
-    ("Mortgage", "mortgage", "NONE", 1, 0, None, None, None),
+    ("Ethereum", "⚡", "eth", "LTCG", 0, 1, 1, None, None),
+    ("VFIAX", "📈", "brokerage_fund", "LTCG", 0, 1, 2, None, None),
+    ("VTIAX", "🌍", "brokerage_fund", "LTCG", 0, 1, 2, None, None),
+    ("VGSH", "🏦", "brokerage_fund", "LTCG", 0, 1, 2, None, None),
+    ("Retirement", "🏖️", "401k", "ORDINARY", 0, 1, 3, 59.5, 0.10),
+    ("Home", "🏠", "home", "NONE", 0, 0, None, None, None),
+    ("Chase checking", "💵", "cash", "NONE", 0, 0, None, None, None),
+    ("Vanguard Cash Plus", "💵", "cash_plus", "NONE", 0, 0, None, None, None),
+    ("Car", "🚗", "car", "NONE", 0, 0, None, None, None),
+    ("Mortgage", "🏡", "mortgage", "NONE", 1, 0, None, None, None),
 ]
 
 ETH_QTY = 20
@@ -129,9 +129,9 @@ def seed(conn: sqlite3.Connection) -> bool:
     if conn.execute("SELECT COUNT(*) FROM account").fetchone()[0] > 0:
         return False
     conn.executemany(
-        "INSERT INTO account (name, kind, tax_treatment, owner, is_liability,"
+        "INSERT INTO account (name, emoji, kind, tax_treatment, owner, is_liability,"
         " is_investable, withdrawal_priority, access_age, penalty_rate)"
-        " VALUES (?, ?, ?, 'joint', ?, ?, ?, ?, ?)",
+        " VALUES (?, ?, ?, ?, 'joint', ?, ?, ?, ?, ?)",
         ACCOUNTS,
     )
     accounts = _ids_by_name(conn, "account")

@@ -27,6 +27,7 @@ class Account(BaseModel):
     is_liability: bool
     is_investable: bool
     active: bool
+    emoji: str | None
 
 
 class BalanceEntryCreate(BaseModel):
@@ -87,7 +88,7 @@ class BalanceEntry(BaseModel):
 @router.get("/accounts")
 def list_accounts(db: Db) -> list[Account]:
     rows = db.execute(
-        "SELECT id, name, kind, tax_treatment, owner, is_liability, is_investable, active"
+        "SELECT id, name, kind, tax_treatment, owner, is_liability, is_investable, active, emoji"
         " FROM account ORDER BY id"
     )
     return [Account(**dict(row)) for row in rows]
