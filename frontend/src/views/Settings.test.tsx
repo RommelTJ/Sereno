@@ -1,5 +1,6 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { todayIso } from '../ledger.ts'
 import {
   ACCOUNTS,
   ASSUMPTION,
@@ -166,5 +167,106 @@ describe('Data model note', () => {
     ).toBeInTheDocument()
     expect(within(note).getByText(/Never UPDATE a balance/)).toBeInTheDocument()
     expect(within(note).getByText('schema.sql')).toBeInTheDocument()
+  })
+})
+
+const postCalls = (fetchMock: ReturnType<typeof stubApi>, path: string) =>
+  fetchMock.mock.calls.filter(
+    ([input, init]) => input === path && init?.method === 'POST',
+  )
+
+describe('Editing appends new config rows', () => {
+  it('saves edited assumptions as a new row effective today', async () => {
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/assumptions': { ...ASSUMPTION, id: 2 },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Return %'), {
+      target: { value: '6.5' },
+    })
+    fireEvent.change(within(card).getByLabelText('Inflation %'), {
+      target: { value: '2.8' },
+    })
+    r['/api/assumptions'] = {
+      ...ASSUMPTION,
+      id: 2,
+      return_pct: 6.5,
+      inflation_pct: 2.8,
+    }
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('6.5%')).toBeInTheDocument()
+    expect(within(card).getByText('2.8%')).toBeInTheDocument()
+    const body = JSON.parse(
+      postCalls(fetchMock, '/api/assumptions')[0][1]?.body as string,
+    )
+    expect(body).toEqual({
+      effective_date: todayIso(),
+      return_pct: 6.5,
+      inflation_pct: 2.8,
+    })
+    expect(postCalls(fetchMock, '/api/spend-plan')).toHaveLength(0)
+  })
+
+  it('saves an edited planned spend carrying the guardrail knobs forward', async () => {
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/spend-plan': { ...SPEND_PLAN, id: 2, annual_target: 48_000 },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Spend $ / yr'), {
+      target: { value: '48,000' },
+    })
+    r['/api/spend-plan'] = { ...SPEND_PLAN, id: 2, annual_target: 48_000 }
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('$48,000 / yr')).toBeInTheDocument()
+    const body = JSON.parse(
+      postCalls(fetchMock, '/api/spend-plan')[0][1]?.body as string,
+    )
+    expect(body).toEqual({
+      effective_date: todayIso(),
+      annual_target: 48_000,
+      initial_rate: 0.0294,
+      guardrail_band: 0.2,
+    })
+    expect(postCalls(fetchMock, '/api/assumptions')).toHaveLength(0)
+  })
+
+  it('saves an edited Social Security amount for that person only', async () => {
+    const you = { ...SOCIAL_SECURITY[0], id: 3, monthly_amount: 1_550 }
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/social-security': you,
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('social-security-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('You $ / mo'), {
+      target: { value: '1,550' },
+    })
+    r['/api/social-security'] = [you, SOCIAL_SECURITY[1]]
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('$1,550/mo')).toBeInTheDocument()
+    const calls = postCalls(fetchMock, '/api/social-security')
+    expect(calls).toHaveLength(1)
+    expect(JSON.parse(calls[0][1]?.body as string)).toEqual({
+      person: 'you',
+      effective_date: todayIso(),
+      start_age: 67,
+      monthly_amount: 1_550,
+    })
   })
 })
