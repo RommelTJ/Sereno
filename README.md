@@ -135,6 +135,15 @@ The budget slice:
 - `GET /api/categories` — the category dimension with each envelope's planned
   amount for a month (`?month=YYYY-MM`, default the current month). Plans are
   effective-dated: the latest `category_plan` row on or before the month wins.
+- `POST /api/categories` — creates an envelope: inserts the `category` row
+  (name, emoji) plus its initial `category_plan` row (`effective_month`
+  defaults to the current month). A blank name or negative planned amount is
+  a 422; a name matching an active category (case-insensitive) is a 409.
+- `POST /api/categories/{id}/plan` — appends a new effective-dated plan row
+  (the append-only config pattern — revisions never update in place; the
+  latest row per month wins). New and revised envelopes flow into the
+  Safe-to-spend select, envelope bars, and budget-month math with no
+  further wiring.
 - `POST /api/expenses` — appends a spending line. `budget_month` defaults to
   the transaction's month; pass a later month to prepay. `funded_from` is
   `discretionary` or `fund` (then `fund_id` is required).
@@ -345,17 +354,22 @@ The forecast slice (the third Plan engine):
 - **Settings & data** (<http://localhost:5173/settings>) — the config
   home. Accounts & buckets lists every account's newest ledger balance
   (walking back through the months; liabilities negative in red) with
-  each fund beneath, above the Assumptions summary (return, inflation,
-  ETH growth, planned spend), the Social Security panel (You/Spouse
-  $/mo and start age), the latest year's tax parameters (LTCG ceilings,
-  NIIT, standard deduction, ordinary brackets), and the dark append-only
-  data-model note pointing at `docs/design/schema.sql`. Settings is
-  where config changes are *persisted*: saving the Assumptions or
-  Social Security cards appends new rows effective today (only configs
-  whose values actually changed are posted), the tax card's Edit
-  revises the displayed year in place, and + Add creates the next year
-  prefilled from the current one. The Forecast screen's future sliders
-  stay transient what-if overrides.
+  each fund beneath, above the Envelopes card, the Assumptions summary
+  (return, inflation, ETH growth, planned spend), the Social Security
+  panel (You/Spouse $/mo and start age), the latest year's tax
+  parameters (LTCG ceilings, NIIT, standard deduction, ordinary
+  brackets), and the dark append-only data-model note pointing at
+  `docs/design/schema.sql`. The Envelopes card manages the spending
+  categories: each envelope's emoji, name, and current planned amount
+  with a per-row Edit that appends an effective-dated plan revision,
+  and an add form (name, a curated emoji select, $ / month) that
+  creates the category with its initial plan — new envelopes appear in
+  Safe-to-spend immediately. Settings is where config changes are
+  *persisted*: saving the Assumptions or Social Security cards appends
+  new rows effective today (only configs whose values actually changed
+  are posted), the tax card's Edit revises the displayed year in place,
+  and + Add creates the next year prefilled from the current one. The
+  Forecast screen's future sliders stay transient what-if overrides.
 
 ### Tests, linters, and type checkers
 
