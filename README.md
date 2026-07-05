@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.12.1**
+**v0.13.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -333,6 +333,20 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
+v0.13.0 — Withdrawal sourcing. The second Plan engine lands: a pure,
+typed waterfall in `engine/sourcing.py` — target net spend minus
+non-portfolio income, then ETH inside the 0% LTCG headroom, taxable
+brokerage, and the age-gated 401(k), each step grossed up from basis
+and the year's brackets, solving for net spendable rather than a flat
+per-bucket rate — exposed through `GET /api/sourcing?age=&spend=`.
+The Withdrawal sourcing screen replaces its stub (see
+[Screens](#screens)): the sequencing waterfall with per-step amounts
+and tax detail, age and what-if spend inputs re-evaluated
+server-side, a shortfall banner when the gap goes unfilled, and the
+bucket-rule cards. Deliberately federal-only and one-pass in v1 (no
+state tax, no NIIT); the longevity forecast consumes this engine
+next.
+
 v0.12.1 — Bug fix: SQLite connections are now opened with
 `check_same_thread=False`, so a request's connection can be opened,
 used, and closed on different FastAPI threadpool threads. Concurrent
@@ -356,7 +370,7 @@ screen, the balances API, seed data, the append-only schema
 (migrations at startup), the typed SQLite connection module, and the
 app shell landed in earlier releases. Remaining work:
 
-1. Withdrawal sourcing engine → longevity forecast
+1. Longevity forecast (simulating with the sourcing engine)
 
 ## License
 
