@@ -8,11 +8,14 @@ import type {
   SocialSecurityInput,
   SpendPlan,
   TaxParam,
+  TaxParamBody,
+  TaxParamInput,
 } from '../api.ts'
 import {
   createAssumption,
   createSocialSecurity,
   createSpendPlan,
+  createTaxParam,
   fetchAccounts,
   fetchAssumptions,
   fetchFunds,
@@ -20,10 +23,15 @@ import {
   fetchSocialSecurity,
   fetchSpendPlan,
   fetchTaxParams,
+  updateTaxParam,
 } from '../api.ts'
 import { FieldLabel } from '../components/SpendingForm.tsx'
 import { formatUsd, todayIso } from '../ledger.ts'
-import type { AssumptionsEdit, BucketRow } from '../settings.ts'
+import type {
+  AssumptionsEdit,
+  BucketRow,
+  TaxFormValues,
+} from '../settings.ts'
 import {
   accountRows,
   assumptionsEdits,
@@ -34,6 +42,8 @@ import {
   fundRows,
   socialSecurityEdits,
   socialSecurityFormValues,
+  taxFormValues,
+  taxParamBody,
 } from '../settings.ts'
 
 interface SettingsData {
@@ -81,16 +91,26 @@ function Card({
   )
 }
 
-function EditButton({ onClick }: { onClick: () => void }) {
+function GhostButton({
+  label,
+  onClick,
+}: {
+  label: string
+  onClick: () => void
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       className="cursor-pointer rounded-[8px] border border-input-border bg-card px-3 py-1 text-[11.5px] font-semibold text-muted"
     >
-      Edit
+      {label}
     </button>
   )
+}
+
+function EditButton({ onClick }: { onClick: () => void }) {
+  return <GhostButton label="Edit" onClick={onClick} />
 }
 
 function SaveButton({
@@ -356,19 +376,154 @@ function SocialSecurityCard({
   )
 }
 
-function TaxCard({ taxParam }: { taxParam: TaxParam | null }) {
+function TaxCard({
+  taxParam,
+  onRevise,
+  onAdd,
+}: {
+  taxParam: TaxParam | null
+  onRevise: (taxYear: number, body: TaxParamBody) => Promise<void>
+  onAdd: (input: TaxParamInput) => Promise<void>
+}) {
+  const [mode, setMode] = useState<'view' | 'revise' | 'add'>('view')
+  const [saving, setSaving] = useState(false)
+  const [values, setValues] = useState(() => taxFormValues(taxParam))
+
+  const addYear = taxParam ? taxParam.tax_year + 1 : new Date().getFullYear()
+
+  const start = (nextMode: 'revise' | 'add') => {
+    setValues(taxFormValues(taxParam))
+    setMode(nextMode)
+  }
+
+  const save = async () => {
+    const body = taxParamBody(values)
+    if (!body) {
+      return
+    }
+    setSaving(true)
+    try {
+      if (mode === 'revise' && taxParam) {
+        await onRevise(taxParam.tax_year, body)
+      } else {
+        await onAdd({ tax_year: addYear, ...body })
+      }
+      setMode('view')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const set = (key: Exclude<keyof TaxFormValues, 'brackets'>) => (value: string) =>
+    setValues((current) => ({ ...current, [key]: value }))
+
+  const setBracket = (index: number, key: 'rate' | 'upto', value: string) =>
+    setValues((current) => ({
+      ...current,
+      brackets: current.brackets.map((row, i) =>
+        i === index ? { ...row, [key]: value } : row,
+      ),
+    }))
+
   return (
     <Card
       title="Tax parameters"
       hint={taxParam ? `${taxParam.tax_year} · ${taxParam.filing_status}` : undefined}
       testId="tax-card"
+      action={
+        mode === 'view' ? (
+          <div className="flex gap-2">
+            {taxParam && <EditButton onClick={() => start('revise')} />}
+            <GhostButton
+              label={`+ Add ${addYear}`}
+              onClick={() => start('add')}
+            />
+          </div>
+        ) : (
+          <SaveButton disabled={saving} onClick={() => void save()} />
+        )
+      }
     >
-      {!taxParam && (
+      {mode !== 'view' && (
+        <div className="mt-3">
+          <div className="grid grid-cols-2 gap-[11px]">
+            <EditField
+              id="tax-filing"
+              label="Filing status"
+              value={values.filingStatus}
+              onChange={set('filingStatus')}
+            />
+            <EditField
+              id="tax-state"
+              label="State treatment"
+              value={values.stateTreatment}
+              onChange={set('stateTreatment')}
+            />
+            <EditField
+              id="tax-ltcg0"
+              label="0% LTCG up to $"
+              value={values.ltcg0}
+              onChange={set('ltcg0')}
+            />
+            <EditField
+              id="tax-ltcg15"
+              label="15% → 20% at $"
+              value={values.ltcg15}
+              onChange={set('ltcg15')}
+            />
+            <EditField
+              id="tax-niit-rate"
+              label="NIIT rate %"
+              value={values.niitRate}
+              onChange={set('niitRate')}
+            />
+            <EditField
+              id="tax-niit-threshold"
+              label="NIIT over $"
+              value={values.niitThreshold}
+              onChange={set('niitThreshold')}
+            />
+            <EditField
+              id="tax-std"
+              label="Std deduction $"
+              value={values.stdDeduction}
+              onChange={set('stdDeduction')}
+            />
+          </div>
+          {values.brackets.length > 0 && (
+            <p className="mt-3 text-[11.5px] text-muted-2">
+              Ordinary brackets · blank up-to = top bracket
+            </p>
+          )}
+          {values.brackets.map((row, index) => (
+            <div
+              // Rows are positional form state; there is no stable id.
+              // eslint-disable-next-line react/no-array-index-key
+              key={index}
+              className="mt-[7px] grid grid-cols-2 gap-[11px]"
+            >
+              <EditField
+                id={`tax-bracket-rate-${index}`}
+                label={`Bracket ${index + 1} rate %`}
+                value={row.rate}
+                onChange={(value) => setBracket(index, 'rate', value)}
+              />
+              <EditField
+                id={`tax-bracket-upto-${index}`}
+                label={`Bracket ${index + 1} up to $`}
+                value={row.upto}
+                onChange={(value) => setBracket(index, 'upto', value)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      {mode === 'view' && !taxParam && (
         <p className="mt-3 text-[12.5px] leading-8 text-muted-2">
           no tax years loaded yet
         </p>
       )}
-      {taxParam && (
+      {mode === 'view' && taxParam && (
         <div className="mt-3">
           <ConfigLine
             label="0% LTCG up to"
@@ -493,6 +648,21 @@ function Settings() {
     setData((current) => (current ? { ...current, socialSecurity } : current))
   }
 
+  const refetchTaxParams = async () => {
+    const taxParams = await fetchTaxParams()
+    setData((current) => (current ? { ...current, taxParams } : current))
+  }
+
+  const reviseTaxParam = async (taxYear: number, body: TaxParamBody) => {
+    await updateTaxParam(taxYear, body)
+    await refetchTaxParams()
+  }
+
+  const addTaxParam = async (input: TaxParamInput) => {
+    await createTaxParam(input)
+    await refetchTaxParams()
+  }
+
   if (!data) {
     return <div data-testid="view-settings" />
   }
@@ -520,7 +690,11 @@ function Settings() {
           onSave={saveSocialSecurity}
         />
       </div>
-      <TaxCard taxParam={data.taxParams.at(-1) ?? null} />
+      <TaxCard
+        taxParam={data.taxParams.at(-1) ?? null}
+        onRevise={reviseTaxParam}
+        onAdd={addTaxParam}
+      />
       <DataNote />
     </div>
   )

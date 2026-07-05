@@ -11,6 +11,8 @@ import type {
   SpendPlan,
   SpendPlanInput,
   TaxBracket,
+  TaxParam,
+  TaxParamBody,
 } from './api.ts'
 import { formatUsd } from './ledger.ts'
 
@@ -205,4 +207,91 @@ export function socialSecurityEdits(
     })
   }
   return inputs
+}
+
+// Percent string ("3.8") → stored fraction (0.038), rounded so the
+// round-trip through the form never drifts a float.
+function toFraction(raw: string): number | undefined {
+  const pct = parseNumber(raw)
+  return pct == null ? undefined : Number((pct / 100).toFixed(6))
+}
+
+export interface TaxBracketValues {
+  rate: string
+  upto: string
+}
+
+export interface TaxFormValues {
+  filingStatus: string
+  ltcg0: string
+  ltcg15: string
+  niitRate: string
+  niitThreshold: string
+  stateTreatment: string
+  stdDeduction: string
+  brackets: TaxBracketValues[]
+}
+
+// Prefill from the displayed year (revising it, or seeding the next
+// year's form); a fresh database starts from the schema defaults.
+export function taxFormValues(param: TaxParam | null): TaxFormValues {
+  if (!param) {
+    return {
+      filingStatus: 'MFJ',
+      ltcg0: '',
+      ltcg15: '',
+      niitRate: '3.8',
+      niitThreshold: '',
+      stateTreatment: 'CA_ordinary',
+      stdDeduction: '',
+      brackets: [],
+    }
+  }
+  return {
+    filingStatus: param.filing_status,
+    ltcg0: String(param.ltcg_0_ceiling),
+    ltcg15: param.ltcg_15_ceiling != null ? String(param.ltcg_15_ceiling) : '',
+    niitRate: String(+(param.niit_rate * 100).toFixed(2)),
+    niitThreshold:
+      param.niit_threshold != null ? String(param.niit_threshold) : '',
+    stateTreatment: param.state_treatment,
+    stdDeduction: param.std_deduction != null ? String(param.std_deduction) : '',
+    brackets: (param.ordinary_brackets ?? []).map((bracket) => ({
+      rate: String(+(bracket.rate * 100).toFixed(2)),
+      upto: bracket.upto != null ? String(bracket.upto) : '',
+    })),
+  }
+}
+
+// The shared POST/PUT body; null while the required fields are blank.
+// Blank optionals are omitted, a blank bracket "up to" is the top
+// bracket (upto null), and bracket rows without a rate are dropped.
+export function taxParamBody(values: TaxFormValues): TaxParamBody | null {
+  const ltcg0 = parseNumber(values.ltcg0)
+  const niitRate = toFraction(values.niitRate)
+  const filingStatus = values.filingStatus.trim()
+  const stateTreatment = values.stateTreatment.trim()
+  if (ltcg0 == null || niitRate == null || !filingStatus || !stateTreatment) {
+    return null
+  }
+  const ltcg15 = parseNumber(values.ltcg15)
+  const niitThreshold = parseNumber(values.niitThreshold)
+  const stdDeduction = parseNumber(values.stdDeduction)
+  const brackets: TaxBracket[] = []
+  for (const row of values.brackets) {
+    const rate = toFraction(row.rate)
+    if (rate != null) {
+      brackets.push({ rate, upto: parseNumber(row.upto) ?? null })
+    }
+  }
+  return {
+    filing_status: filingStatus,
+    ltcg_0_ceiling: ltcg0,
+    ...(ltcg15 != null && { ltcg_15_ceiling: ltcg15 }),
+    niit_rate: niitRate,
+    ...(niitThreshold != null && { niit_threshold: niitThreshold }),
+    state_treatment: stateTreatment,
+    ...(stdDeduction != null && { std_deduction: stdDeduction }),
+    ...(brackets.length > 0 && { ordinary_brackets: brackets }),
+  }
 }

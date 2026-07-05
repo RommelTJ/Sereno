@@ -187,6 +187,24 @@ export interface SocialSecurityInput {
   monthly_amount: number
 }
 
+// The shared tax-param write body: POST adds a year (tax_year included),
+// PUT revises one in place (the year comes from the path — it's the
+// table's primary key, so a revision replaces rather than appends).
+export interface TaxParamBody {
+  filing_status: string
+  ltcg_0_ceiling: number
+  ltcg_15_ceiling?: number
+  niit_rate: number
+  niit_threshold?: number
+  state_treatment: string
+  std_deduction?: number
+  ordinary_brackets?: TaxBracket[]
+}
+
+export interface TaxParamInput extends TaxParamBody {
+  tax_year: number
+}
+
 export interface FundEntryInput {
   fund_id: number
   as_of_date: string
@@ -215,6 +233,17 @@ async function postJsonReturning<T>(path: string, body: unknown): Promise<T> {
 
 async function postJson(path: string, body: unknown): Promise<void> {
   await postJsonReturning<unknown>(path, body)
+}
+
+async function putJson(path: string, body: unknown): Promise<void> {
+  const res = await fetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(`PUT ${path} failed: ${res.status}`)
+  }
 }
 
 export const fetchAccounts = () => getJson<Account[]>('/api/accounts')
@@ -248,3 +277,7 @@ export const createSpendPlan = (input: SpendPlanInput) =>
   postJson('/api/spend-plan', input)
 export const createSocialSecurity = (input: SocialSecurityInput) =>
   postJson('/api/social-security', input)
+export const createTaxParam = (input: TaxParamInput) =>
+  postJson('/api/tax-params', input)
+export const updateTaxParam = (taxYear: number, body: TaxParamBody) =>
+  putJson(`/api/tax-params/${taxYear}`, body)
