@@ -10,7 +10,7 @@ age; a portfolio that always delivers never runs out.
 
 import pytest
 
-from sereno.engine.forecast import simulate_forecast
+from sereno.engine.forecast import SocialSecurityBenefit, simulate_forecast
 from sereno.engine.sourcing import Bucket
 
 
@@ -158,3 +158,82 @@ class TestBridge:
             buckets=[brokerage(840_000), four01k(5_000_000)],
         )
         assert result.run_out_age == 59
+
+
+class TestSocialSecurity:
+    def test_ss_income_starts_at_the_start_age(self):
+        # 1,500 + 1,400 monthly from 67 → 34,800/yr, cutting the
+        # portfolio draw from 40,000 to 5,200 that year on.
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            social_security=[
+                SocialSecurityBenefit(monthly_amount=1_500, start_age=67),
+                SocialSecurityBenefit(monthly_amount=1_400, start_age=67),
+            ],
+        )
+        age_66 = result.series[66 - 38]
+        age_67 = result.series[67 - 38]
+        age_68 = result.series[68 - 38]
+        assert age_66.ss_income == 0
+        assert age_67.ss_income == pytest.approx(34_800)
+        # 29 full-spend draws land before the 67 point is recorded...
+        assert age_67.balances[0] == pytest.approx(2_000_000 - 29 * 40_000)
+        # ...and the first SS-subsidized draw shows up at 68.
+        assert age_68.balances[0] == pytest.approx(2_000_000 - 29 * 40_000 - 5_200)
+
+    def test_each_person_starts_on_their_own_age(self):
+        result = run(
+            social_security=[
+                SocialSecurityBenefit(monthly_amount=1_500, start_age=65),
+                SocialSecurityBenefit(monthly_amount=1_400, start_age=67),
+            ],
+        )
+        assert result.series[64 - 38].ss_income == 0
+        assert result.series[65 - 38].ss_income == pytest.approx(18_000)
+        assert result.series[67 - 38].ss_income == pytest.approx(34_800)
+
+    def test_ss_covering_the_spend_prevents_a_run_out(self):
+        # 870,000 lasts exactly the 29 years to 67 (38 through 66);
+        # from then on Social Security alone covers the 30,000 spend.
+        result = run(
+            spend=30_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(870_000)],
+            social_security=[
+                SocialSecurityBenefit(monthly_amount=1_500, start_age=67),
+                SocialSecurityBenefit(monthly_amount=1_400, start_age=67),
+            ],
+        )
+        assert result.run_out_age is None
+        assert result.balance_at_90 == pytest.approx(0)
+
+
+class TestStaking:
+    def test_staking_income_flows_while_eth_stays_meaningful(self):
+        # ETH above 50,000 stakes 3,000/yr, so the draw is 37,000 —
+        # until the stake is spent below the threshold at age 40.
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[eth(100_000), brokerage(1_000_000)],
+        )
+        assert result.series[39 - 38].balances[0] == pytest.approx(100_000 - 37_000)
+        assert result.series[40 - 38].balances[0] == pytest.approx(100_000 - 2 * 37_000)
+        # At 40 the 26,000 stake is under the threshold: the full
+        # 40,000 need drains ETH and takes 14,000 from the brokerage.
+        assert result.series[41 - 38].balances == (
+            pytest.approx(0),
+            pytest.approx(1_000_000 - 14_000),
+        )
+
+    def test_staking_needs_strictly_more_than_the_threshold(self):
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[eth(50_000), brokerage(1_000_000)],
+        )
+        # No staking at exactly 50,000: the first draw is the full
+        # 40,000, not 37,000.
+        assert result.series[39 - 38].balances[0] == pytest.approx(10_000)
