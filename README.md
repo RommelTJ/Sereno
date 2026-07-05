@@ -1,6 +1,6 @@
 # Sereno
 
-**v0.11.0**
+**v0.12.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -296,23 +296,23 @@ docker compose run --rm --no-deps frontend npm test
 
 ## Status
 
-v0.11.0 — Planning config. The four config tables now have typed
-endpoints — assumptions, spend plan, and Social Security resolve the
-latest effective-dated row on or before today (per person for Social
-Security) and only ever append; tax parameters are per-year rows with
-POST to load a year and PUT to reconcile it against the CPA's numbers.
-The Settings & data screen replaces its stub (see
-[Screens](#screens)): accounts & buckets with live balances, editable
-Assumptions and Social Security cards that append dated rows, the
-tax-parameter editor, and the append-only data-model note. This gives
-the three Plan engines one tested input source. The Dashboard v2
-landing view, the Funds & goals screen, the Safe-to-spend screen, the
-budget API, the Ledger entries screen, the balances API, seed data,
-the append-only schema (migrations at startup), the typed SQLite
-connection module, and the app shell landed in earlier releases.
-Remaining work:
+v0.12.0 — Guardrails. The first Plan engine lands: a pure, typed
+Guyton-Klinger module in `engine/guardrails.py` (the ±band around the
+stored at-retirement rate is the trigger, the ~10% change is the
+response) exposed through `GET /api/guardrails`, which evaluates the
+plan's annual target — or a `?spend=` what-if — against the latest
+month's investable total. The Guardrails screen replaces its stub
+(see [Screens](#screens)): KPIs, the three-zone Cut / Hold / Raise
+band with a marker at the current rate, the recommendation banner,
+band-derived spend slider, and raise/cut trigger cards; the
+Dashboard's Spend guardrail card now reads the same evaluation live.
+Planning config, the Dashboard v2 landing view, the Funds & goals
+screen, the Safe-to-spend screen, the budget API, the Ledger entries
+screen, the balances API, seed data, the append-only schema
+(migrations at startup), the typed SQLite connection module, and the
+app shell landed in earlier releases. Remaining work:
 
-1. Guardrails → withdrawal sourcing engine → longevity forecast
+1. Withdrawal sourcing engine → longevity forecast
 
 ## License
 
