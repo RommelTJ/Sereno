@@ -19,7 +19,7 @@ function App() {
           <Sidebar />
           <div className="flex min-w-0 flex-1 flex-col">
             <Header />
-            <main className="w-full max-w-[1180px] px-9 pt-[30px] pb-[60px]">
+            <main className="mx-auto w-full max-w-[1180px] px-4 pt-[30px] pb-[60px] sm:px-9">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/ledger" element={<Ledger />} />

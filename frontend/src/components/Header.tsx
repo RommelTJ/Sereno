@@ -9,7 +9,7 @@ function Header() {
   const { netWorth } = useNetWorth()
 
   return (
-    <header className="sticky top-0 z-10 border-b border-card-border bg-header px-9 py-4">
+    <header className="sticky top-0 z-10 border-b border-card-border bg-header px-4 py-4 sm:px-9">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[21px] font-bold">{item?.title ?? 'Sereno'}</h1>
