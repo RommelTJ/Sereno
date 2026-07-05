@@ -63,6 +63,7 @@ class TestGetAccounts:
                 "is_liability": False,
                 "is_investable": True,
                 "active": True,
+                "emoji": None,
             },
             {
                 "id": mortgage_id,
@@ -73,8 +74,20 @@ class TestGetAccounts:
                 "is_liability": True,
                 "is_investable": False,
                 "active": True,
+                "emoji": None,
             },
         ]
+
+    def test_returns_the_account_emoji(self, client):
+        eth_id = insert_account("Ethereum", "eth", tax_treatment="LTCG")
+        conn = connect()
+        try:
+            conn.execute("UPDATE account SET emoji = '⚡' WHERE id = ?", (eth_id,))
+            conn.commit()
+        finally:
+            conn.close()
+        (account,) = client.get("/api/accounts").json()
+        assert account["emoji"] == "⚡"
 
 
 class TestPostBalanceEntries:
