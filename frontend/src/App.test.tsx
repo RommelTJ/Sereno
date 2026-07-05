@@ -17,6 +17,7 @@ beforeEach(() => {
       activity: [],
     },
     '/api/funds': [],
+    '/api/guardrails': null,
   })
 })
 
