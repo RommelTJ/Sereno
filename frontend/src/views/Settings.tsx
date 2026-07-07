@@ -35,6 +35,7 @@ import {
 } from '../api.ts'
 import { FieldLabel } from '../components/SpendingForm.tsx'
 import { formatUsd, todayIso } from '../ledger.ts'
+import { useNetWorth } from '../netWorth.ts'
 import type {
   AccountRow,
   AssumptionsEdit,
@@ -915,6 +916,7 @@ function DataNote() {
 
 function Settings() {
   const [data, setData] = useState<SettingsData | null>(null)
+  const { refresh } = useNetWorth()
 
   useEffect(() => {
     void Promise.all([
@@ -948,9 +950,11 @@ function Settings() {
   }, [])
 
   const refetchAccounts = async () => {
+    // Account changes move net worth, so the header readout refreshes too.
     const [accounts, ledger] = await Promise.all([
       fetchAccounts(),
       fetchLedger(),
+      refresh(),
     ])
     setData((current) => (current ? { ...current, accounts, ledger } : current))
   }
