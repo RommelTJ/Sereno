@@ -5,8 +5,10 @@ import type {
   AccountInput,
   Assumption,
   AssumptionInput,
+  Category,
   CategoryInput,
   CategoryPlanInput,
+  CategoryUpdate,
   LedgerMonth,
   SocialSecurityEntry,
   SocialSecurityInput,
@@ -173,10 +175,33 @@ export function envelopeInput(values: {
   return input
 }
 
-// Build the POST /api/categories/{id}/plan body, or null while invalid.
-export function envelopePlanInput(planned: string): CategoryPlanInput | null {
-  const value = parsePlanned(planned)
-  return value == null ? null : { planned: value }
+export interface EnvelopeEdit {
+  update?: CategoryUpdate
+  plan?: CategoryPlanInput
+}
+
+// Build the row-edit saves — one request per thing that actually changed,
+// like assumptionsEdits: a name or emoji change PUTs the category, a
+// planned change appends a plan revision. Null while the form is invalid
+// (blank name, or a planned amount that isn't a non-negative number).
+export function envelopeEdits(
+  values: { name: string; emoji: string; planned: string },
+  category: Category,
+): EnvelopeEdit | null {
+  const name = values.name.trim()
+  const planned = parsePlanned(values.planned)
+  if (name === '' || planned == null) {
+    return null
+  }
+  const edit: EnvelopeEdit = {}
+  const emoji = values.emoji === '' ? null : values.emoji
+  if (name !== category.name || emoji !== (category.emoji ?? null)) {
+    edit.update = { name, emoji }
+  }
+  if (planned !== category.planned) {
+    edit.plan = { planned }
+  }
+  return edit
 }
 
 // 7 → "7.0%" — for values stored in percent units (return_pct, …).
