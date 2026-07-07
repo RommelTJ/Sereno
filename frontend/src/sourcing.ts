@@ -2,8 +2,20 @@
 // math comes from GET /api/sourcing — these helpers only turn the
 // engine's waterfall into row copy.
 
-import type { SourcingStep } from './api.ts'
+import type { Account, SourcingStep } from './api.ts'
 import { formatUsd } from './ledger.ts'
+
+// Sourcing — and the forecast, which reuses its buckets — draws only
+// from active assets with a withdrawal priority; without one, the
+// engines stay null whatever the config and balances say.
+export function hasWithdrawalBuckets(accounts: Account[]): boolean {
+  return accounts.some(
+    (account) =>
+      account.active &&
+      !account.is_liability &&
+      account.withdrawal_priority != null,
+  )
+}
 
 const MARKERS = ['①', '②', '③']
 

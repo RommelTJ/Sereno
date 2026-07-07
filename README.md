@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.2.0**
+**v1.3.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -119,15 +119,24 @@ Interactive docs at <http://localhost:8000/docs>.
 The balances slice:
 
 - `GET /api/accounts` — the account dimension rows (name, emoji, kind,
-  liability and investable flags; inactive accounts stay listed with
-  `active: false` so history keeps its labels).
+  tax treatment, liability and investable flags, withdrawal priority,
+  and access age; inactive accounts stay listed with `active: false` so
+  history keeps its labels).
 - `POST /api/accounts` — creates an asset or liability: inserts the
-  `account` row (name, emoji, `is_liability`; kind `other`, net-worth-only)
-  plus an initial `balance_entry` dated today. The initial value is set
-  here only — later values go through the ledger. A blank name or negative
-  initial value is a 422; a name matching an active account
-  (case-insensitive) is a 409. Liabilities are stored positive and
+  `account` row (name, emoji, `is_liability`; kind `other`, net-worth-only
+  until classified) plus an initial `balance_entry` dated today. The
+  initial value is set here only — later values go through the ledger. A
+  blank name or negative initial value is a 422; a name matching an active
+  account (case-insensitive) is a 409. Liabilities are stored positive and
   displayed negative.
+- `PUT /api/accounts/{id}` — classifies an account for the planners:
+  kind, tax treatment, the investable flag, withdrawal priority (1 ETH,
+  2 brokerage, 3 tax-advantaged), and access age, revised in place — the
+  account row is a dimension, like an envelope rename, so history is
+  unaffected. This is what lets an account created through the UI feed
+  Guardrails (investable), Sourcing, and Forecast (priority buckets). A
+  liability can never be investable or hold a priority; unknown kinds or
+  treatments, out-of-range priorities, and negative access ages are 422s.
 - `POST /api/accounts/{id}/deactivate` — soft remove: the account drops out
   of the pickers and stops carrying forward, but the months it was really
   entered keep counting in net worth and its name frees up for reuse. No
@@ -346,7 +355,10 @@ The forecast slice (the third Plan engine):
   trigger cards naming the portfolio levels where the next rule fires.
   The slider's bounds derive from the band edges, so both rails are
   always reachable whatever the portfolio and plan sizes are. Until a
-  spend plan and balances exist, the view points at Settings & data.
+  spend plan and balances exist, the view points at Settings & data —
+  and when no account is marked investable at all, the empty state says
+  so and points at the account Edit instead, since balances alone could
+  never light it up.
 - **Withdrawal sourcing** (<http://localhost:5173/withdrawals>) — the
   "where does the money come from?" view, every figure from
   `GET /api/sourcing`. Left, the sequencing waterfall: target net
@@ -361,7 +373,9 @@ The forecast slice (the third Plan engine):
   birthdate lives in the schema). Right, the per-bucket rule cards
   and the engine rule: never 0.04 × balance per bucket; solve for
   net spendable. Until tax parameters, a spend target, and balances
-  exist, the view points at Settings & data.
+  exist, the view points at Settings & data — and when no account has
+  a withdrawal priority, the empty state points at the account Edit
+  instead.
 - **Longevity forecast** (<http://localhost:5173/forecast>) — the
   "does the money last?" view, every figure from `GET /api/forecast`.
   The verdict hero ("You don't run out." / "Lasts to age N", red only
@@ -381,16 +395,24 @@ The forecast slice (the third Plan engine):
   slider's floor widens so the resolved spend is always reachable.
   All of it is transient what-if: Settings owns config writes. Until
   a tax year, assumptions, a spend target, and balances exist, the
-  view points at Settings & data.
+  view points at Settings & data — and when no account has a
+  withdrawal priority, the empty state points at the account Edit
+  instead.
 - **Settings & data** (<http://localhost:5173/settings>) — the config
   home. The Assets and Liabilities cards list every active account's
   emoji, name, and newest ledger balance (walking back through the
   months; liabilities negative in red), each with an add form (name, a
   curated emoji select, and the initial value — later values go through
   the Ledger) and a per-row Deactivate that soft-removes the account
-  while its entered history keeps counting. Adding or deactivating an
-  account refreshes the header net-worth readout immediately, like a
-  Ledger save. Fund rows no longer appear
+  while its entered history keeps counting. Asset rows also carry an
+  Edit that opens the classification form — kind, tax treatment, an
+  Investable checkbox, the withdrawal-priority select (1 ETH /
+  2 Brokerage / 3 Tax-advantaged), and an access age for retirement
+  kinds — saved in place via `PUT /api/accounts/{id}`, so accounts
+  created here can feed Guardrails, Withdrawal sourcing, and the
+  Longevity forecast; liabilities are never classified. Adding or
+  deactivating an account refreshes the header net-worth readout
+  immediately, like a Ledger save. Fund rows no longer appear
   on Settings — funds live on Funds & Goals, where their targets and
   progress already are. Below them sit the Envelopes card, the
   Assumptions summary
@@ -433,6 +455,20 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.3.0 — Account classification. Accounts created through the UI can
+finally participate in the planner: `PUT /api/accounts/{id}` sets
+kind, tax treatment, the investable flag, withdrawal priority, and
+access age in place (a liability can never be investable or
+prioritized), and the Settings Assets rows gain a per-row Edit with
+those fields, prefilled from the account. The three Plan pages'
+empty states now fetch the accounts and tell apart "config and
+balances missing" from "no accounts classified", pointing at the
+account Edit instead of Ledger entries when classification is the
+real blocker — on a fresh install every account used to sit at the
+net-worth-only defaults, leaving Guardrails, Withdrawal sourcing,
+and the Longevity forecast permanently null with copy that sent the
+user to enter more balances.
 
 v1.2.0 — Ledger backdating. The balance form gains an "As of" date
 input (default today), passed through to `POST /api/balance-entries`

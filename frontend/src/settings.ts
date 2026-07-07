@@ -2,6 +2,7 @@
 
 import type {
   Account,
+  AccountClassificationInput,
   AccountInput,
   Assumption,
   AssumptionInput,
@@ -26,6 +27,7 @@ export interface AccountRow {
   emoji: string
   value: string
   negative: boolean
+  account: Account
 }
 
 // One Assets or Liabilities section: the active accounts on that side.
@@ -57,8 +59,83 @@ export function accountRows(
         emoji: account.emoji ?? '💰',
         value: formatUsd(isLiability ? -balance : balance),
         negative: isLiability,
+        account,
       }
     })
+}
+
+// The classification selects mirror the backend's account enums —
+// schema.sql's kind and tax_treatment comments and the sourcing engine's
+// withdrawal buckets. Mortgage is absent: liabilities are never classified.
+export const KIND_OPTIONS = [
+  { value: 'other', label: 'Other' },
+  { value: 'eth', label: 'Ethereum' },
+  { value: 'brokerage_fund', label: 'Brokerage fund' },
+  { value: '401k', label: '401(k)' },
+  { value: 'roth', label: 'Roth' },
+  { value: 'hsa', label: 'HSA' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'cash_plus', label: 'Cash Plus' },
+  { value: 'home', label: 'Home' },
+  { value: 'car', label: 'Car' },
+]
+
+export const TAX_TREATMENT_OPTIONS = [
+  { value: 'NONE', label: 'None' },
+  { value: 'LTCG', label: 'Long-term gains' },
+  { value: 'ORDINARY', label: 'Ordinary income' },
+  { value: 'TAX_FREE', label: 'Tax-free' },
+]
+
+export const PRIORITY_OPTIONS = [
+  { value: '', label: '—' },
+  { value: '1', label: '1 — ETH' },
+  { value: '2', label: '2 — Brokerage' },
+  { value: '3', label: '3 — Tax-advantaged' },
+]
+
+export interface AccountClassificationValues {
+  kind: string
+  taxTreatment: string
+  investable: boolean
+  priority: string
+  accessAge: string
+}
+
+export function classificationValues(
+  account: Account,
+): AccountClassificationValues {
+  return {
+    kind: account.kind,
+    taxTreatment: account.tax_treatment,
+    investable: account.is_investable,
+    priority:
+      account.withdrawal_priority != null
+        ? String(account.withdrawal_priority)
+        : '',
+    accessAge: account.access_age != null ? String(account.access_age) : '',
+  }
+}
+
+// Build the PUT /api/accounts/{id} body, or null while the form is invalid
+// (an access age that isn't a non-negative number). Blank means
+// unrestricted access / no withdrawal priority.
+export function classificationInput(
+  values: AccountClassificationValues,
+): AccountClassificationInput | null {
+  const accessAge =
+    values.accessAge.trim() === '' ? null : parsePlanned(values.accessAge)
+  if (accessAge === undefined) {
+    return null
+  }
+  return {
+    kind: values.kind,
+    tax_treatment: values.taxTreatment,
+    is_investable: values.investable,
+    withdrawal_priority:
+      values.priority === '' ? null : Number(values.priority),
+    access_age: accessAge,
+  }
 }
 
 // The curated emoji choices for the account add forms — an asset- and

@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
-import type { Forecast as ForecastData, ForecastOverrides } from '../api.ts'
-import { fetchForecast } from '../api.ts'
+import type {
+  Account,
+  Forecast as ForecastData,
+  ForecastOverrides,
+} from '../api.ts'
+import { fetchAccounts, fetchForecast } from '../api.ts'
 import type { ChartColumn, SensitivityRowCopy } from '../forecast.ts'
 import {
   bridgeCopy,
@@ -11,6 +15,7 @@ import {
   verdict,
 } from '../forecast.ts'
 import { formatUsd } from '../ledger.ts'
+import { hasWithdrawalBuckets } from '../sourcing.ts'
 
 function BarColumn({ column }: { column: ChartColumn }) {
   return (
@@ -132,9 +137,11 @@ function SsField({
 
 function Forecast() {
   const [forecast, setForecast] = useState<ForecastData | null>()
+  const [accounts, setAccounts] = useState<Account[]>()
   const [overrides, setOverrides] = useState<ForecastOverrides>({})
 
   useEffect(() => {
+    void fetchAccounts().then(setAccounts)
     void fetchForecast().then(setForecast)
   }, [])
 
@@ -144,7 +151,7 @@ function Forecast() {
     void fetchForecast(next).then(setForecast)
   }
 
-  if (forecast === undefined) {
+  if (forecast === undefined || accounts === undefined) {
     return <div data-testid="view-forecast" className="max-w-[1000px]" />
   }
 
@@ -155,10 +162,21 @@ function Forecast() {
           data-testid="forecast-empty"
           className="rounded-card border border-card-border bg-card p-[26px] text-[13.5px] text-muted"
         >
-          The longevity forecast needs the year's tax parameters, return and
-          inflation assumptions, a spend target, and at least one balance to
-          simulate. Add the config under Settings &amp; data, then enter
-          balances in Ledger entries.
+          {hasWithdrawalBuckets(accounts) ? (
+            <>
+              The longevity forecast needs the year's tax parameters, return
+              and inflation assumptions, a spend target, and at least one
+              balance to simulate. Add the config under Settings &amp; data,
+              then enter balances in Ledger entries.
+            </>
+          ) : (
+            <>
+              No accounts have a withdrawal priority yet, so there are no
+              buckets to simulate. Use Edit on each investment account under
+              Settings &amp; data to set its kind, investable flag, and
+              withdrawal priority.
+            </>
+          )}
         </div>
       </div>
     )

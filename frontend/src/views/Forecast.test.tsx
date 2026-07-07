@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { FORECAST } from '../test/fixtures.ts'
+import {
+  ACCOUNTS,
+  FORECAST,
+  UNCLASSIFIED_ACCOUNTS,
+} from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import Forecast from './Forecast.tsx'
 
@@ -21,7 +25,7 @@ const FORECAST_BROKEN_BRIDGE = {
 }
 
 beforeEach(() => {
-  stubApi({ '/api/forecast': FORECAST })
+  stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
 })
 
 describe('verdict hero', () => {
@@ -36,7 +40,7 @@ describe('verdict hero', () => {
   })
 
   it('names the last funded age when the money runs out', async () => {
-    stubApi({ '/api/forecast': FORECAST_RUNS_OUT })
+    stubApi({ '/api/forecast': FORECAST_RUNS_OUT, '/api/accounts': ACCOUNTS })
     render(<Forecast />)
 
     const hero = await screen.findByTestId('forecast-verdict')
@@ -54,7 +58,10 @@ describe('bridge card', () => {
   })
 
   it('reports how long the taxable buckets last when they break early', async () => {
-    stubApi({ '/api/forecast': FORECAST_BROKEN_BRIDGE })
+    stubApi({
+      '/api/forecast': FORECAST_BROKEN_BRIDGE,
+      '/api/accounts': ACCOUNTS,
+    })
     render(<Forecast />)
 
     const bridge = await screen.findByTestId('forecast-bridge')
@@ -124,7 +131,7 @@ describe('sensitivity table', () => {
 
 describe('assumption controls', () => {
   it('loads without overrides', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-verdict')
@@ -140,7 +147,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if spend level', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-spend')
 
@@ -150,7 +157,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if return', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-return')
     expect(slider).toHaveAttribute('min', '3')
@@ -163,7 +170,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if inflation', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-inflation')
     expect(slider).toHaveAttribute('min', '1')
@@ -175,7 +182,7 @@ describe('assumption controls', () => {
   })
 
   it('accumulates overrides across controls', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
     render(<Forecast />)
     const spend = await screen.findByTestId('forecast-spend')
     const inflation = screen.getByTestId('forecast-inflation')
@@ -197,7 +204,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches when a Social Security figure changes', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
     render(<Forecast />)
     const you = await screen.findByTestId('forecast-ss-you')
 
@@ -221,13 +228,23 @@ describe('assumption controls', () => {
 
 describe('empty state', () => {
   it('points at Settings until config and balances exist', async () => {
-    stubApi({ '/api/forecast': null })
+    stubApi({ '/api/forecast': null, '/api/accounts': ACCOUNTS })
     render(<Forecast />)
 
     const empty = await screen.findByTestId('forecast-empty')
     expect(empty).toHaveTextContent(/tax parameters/i)
     expect(empty).toHaveTextContent(/assumptions/i)
     expect(screen.queryByTestId('forecast-chart')).not.toBeInTheDocument()
+  })
+
+  it('points at account classification when no priorities are set', async () => {
+    stubApi({ '/api/forecast': null, '/api/accounts': UNCLASSIFIED_ACCOUNTS })
+    render(<Forecast />)
+
+    const empty = await screen.findByTestId('forecast-empty')
+    expect(empty).toHaveTextContent(/withdrawal priority/i)
+    expect(empty).toHaveTextContent(/Settings & data/)
+    expect(empty).not.toHaveTextContent(/Ledger entries/)
   })
 })
 

@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { markerLeftPct } from '../guardrails.ts'
-import { GUARDRAILS } from '../test/fixtures.ts'
+import {
+  ACCOUNTS,
+  GUARDRAILS,
+  UNCLASSIFIED_ACCOUNTS,
+} from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import Guardrails from './Guardrails.tsx'
 
@@ -17,7 +21,7 @@ const GUARDRAILS_AT_60K = {
 }
 
 beforeEach(() => {
-  stubApi({ '/api/guardrails': GUARDRAILS })
+  stubApi({ '/api/guardrails': GUARDRAILS, '/api/accounts': ACCOUNTS })
 })
 
 describe('KPI row', () => {
@@ -99,7 +103,10 @@ describe('spend slider', () => {
   })
 
   it('refetches the evaluation at the dragged spend level', async () => {
-    const routes: Record<string, unknown> = { '/api/guardrails': GUARDRAILS }
+    const routes: Record<string, unknown> = {
+      '/api/guardrails': GUARDRAILS,
+      '/api/accounts': ACCOUNTS,
+    }
     const fetchMock = stubApi(routes)
     render(<Guardrails />)
     const slider = await screen.findByTestId('guardrails-slider')
@@ -123,12 +130,35 @@ describe('spend slider', () => {
 
 describe('empty state', () => {
   it('points at Settings until a plan and balances exist', async () => {
-    stubApi({ '/api/guardrails': null })
+    stubApi({ '/api/guardrails': null, '/api/accounts': ACCOUNTS })
     render(<Guardrails />)
 
     const empty = await screen.findByTestId('guardrails-empty')
     expect(empty).toHaveTextContent(/spend plan/i)
     expect(screen.queryByTestId('guardrails-rate')).not.toBeInTheDocument()
+  })
+
+  it('points at account classification when nothing is investable', async () => {
+    stubApi({
+      '/api/guardrails': null,
+      '/api/accounts': UNCLASSIFIED_ACCOUNTS,
+    })
+    render(<Guardrails />)
+
+    const empty = await screen.findByTestId('guardrails-empty')
+    expect(empty).toHaveTextContent(/marked investable/i)
+    expect(empty).toHaveTextContent(/Settings & data/)
+    expect(empty).not.toHaveTextContent(/Ledger entries/)
+  })
+
+  it('ignores inactive accounts when looking for an investable one', async () => {
+    const inactive = ACCOUNTS.map((account) => ({ ...account, active: false }))
+    stubApi({ '/api/guardrails': null, '/api/accounts': inactive })
+    render(<Guardrails />)
+
+    expect(await screen.findByTestId('guardrails-empty')).toHaveTextContent(
+      /marked investable/i,
+    )
   })
 })
 

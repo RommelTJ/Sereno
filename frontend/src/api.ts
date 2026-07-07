@@ -11,6 +11,8 @@ export interface Account {
   owner: string | null
   is_liability: boolean
   is_investable: boolean
+  withdrawal_priority: number | null
+  access_age: number | null
   active: boolean
   emoji: string | null
 }
@@ -56,6 +58,19 @@ export interface AccountInput {
   emoji?: string
   is_liability: boolean
   initial_value: number
+}
+
+// PUT /api/accounts/{id} classifies an account for the planners — kind,
+// tax treatment, the investable flag, withdrawal priority (1 ETH,
+// 2 brokerage, 3 tax-advantaged), and access age — revised in place:
+// dimension metadata, not an effective-dated fact. A liability can never
+// be investable or hold a priority (422).
+export interface AccountClassificationInput {
+  kind: string
+  tax_treatment: string
+  is_investable: boolean
+  withdrawal_priority: number | null
+  access_age: number | null
 }
 
 // GET /api/categories: the category dimension with each envelope's planned
@@ -424,6 +439,10 @@ export const fetchTaxParams = () => getJson<TaxParam[]>('/api/tax-params')
 
 export const createAccount = (input: AccountInput) =>
   postJsonReturning<Account>('/api/accounts', input)
+export const updateAccount = (
+  accountId: number,
+  input: AccountClassificationInput,
+) => putJson(`/api/accounts/${accountId}`, input)
 export const deactivateAccount = (accountId: number) =>
   postJson(`/api/accounts/${accountId}/deactivate`, {})
 export const createBalanceEntry = (input: BalanceEntryInput) =>

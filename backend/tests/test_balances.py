@@ -22,13 +22,25 @@ def insert_account(
     owner=None,
     is_liability=0,
     is_investable=0,
+    withdrawal_priority=None,
+    access_age=None,
 ):
     conn = connect()
     try:
         cursor = conn.execute(
-            "INSERT INTO account (name, kind, tax_treatment, owner, is_liability, is_investable)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            (name, kind, tax_treatment, owner, is_liability, is_investable),
+            "INSERT INTO account (name, kind, tax_treatment, owner, is_liability, is_investable,"
+            " withdrawal_priority, access_age)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                name,
+                kind,
+                tax_treatment,
+                owner,
+                is_liability,
+                is_investable,
+                withdrawal_priority,
+                access_age,
+            ),
         )
         conn.commit()
         return cursor.lastrowid
@@ -64,6 +76,8 @@ class TestGetAccounts:
                 "owner": None,
                 "is_liability": False,
                 "is_investable": True,
+                "withdrawal_priority": None,
+                "access_age": None,
                 "active": True,
                 "emoji": None,
             },
@@ -75,10 +89,25 @@ class TestGetAccounts:
                 "owner": None,
                 "is_liability": True,
                 "is_investable": False,
+                "withdrawal_priority": None,
+                "access_age": None,
                 "active": True,
                 "emoji": None,
             },
         ]
+
+    def test_returns_the_planner_classification_columns(self, client):
+        insert_account(
+            "Retirement",
+            "401k",
+            tax_treatment="ORDINARY",
+            is_investable=1,
+            withdrawal_priority=3,
+            access_age=59.5,
+        )
+        (account,) = client.get("/api/accounts").json()
+        assert account["withdrawal_priority"] == 3
+        assert account["access_age"] == 59.5
 
     def test_returns_the_account_emoji(self, client):
         eth_id = insert_account("Ethereum", "eth", tax_treatment="LTCG")
@@ -106,6 +135,8 @@ class TestPostAccounts:
         assert body["kind"] == "other"
         assert body["is_liability"] is False
         assert body["is_investable"] is False
+        assert body["withdrawal_priority"] is None
+        assert body["access_age"] is None
         assert body["active"] is True
         entries = query(
             "SELECT as_of_date, balance_usd, source FROM balance_entry WHERE account_id = ?",
@@ -203,6 +234,131 @@ class TestDeactivateAccount:
         client.post(f"/api/accounts/{created['id']}/deactivate")
         response = client.post("/api/accounts", json={"name": "Robinhood", "initial_value": 200})
         assert response.status_code == 201
+
+
+class TestUpdateAccount:
+    CLASSIFICATION = {
+        "kind": "eth",
+        "tax_treatment": "LTCG",
+        "is_investable": True,
+        "withdrawal_priority": 1,
+        "access_age": None,
+    }
+
+    def create(self, client, name, **extra):
+        response = client.post("/api/accounts", json={"name": name, "initial_value": 100, **extra})
+        assert response.status_code == 201
+        return response.json()
+
+    def test_classifies_an_account_for_the_planners(self, client):
+        created = self.create(client, "Coinbase ETH")
+        response = client.put(f"/api/accounts/{created['id']}", json=self.CLASSIFICATION)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["kind"] == "eth"
+        assert body["tax_treatment"] == "LTCG"
+        assert body["is_investable"] is True
+        assert body["withdrawal_priority"] == 1
+        assert body["access_age"] is None
+        (account,) = client.get("/api/accounts").json()
+        assert account["kind"] == "eth"
+        assert account["is_investable"] is True
+        assert account["withdrawal_priority"] == 1
+
+    def test_classifies_a_retirement_account_with_an_access_age(self, client):
+        created = self.create(client, "Fidelity 401k")
+        response = client.put(
+            f"/api/accounts/{created['id']}",
+            json={
+                "kind": "401k",
+                "tax_treatment": "ORDINARY",
+                "is_investable": True,
+                "withdrawal_priority": 3,
+                "access_age": 59.5,
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["access_age"] == 59.5
+        (row,) = query(
+            "SELECT withdrawal_priority, access_age FROM account WHERE id = ?", created["id"]
+        )
+        assert row == {"withdrawal_priority": 3, "access_age": 59.5}
+
+    def test_classification_can_be_cleared_back_to_net_worth_only(self, client):
+        created = self.create(client, "Coinbase ETH")
+        classified = client.put(f"/api/accounts/{created['id']}", json=self.CLASSIFICATION)
+        assert classified.status_code == 200
+        response = client.put(
+            f"/api/accounts/{created['id']}",
+            json={
+                "kind": "other",
+                "tax_treatment": "NONE",
+                "is_investable": False,
+                "withdrawal_priority": None,
+                "access_age": None,
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["is_investable"] is False
+        assert body["withdrawal_priority"] is None
+
+    def test_unknown_account_returns_404(self, client):
+        response = client.put("/api/accounts/999", json=self.CLASSIFICATION)
+        assert response.status_code == 404
+        assert response.json()["detail"] == "account not found"
+
+    def test_unknown_kind_is_rejected(self, client):
+        created = self.create(client, "Robinhood")
+        response = client.put(
+            f"/api/accounts/{created['id']}", json={**self.CLASSIFICATION, "kind": "stocks"}
+        )
+        assert response.status_code == 422
+
+    def test_unknown_tax_treatment_is_rejected(self, client):
+        created = self.create(client, "Robinhood")
+        response = client.put(
+            f"/api/accounts/{created['id']}", json={**self.CLASSIFICATION, "tax_treatment": "STCG"}
+        )
+        assert response.status_code == 422
+
+    def test_out_of_range_withdrawal_priority_is_rejected(self, client):
+        created = self.create(client, "Robinhood")
+        for priority in (0, 4):
+            response = client.put(
+                f"/api/accounts/{created['id']}",
+                json={**self.CLASSIFICATION, "withdrawal_priority": priority},
+            )
+            assert response.status_code == 422
+
+    def test_negative_access_age_is_rejected(self, client):
+        created = self.create(client, "Robinhood")
+        response = client.put(
+            f"/api/accounts/{created['id']}", json={**self.CLASSIFICATION, "access_age": -1}
+        )
+        assert response.status_code == 422
+
+    def test_a_liability_cannot_join_the_portfolio(self, client):
+        # An investable liability would add its positive stored balance to
+        # v_net_worth's investable sum, and a prioritized one would enter the
+        # withdrawal buckets — both nonsense for money that is owed.
+        created = self.create(client, "Mortgage", is_liability=True)
+        base = {
+            "kind": "mortgage",
+            "tax_treatment": "NONE",
+            "is_investable": False,
+            "withdrawal_priority": None,
+            "access_age": None,
+        }
+        assert client.put(f"/api/accounts/{created['id']}", json=base).status_code == 200
+        investable = client.put(
+            f"/api/accounts/{created['id']}", json={**base, "is_investable": True}
+        )
+        assert investable.status_code == 422
+        prioritized = client.put(
+            f"/api/accounts/{created['id']}", json={**base, "withdrawal_priority": 2}
+        )
+        assert prioritized.status_code == 422
 
 
 class TestPostBalanceEntries:

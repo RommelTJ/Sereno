@@ -4,9 +4,17 @@
 // copy. The Zone type lives here so the api layer and both views share
 // one definition.
 
+import type { Account } from './api.ts'
 import { formatUsd } from './ledger.ts'
 
 export type Zone = 'cut' | 'hold' | 'raise'
+
+// The engine's null can mean missing config/balances or an empty
+// portfolio; the accounts tell those apart. With no active investable
+// account, no amount of config or balances lights Guardrails up.
+export function hasInvestableAccount(accounts: Account[]): boolean {
+  return accounts.some((account) => account.active && account.is_investable)
+}
 
 // "0.0294" → "2.94%" — two decimals, so a rate near a rail never displays
 // as equal to it while the zone says otherwise.

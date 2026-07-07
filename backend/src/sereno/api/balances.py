@@ -6,7 +6,7 @@ All reads go through the SQL views (v_account_monthly, v_net_worth) so the
 
 import sqlite3
 from datetime import date, datetime
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, StringConstraints, model_validator
@@ -17,6 +17,11 @@ router = APIRouter()
 
 Db = Annotated[sqlite3.Connection, Depends(get_db)]
 
+_ACCOUNT_COLUMNS = (
+    "id, name, kind, tax_treatment, owner, is_liability, is_investable,"
+    " withdrawal_priority, access_age, active, emoji"
+)
+
 
 class Account(BaseModel):
     id: int
@@ -26,6 +31,8 @@ class Account(BaseModel):
     owner: str | None
     is_liability: bool
     is_investable: bool
+    withdrawal_priority: int | None
+    access_age: float | None
     active: bool
     emoji: str | None
 
@@ -39,6 +46,38 @@ class AccountCreate(BaseModel):
     emoji: str | None = None
     is_liability: bool = False
     initial_value: float = Field(ge=0)
+
+
+class AccountClassification(BaseModel):
+    """The planner-facing dimensions of an account: is_investable feeds the
+    guardrails portfolio, withdrawal_priority buckets sourcing and forecast
+    (1 ETH, 2 brokerage, 3 tax-advantaged), and access_age gates the
+    tax-advantaged bucket until that age."""
+
+    kind: Literal[
+        "eth",
+        "brokerage_fund",
+        "401k",
+        "roth",
+        "hsa",
+        "cash",
+        "cash_plus",
+        "home",
+        "car",
+        "mortgage",
+        "other",
+    ]
+    tax_treatment: Literal["LTCG", "ORDINARY", "TAX_FREE", "NONE"]
+    is_investable: bool
+    withdrawal_priority: Annotated[int, Field(ge=1, le=3)] | None
+    access_age: Annotated[float, Field(ge=0)] | None
+
+
+def _account(db: sqlite3.Connection, account_id: int | None) -> Account:
+    row = db.execute(
+        f"SELECT {_ACCOUNT_COLUMNS} FROM account WHERE id = ?", (account_id,)
+    ).fetchone()
+    return Account(**dict(row))
 
 
 class BalanceEntryCreate(BaseModel):
@@ -98,10 +137,7 @@ class BalanceEntry(BaseModel):
 
 @router.get("/accounts")
 def list_accounts(db: Db) -> list[Account]:
-    rows = db.execute(
-        "SELECT id, name, kind, tax_treatment, owner, is_liability, is_investable, active, emoji"
-        " FROM account ORDER BY id"
-    )
+    rows = db.execute(f"SELECT {_ACCOUNT_COLUMNS} FROM account ORDER BY id")
     return [Account(**dict(row)) for row in rows]
 
 
@@ -109,9 +145,9 @@ def list_accounts(db: Db) -> list[Account]:
 def create_account(account: AccountCreate, db: Db) -> Account:
     """Inserts the dimension row plus its initial balance_entry for today.
 
-    New accounts are net-worth-only: kind 'other', not investable, no
-    withdrawal priority — planner wiring for arbitrary accounts is its own
-    slice."""
+    New accounts start net-worth-only: kind 'other', not investable, no
+    withdrawal priority — PUT /accounts/{id} classifies them for the
+    planners afterwards."""
     duplicate = db.execute(
         "SELECT 1 FROM account WHERE active = 1 AND LOWER(name) = LOWER(?)",
         (account.name,),
@@ -130,12 +166,39 @@ def create_account(account: AccountCreate, db: Db) -> Account:
         (account_id, date.today().isoformat(), account.initial_value),
     )
     db.commit()
-    row = db.execute(
-        "SELECT id, name, kind, tax_treatment, owner, is_liability, is_investable, active, emoji"
-        " FROM account WHERE id = ?",
-        (account_id,),
-    ).fetchone()
-    return Account(**dict(row))
+    return _account(db, account_id)
+
+
+@router.put("/accounts/{account_id}")
+def update_account(account_id: int, classification: AccountClassification, db: Db) -> Account:
+    """Classifies an account for the planners — in place, like the other
+    dimension edits (PUT /categories/{id}): what an account *is* is metadata,
+    not an effective-dated fact. A liability can never be investable or hold
+    a withdrawal priority — it would add its positive stored balance to the
+    investable sum and enter the withdrawal buckets."""
+    row = db.execute("SELECT is_liability FROM account WHERE id = ?", (account_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    if row["is_liability"] and (
+        classification.is_investable or classification.withdrawal_priority is not None
+    ):
+        raise HTTPException(
+            status_code=422, detail="a liability cannot join the withdrawal portfolio"
+        )
+    db.execute(
+        "UPDATE account SET kind = ?, tax_treatment = ?, is_investable = ?,"
+        " withdrawal_priority = ?, access_age = ? WHERE id = ?",
+        (
+            classification.kind,
+            classification.tax_treatment,
+            classification.is_investable,
+            classification.withdrawal_priority,
+            classification.access_age,
+            account_id,
+        ),
+    )
+    db.commit()
+    return _account(db, account_id)
 
 
 @router.post("/accounts/{account_id}/deactivate")
@@ -147,12 +210,7 @@ def deactivate_account(account_id: int, db: Db) -> Account:
         raise HTTPException(status_code=404, detail="account not found")
     db.execute("UPDATE account SET active = 0 WHERE id = ?", (account_id,))
     db.commit()
-    row = db.execute(
-        "SELECT id, name, kind, tax_treatment, owner, is_liability, is_investable, active, emoji"
-        " FROM account WHERE id = ?",
-        (account_id,),
-    ).fetchone()
-    return Account(**dict(row))
+    return _account(db, account_id)
 
 
 @router.get("/ledger")
