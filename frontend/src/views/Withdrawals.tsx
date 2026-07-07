@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { Sourcing, SourcingStep } from '../api.ts'
-import { fetchSourcing } from '../api.ts'
+import type { Account, Sourcing, SourcingStep } from '../api.ts'
+import { fetchAccounts, fetchSourcing } from '../api.ts'
 import { formatUsd } from '../ledger.ts'
-import { stepAction, stepDetail, stepMarker } from '../sourcing.ts'
+import {
+  hasWithdrawalBuckets,
+  stepAction,
+  stepDetail,
+  stepMarker,
+} from '../sourcing.ts'
 
 // No birthdate lives in the schema, so the screen owns its starting
 // age — the handoff forecast's age 38 — and the input re-evaluates
@@ -72,10 +77,12 @@ function RuleCard({
 
 function Withdrawals() {
   const [sourcing, setSourcing] = useState<Sourcing | null>()
+  const [accounts, setAccounts] = useState<Account[]>()
   const [age, setAge] = useState(DEFAULT_AGE)
   const [spend, setSpend] = useState<number | null>(null)
 
   useEffect(() => {
+    void fetchAccounts().then(setAccounts)
     void fetchSourcing(DEFAULT_AGE).then(setSourcing)
   }, [])
 
@@ -86,7 +93,7 @@ function Withdrawals() {
     void fetchSourcing(nextAge, nextSpend ?? undefined).then(setSourcing)
   }
 
-  if (sourcing === undefined) {
+  if (sourcing === undefined || accounts === undefined) {
     return <div data-testid="view-withdrawals" className="max-w-[980px]" />
   }
 
@@ -97,10 +104,21 @@ function Withdrawals() {
           data-testid="sourcing-empty"
           className="rounded-card border border-card-border bg-card p-[26px] text-[13.5px] text-muted"
         >
-          Withdrawal sourcing needs the year's tax parameters, a spend plan
-          for the target, and at least one balance to draw from. Load the
-          tax year and plan under Settings &amp; data, then enter balances
-          in Ledger entries.
+          {hasWithdrawalBuckets(accounts) ? (
+            <>
+              Withdrawal sourcing needs the year's tax parameters, a spend
+              plan for the target, and at least one balance to draw from.
+              Load the tax year and plan under Settings &amp; data, then
+              enter balances in Ledger entries.
+            </>
+          ) : (
+            <>
+              No accounts have a withdrawal priority yet, so there are no
+              buckets to draw from. Use Edit on each investment account
+              under Settings &amp; data to set its kind, investable flag,
+              and withdrawal priority.
+            </>
+          )}
         </div>
       </div>
     )

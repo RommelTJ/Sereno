@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import type { Guardrails as GuardrailsData } from '../api.ts'
-import { fetchGuardrails } from '../api.ts'
+import type { Account, Guardrails as GuardrailsData } from '../api.ts'
+import { fetchAccounts, fetchGuardrails } from '../api.ts'
 import {
   formatRate,
+  hasInvestableAccount,
   markerLeftPct,
   sliderBounds,
   zoneCopy,
@@ -54,9 +55,11 @@ function Band({ guardrails }: { guardrails: GuardrailsData }) {
 
 function Guardrails() {
   const [guardrails, setGuardrails] = useState<GuardrailsData | null>()
+  const [accounts, setAccounts] = useState<Account[]>()
   const [spend, setSpend] = useState<number | null>(null)
 
   useEffect(() => {
+    void fetchAccounts().then(setAccounts)
     void fetchGuardrails().then(setGuardrails)
   }, [])
 
@@ -65,7 +68,7 @@ function Guardrails() {
     void fetchGuardrails(value).then(setGuardrails)
   }
 
-  if (guardrails === undefined) {
+  if (guardrails === undefined || accounts === undefined) {
     return <div data-testid="view-guardrails" className="max-w-[860px]" />
   }
 
@@ -76,10 +79,21 @@ function Guardrails() {
           data-testid="guardrails-empty"
           className="rounded-card border border-card-border bg-card p-[26px] text-[13.5px] text-muted"
         >
-          Guardrails need a spend plan — an annual target and the
-          at-retirement withdrawal rate — plus at least one month of
-          balances. Add the plan under Settings &amp; data, then enter this
-          month's balances in Ledger entries.
+          {hasInvestableAccount(accounts) ? (
+            <>
+              Guardrails need a spend plan — an annual target and the
+              at-retirement withdrawal rate — plus at least one month of
+              balances. Add the plan under Settings &amp; data, then enter
+              this month's balances in Ledger entries.
+            </>
+          ) : (
+            <>
+              No accounts are marked investable yet, so there is no
+              portfolio to measure a withdrawal rate against. Use Edit on
+              each investment account under Settings &amp; data to set its
+              kind, investable flag, and withdrawal priority.
+            </>
+          )}
         </div>
       </div>
     )
