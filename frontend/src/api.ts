@@ -11,6 +11,8 @@ export interface Account {
   owner: string | null
   is_liability: boolean
   is_investable: boolean
+  withdrawal_priority: number | null
+  access_age: number | null
   active: boolean
   emoji: string | null
 }

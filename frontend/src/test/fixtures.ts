@@ -9,8 +9,11 @@ const account = (
   kind: string,
   emoji: string | null = null,
   overrides: Partial<{
+    tax_treatment: string
     is_liability: boolean
     is_investable: boolean
+    withdrawal_priority: number | null
+    access_age: number | null
     active: boolean
   }> = {},
 ) => ({
@@ -22,16 +25,27 @@ const account = (
   owner: null,
   is_liability: false,
   is_investable: false,
+  withdrawal_priority: null,
+  access_age: null,
   active: true,
   ...overrides,
 })
 
+const investable = (priority: number, tax_treatment = 'LTCG') => ({
+  is_investable: true,
+  withdrawal_priority: priority,
+  tax_treatment,
+})
+
 export const ACCOUNTS = [
-  account(1, 'Ethereum', 'eth', '⚡', { is_investable: true }),
-  account(2, 'VFIAX', 'brokerage_fund', '📈', { is_investable: true }),
-  account(3, 'VTIAX', 'brokerage_fund', '🌍', { is_investable: true }),
-  account(4, 'VGSH', 'brokerage_fund', '🏦', { is_investable: true }),
-  account(5, 'Retirement', '401k', '🏖️', { is_investable: true }),
+  account(1, 'Ethereum', 'eth', '⚡', investable(1)),
+  account(2, 'VFIAX', 'brokerage_fund', '📈', investable(2)),
+  account(3, 'VTIAX', 'brokerage_fund', '🌍', investable(2)),
+  account(4, 'VGSH', 'brokerage_fund', '🏦', investable(2)),
+  account(5, 'Retirement', '401k', '🏖️', {
+    ...investable(3, 'ORDINARY'),
+    access_age: 59.5,
+  }),
   account(6, 'Home', 'home', '🏠'),
   account(7, 'Chase checking', 'cash', '💵'),
   account(8, 'Vanguard Cash Plus', 'cash_plus', '💵'),

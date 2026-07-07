@@ -169,6 +169,15 @@ describe('Liabilities card', () => {
     expect(amount).toHaveClass('text-red')
   })
 
+  it('offers no classification edit on liability rows', async () => {
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-liability-row')
+    expect(
+      within(rows[0]).queryByRole('button', { name: 'Edit' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('adds a liability with is_liability true', async () => {
     const liveRoutes: Record<string, unknown> = routes()
     const fetchMock = stubApi(liveRoutes)
@@ -199,6 +208,84 @@ describe('Liabilities card', () => {
         is_liability: true,
         initial_value: 20000,
       }),
+    )
+  })
+})
+
+describe('Account classification', () => {
+  // The per-row Edit sets the planner-facing dimensions — kind, tax
+  // treatment, the investable flag, withdrawal priority, and access age —
+  // so accounts created here can feed Guardrails, Sourcing, and Forecast.
+  it('opens a per-row edit prefilled with the classification', async () => {
+    render(<Settings />)
+    const rows = await screen.findAllByTestId('settings-asset-row')
+
+    fireEvent.click(within(rows[4]).getByRole('button', { name: 'Edit' }))
+
+    expect(within(rows[4]).getByLabelText('Kind')).toHaveValue('401k')
+    expect(within(rows[4]).getByLabelText('Tax treatment')).toHaveValue(
+      'ORDINARY',
+    )
+    expect(within(rows[4]).getByLabelText('Investable')).toBeChecked()
+    expect(within(rows[4]).getByLabelText('Withdrawal priority')).toHaveValue(
+      '3',
+    )
+    expect(within(rows[4]).getByLabelText('Access age')).toHaveValue('59.5')
+  })
+
+  it('classifies an account via PUT and closes the edit', async () => {
+    // The issue's scenario: an account created from Settings sits at kind
+    // 'other', invisible to every planner, until it is classified here.
+    const robinhood = {
+      ...ACCOUNTS[8],
+      id: 11,
+      name: 'Robinhood',
+      kind: 'other',
+      emoji: '🪙',
+    }
+    const liveRoutes: Record<string, unknown> = {
+      ...routes(),
+      '/api/accounts': [...ACCOUNTS, robinhood],
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    const rows = await screen.findAllByTestId('settings-asset-row')
+    const row = rows[9]
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(row).getByLabelText('Kind'), {
+      target: { value: 'brokerage_fund' },
+    })
+    fireEvent.change(within(row).getByLabelText('Tax treatment'), {
+      target: { value: 'LTCG' },
+    })
+    fireEvent.click(within(row).getByLabelText('Investable'))
+    fireEvent.change(within(row).getByLabelText('Withdrawal priority'), {
+      target: { value: '2' },
+    })
+
+    const classified = {
+      ...robinhood,
+      kind: 'brokerage_fund',
+      tax_treatment: 'LTCG',
+      is_investable: true,
+      withdrawal_priority: 2,
+    }
+    liveRoutes['PUT /api/accounts/11'] = classified
+    liveRoutes['/api/accounts'] = [...ACCOUNTS, classified]
+    fireEvent.click(within(row).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(putBody(fetchMock, '/api/accounts/11')).toEqual({
+        kind: 'brokerage_fund',
+        tax_treatment: 'LTCG',
+        is_investable: true,
+        withdrawal_priority: 2,
+        access_age: null,
+      }),
+    )
+    await waitFor(() =>
+      expect(within(row).queryByLabelText('Kind')).not.toBeInTheDocument(),
     )
   })
 })
