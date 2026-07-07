@@ -43,6 +43,14 @@ class CategoryCreate(BaseModel):
     effective_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
 
 
+class CategoryUpdate(BaseModel):
+    """The rename body — name and emoji replace the stored values (a null
+    or omitted emoji clears it). planned stays on the /plan endpoint."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    emoji: str | None = None
+
+
 class CategoryPlanCreate(BaseModel):
     planned: float = Field(ge=0)
     effective_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
@@ -150,6 +158,18 @@ def _require(db: sqlite3.Connection, table: str, row_id: int | None, label: str)
         raise HTTPException(status_code=404, detail=f"{label} not found")
 
 
+def _category(db: sqlite3.Connection, category_id: int, month: str) -> Category:
+    row = db.execute(
+        "SELECT c.id, c.name, c.emoji, c.is_fixed,"
+        " COALESCE((SELECT p.planned FROM category_plan p"
+        "           WHERE p.category_id = c.id AND p.effective_month <= ?"
+        "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned"
+        " FROM category c WHERE c.id = ?",
+        (month, category_id),
+    ).fetchone()
+    return Category(**dict(row))
+
+
 @router.get("/categories")
 def list_categories(db: Db, month: Month = None) -> list[Category]:
     rows = db.execute(
@@ -185,6 +205,26 @@ def create_category(category: CategoryCreate, db: Db) -> Category:
         "SELECT id, name, emoji, is_fixed FROM category WHERE id = ?", (category_id,)
     ).fetchone()
     return Category(**dict(row), planned=category.planned)
+
+
+@router.put("/categories/{category_id}")
+def update_category(category_id: int, update: CategoryUpdate, db: Db) -> Category:
+    """Renames the dimension row in place — category is a dimension, not a
+    fact, so its identity fields are mutable; plans and expense lines keep
+    their history untouched."""
+    _require(db, "category", category_id, "category")
+    duplicate = db.execute(
+        "SELECT 1 FROM category WHERE active = 1 AND LOWER(name) = LOWER(?) AND id != ?",
+        (update.name, category_id),
+    ).fetchone()
+    if duplicate:
+        raise HTTPException(status_code=409, detail=f"category {update.name!r} exists")
+    db.execute(
+        "UPDATE category SET name = ?, emoji = ? WHERE id = ?",
+        (update.name, update.emoji, category_id),
+    )
+    db.commit()
+    return _category(db, category_id, _current_month())
 
 
 @router.post("/categories/{category_id}/plan", status_code=201)
