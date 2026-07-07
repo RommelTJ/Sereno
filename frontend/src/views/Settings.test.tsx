@@ -486,6 +486,30 @@ describe('Envelopes card', () => {
     expect(putBody(fetchMock, '/api/categories/1')).toBeUndefined()
     expect(postBody(fetchMock, '/api/categories/1/plan')).toBeUndefined()
   })
+
+  it('archives an envelope and removes its row', async () => {
+    const liveRoutes: Record<string, unknown> = routes()
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+
+    liveRoutes['POST /api/categories/1/archive'] = CATEGORIES[0]
+    liveRoutes['/api/categories'] = CATEGORIES.filter(
+      (category) => category.id !== 1,
+    )
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Archive' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('settings-envelope-row')).toHaveLength(3),
+    )
+    expect(screen.queryByText('Groceries')).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          input === '/api/categories/1/archive' && init?.method === 'POST',
+      ),
+    ).toBe(true)
+  })
 })
 
 describe('Assumptions card', () => {
