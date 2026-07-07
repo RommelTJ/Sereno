@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.0.0**
+**v1.1.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -428,6 +428,17 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.1.0 — Envelope rename & archive. Envelopes are no longer immutable
+after creation: `PUT /api/categories/{id}` renames an envelope's name
+and emoji in place (the category row is a dimension, so plans and
+expense lines keep their history), and
+`POST /api/categories/{id}/archive` soft-removes one via the existing
+`active` flag — it drops out of Settings and the budget month while
+its spending keeps counting and its name frees up for reuse. The
+Settings Envelopes card's per-row Edit now covers name, emoji, and
+planned amount (only what actually changed is sent), and each row
+gains an Archive button.
 
 v1.0.0 — Asset & liability management. Accounts are no longer
 seed-only: `POST /api/accounts` creates an asset or liability — name,
