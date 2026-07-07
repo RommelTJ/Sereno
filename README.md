@@ -303,7 +303,10 @@ The forecast slice (the third Plan engine):
   grow. Beside it, the "Update this month's balances" form: an account picker
   over the active accounts with a single value input prefilled from the
   newest month (the ETH account swaps to quantity + $/ETH inputs with a live
-  quantity × price readout), and a live net-worth figure that tracks the
+  quantity × price readout), an "As of" date defaulting to today — pick an
+  earlier date to backfill history or catch up a missed month, and the date
+  sticks across saves so a backfill month can be entered account by
+  account — and a live net-worth figure that tracks the
   draft before anything is saved. Saving appends one dated row via
   `POST /api/balance-entries` — the latest entry in a month wins and earlier
   rows are kept as history — then the table and the header net-worth readout
