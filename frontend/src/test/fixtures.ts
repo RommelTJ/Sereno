@@ -53,6 +53,18 @@ export const ACCOUNTS = [
   account(10, 'Mortgage', 'mortgage', '🏡', { is_liability: true }),
 ]
 
+// The fresh-install scenario (issue #47): every account was created from
+// Settings, so all of them sit at the POST /api/accounts defaults —
+// invisible to every planner until classified.
+export const UNCLASSIFIED_ACCOUNTS = ACCOUNTS.map((account) => ({
+  ...account,
+  kind: 'other',
+  tax_treatment: 'NONE',
+  is_investable: false,
+  withdrawal_priority: null,
+  access_age: null,
+}))
+
 // Exactly as GET /api/net-worth returns it: last-12-months series (oldest
 // first), current = newest month, yoy vs. the same month a year earlier.
 export const NET_WORTH = {

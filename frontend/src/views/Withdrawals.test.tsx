@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { stepDetail } from '../sourcing.ts'
-import { SOURCING } from '../test/fixtures.ts'
+import {
+  ACCOUNTS,
+  SOURCING,
+  UNCLASSIFIED_ACCOUNTS,
+} from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import Withdrawals from './Withdrawals.tsx'
 
@@ -27,7 +31,7 @@ const SOURCING_SHORT = {
 }
 
 beforeEach(() => {
-  stubApi({ '/api/sourcing': SOURCING })
+  stubApi({ '/api/sourcing': SOURCING, '/api/accounts': ACCOUNTS })
 })
 
 describe('sequencing waterfall', () => {
@@ -69,7 +73,7 @@ describe('sequencing waterfall', () => {
   })
 
   it('shows the tax cost on a taxed draw and flags a shortfall', async () => {
-    stubApi({ '/api/sourcing': SOURCING_SHORT })
+    stubApi({ '/api/sourcing': SOURCING_SHORT, '/api/accounts': ACCOUNTS })
     render(<Withdrawals />)
 
     const step = await screen.findByTestId('sourcing-step-1')
@@ -90,7 +94,7 @@ describe('sequencing waterfall', () => {
 
 describe('what-if controls', () => {
   it('refetches when the age changes', async () => {
-    const fetchMock = stubApi({ '/api/sourcing': SOURCING })
+    const fetchMock = stubApi({ '/api/sourcing': SOURCING, '/api/accounts': ACCOUNTS })
     render(<Withdrawals />)
     const age = await screen.findByTestId('sourcing-age')
     expect(fetchMock).toHaveBeenLastCalledWith('/api/sourcing?age=38')
@@ -101,7 +105,7 @@ describe('what-if controls', () => {
   })
 
   it('refetches at a what-if spend level', async () => {
-    const fetchMock = stubApi({ '/api/sourcing': SOURCING })
+    const fetchMock = stubApi({ '/api/sourcing': SOURCING, '/api/accounts': ACCOUNTS })
     render(<Withdrawals />)
     const spend = await screen.findByTestId('sourcing-spend')
 
@@ -127,12 +131,22 @@ describe('bucket rules', () => {
 
 describe('empty state', () => {
   it('points at Settings until tax params, balances, and a plan exist', async () => {
-    stubApi({ '/api/sourcing': null })
+    stubApi({ '/api/sourcing': null, '/api/accounts': ACCOUNTS })
     render(<Withdrawals />)
 
     const empty = await screen.findByTestId('sourcing-empty')
     expect(empty).toHaveTextContent(/tax parameters/i)
     expect(screen.queryByTestId('sourcing-waterfall')).not.toBeInTheDocument()
+  })
+
+  it('points at account classification when no priorities are set', async () => {
+    stubApi({ '/api/sourcing': null, '/api/accounts': UNCLASSIFIED_ACCOUNTS })
+    render(<Withdrawals />)
+
+    const empty = await screen.findByTestId('sourcing-empty')
+    expect(empty).toHaveTextContent(/withdrawal priority/i)
+    expect(empty).toHaveTextContent(/Settings & data/)
+    expect(empty).not.toHaveTextContent(/Ledger entries/)
   })
 })
 
