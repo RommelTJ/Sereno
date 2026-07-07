@@ -227,6 +227,17 @@ def update_category(category_id: int, update: CategoryUpdate, db: Db) -> Categor
     return _category(db, category_id, _current_month())
 
 
+@router.post("/categories/{category_id}/archive")
+def archive_category(category_id: int, db: Db) -> Category:
+    """Soft remove, like account deactivation: the envelope drops out of
+    listings and the budget month, but its plans and expense lines keep
+    counting in history, and its name frees up for reuse. No hard delete."""
+    _require(db, "category", category_id, "category")
+    db.execute("UPDATE category SET active = 0 WHERE id = ?", (category_id,))
+    db.commit()
+    return _category(db, category_id, _current_month())
+
+
 @router.post("/categories/{category_id}/plan", status_code=201)
 def create_category_plan(category_id: int, plan: CategoryPlanCreate, db: Db) -> CategoryPlan:
     """Appends a new effective-dated plan row — revisions never update in
