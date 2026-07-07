@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.2.0**
+**v1.3.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -455,6 +455,20 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.3.0 — Account classification. Accounts created through the UI can
+finally participate in the planner: `PUT /api/accounts/{id}` sets
+kind, tax treatment, the investable flag, withdrawal priority, and
+access age in place (a liability can never be investable or
+prioritized), and the Settings Assets rows gain a per-row Edit with
+those fields, prefilled from the account. The three Plan pages'
+empty states now fetch the accounts and tell apart "config and
+balances missing" from "no accounts classified", pointing at the
+account Edit instead of Ledger entries when classification is the
+real blocker — on a fresh install every account used to sit at the
+net-worth-only defaults, leaving Guardrails, Withdrawal sourcing,
+and the Longevity forecast permanently null with copy that sent the
+user to enter more balances.
 
 v1.2.0 — Ledger backdating. The balance form gains an "As of" date
 input (default today), passed through to `POST /api/balance-entries`
