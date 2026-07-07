@@ -385,7 +385,9 @@ The forecast slice (the third Plan engine):
   months; liabilities negative in red), each with an add form (name, a
   curated emoji select, and the initial value — later values go through
   the Ledger) and a per-row Deactivate that soft-removes the account
-  while its entered history keeps counting. Fund rows no longer appear
+  while its entered history keeps counting. Adding or deactivating an
+  account refreshes the header net-worth readout immediately, like a
+  Ledger save. Fund rows no longer appear
   on Settings — funds live on Funds & Goals, where their targets and
   progress already are. Below them sit the Envelopes card, the
   Assumptions summary
