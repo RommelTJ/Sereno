@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.1.1**
+**v1.2.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -433,6 +433,16 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.2.0 — Ledger backdating. The balance form gains an "As of" date
+input (default today), passed through to `POST /api/balance-entries`
+as `as_of_date`, so historical balances can be entered from the UI —
+backfilling a fresh install's sparkline and YoY figure, or catching up
+a missed month, no longer needs curl or the interactive docs. The date
+sticks across saves and account switches so a backfill month can be
+entered account by account. No backend changes: the append-only model
+already handles out-of-order rows — `v_account_monthly` picks the
+latest row per account per month and carry-forward fills the gaps.
 
 v1.1.1 — Bug fix: the header net-worth readout now refreshes as soon
 as an account is added or deactivated on Settings & data. The Settings
