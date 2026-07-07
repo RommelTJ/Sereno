@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.1.1**
+**v1.2.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -303,7 +303,10 @@ The forecast slice (the third Plan engine):
   grow. Beside it, the "Update this month's balances" form: an account picker
   over the active accounts with a single value input prefilled from the
   newest month (the ETH account swaps to quantity + $/ETH inputs with a live
-  quantity × price readout), and a live net-worth figure that tracks the
+  quantity × price readout), an "As of" date defaulting to today — pick an
+  earlier date to backfill history or catch up a missed month, and the date
+  sticks across saves so a backfill month can be entered account by
+  account — and a live net-worth figure that tracks the
   draft before anything is saved. Saving appends one dated row via
   `POST /api/balance-entries` — the latest entry in a month wins and earlier
   rows are kept as history — then the table and the header net-worth readout
@@ -430,6 +433,16 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.2.0 — Ledger backdating. The balance form gains an "As of" date
+input (default today), passed through to `POST /api/balance-entries`
+as `as_of_date`, so historical balances can be entered from the UI —
+backfilling a fresh install's sparkline and YoY figure, or catching up
+a missed month, no longer needs curl or the interactive docs. The date
+sticks across saves and account switches so a backfill month can be
+entered account by account. No backend changes: the append-only model
+already handles out-of-order rows — `v_account_monthly` picks the
+latest row per account per month and carry-forward fills the gaps.
 
 v1.1.1 — Bug fix: the header net-worth readout now refreshes as soon
 as an account is added or deactivated on Settings & data. The Settings

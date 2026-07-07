@@ -204,6 +204,25 @@ describe("Update this month's balances form", () => {
       '$1,754,000',
     )
   })
+
+  it('shows an as-of date input defaulting to today', async () => {
+    render(<Ledger />)
+
+    const today = new Date().toLocaleDateString('en-CA')
+    expect(await screen.findByLabelText('As of')).toHaveValue(today)
+  })
+
+  it('keeps the chosen date across account switches', async () => {
+    render(<Ledger />)
+
+    fireEvent.change(await screen.findByLabelText('As of'), {
+      target: { value: '2025-07-01' },
+    })
+    fireEvent.change(screen.getByLabelText('Account'), {
+      target: { value: '2' },
+    })
+    expect(screen.getByLabelText('As of')).toHaveValue('2025-07-01')
+  })
 })
 
 describe('Responsive layout', () => {
@@ -262,6 +281,31 @@ describe('Saving balances', () => {
       .map(([, init]) => JSON.parse(String(init?.body)) as unknown)
     expect(bodies).toEqual([
       { account_id: 2, as_of_date: today, balance_usd: 710000 },
+    ])
+  })
+
+  it('posts the chosen as-of date when backdated', async () => {
+    render(<Ledger />)
+
+    fireEvent.change(await screen.findByLabelText('Account'), {
+      target: { value: '2' },
+    })
+    fireEvent.change(screen.getByLabelText('Value'), {
+      target: { value: '650,000' },
+    })
+    fireEvent.change(screen.getByLabelText('As of'), {
+      target: { value: '2025-07-01' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save balance' }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Saved ✓' }),
+    ).toBeInTheDocument()
+    const bodies = fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'POST')
+      .map(([, init]) => JSON.parse(String(init?.body)) as unknown)
+    expect(bodies).toEqual([
+      { account_id: 2, as_of_date: '2025-07-01', balance_usd: 650000 },
     ])
   })
 

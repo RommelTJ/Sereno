@@ -15,9 +15,10 @@ interface FieldProps {
   label: string
   value: string
   onChange: (value: string) => void
+  type?: string
 }
 
-function Field({ id, label, value, onChange }: FieldProps) {
+function Field({ id, label, value, onChange, type = 'text' }: FieldProps) {
   return (
     <label htmlFor={id} className="block">
       <span className="text-[11px] font-semibold text-muted-2 uppercase">
@@ -25,6 +26,7 @@ function Field({ id, label, value, onChange }: FieldProps) {
       </span>
       <input
         id={id}
+        type={type}
         className="num mt-1 w-full rounded-input border border-input-border px-3 py-2.5 text-sm"
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -46,6 +48,9 @@ function BalanceForm({ accounts, months, onSave }: BalanceFormProps) {
   const [draft, setDraft] = useState<BalanceDraft>(() =>
     account ? draftFor(account, months) : { value: '', qty: '', price: '' },
   )
+  // The as-of date survives saves and account switches: backfilling a
+  // historical month means entering it once, then walking the accounts.
+  const [asOfDate, setAsOfDate] = useState(todayIso)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -72,7 +77,7 @@ function BalanceForm({ accounts, months, onSave }: BalanceFormProps) {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await onSave(entryInput(account, draft, todayIso()))
+      await onSave(entryInput(account, draft, asOfDate))
       setSaved(true)
     } finally {
       setSaving(false)
@@ -139,6 +144,17 @@ function BalanceForm({ accounts, months, onSave }: BalanceFormProps) {
             onChange={setField('value')}
           />
         )}
+
+        <Field
+          id="balance-as-of"
+          label="As of"
+          type="date"
+          value={asOfDate}
+          onChange={(value) => {
+            setSaved(false)
+            setAsOfDate(value)
+          }}
+        />
       </div>
 
       <div className="mt-4.5 flex items-center justify-between border-t border-hairline pt-4">
