@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.1.0**
+**v1.1.1**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -430,6 +430,12 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.1.1 — Bug fix: the header net-worth readout now refreshes as soon
+as an account is added or deactivated on Settings & data. The Settings
+account handlers refresh the net-worth context the way a Ledger save
+already did, so a fresh install no longer shows the `$—` placeholder
+(or a stale figure) until a hard reload.
 
 v1.1.0 — Envelope rename & archive. Envelopes are no longer immutable
 after creation: `PUT /api/categories/{id}` renames an envelope's name
