@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type {
   Account,
+  AccountClassificationInput,
   AccountInput,
   Assumption,
   Category,
@@ -29,6 +30,7 @@ import {
   fetchSocialSecurity,
   fetchSpendPlan,
   fetchTaxParams,
+  updateAccount,
   updateCategory,
   updateCategoryPlan,
   updateTaxParam,
@@ -49,13 +51,18 @@ import {
   assumptionsEdits,
   assumptionsFormValues,
   bracketLabel,
+  classificationInput,
+  classificationValues,
   EMOJI_OPTIONS,
   envelopeEdits,
   envelopeInput,
   formatPct,
   formatRate,
+  KIND_OPTIONS,
+  PRIORITY_OPTIONS,
   socialSecurityEdits,
   socialSecurityFormValues,
+  TAX_TREATMENT_OPTIONS,
   taxFormValues,
   taxParamBody,
 } from '../settings.ts'
@@ -170,6 +177,38 @@ function EditField({
   )
 }
 
+function SelectField({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  id: string
+  label: string
+  value: string
+  options: { value: string; label: string }[]
+  onChange: (value: string) => void
+}) {
+  return (
+    <label htmlFor={id} className="block">
+      <FieldLabel text={label} />
+      <select
+        id={id}
+        className="mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 // The curated envelope emoji select, shared by the add form and row edit.
 function EmojiSelect({
   id,
@@ -203,30 +242,112 @@ function EmojiSelect({
 function AccountRowItem({
   row,
   testId,
+  onClassify,
   onDeactivate,
 }: {
   row: AccountRow
   testId: string
+  onClassify?: (
+    accountId: number,
+    input: AccountClassificationInput,
+  ) => Promise<void>
   onDeactivate: (accountId: number) => Promise<void>
 }) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [values, setValues] = useState(() => classificationValues(row.account))
+
+  const set = (key: 'kind' | 'taxTreatment' | 'priority' | 'accessAge') =>
+    (value: string) => setValues((current) => ({ ...current, [key]: value }))
+
+  const startEditing = () => {
+    setValues(classificationValues(row.account))
+    setEditing(true)
+  }
+
+  const save = async () => {
+    const input = classificationInput(values)
+    if (!input || !onClassify) {
+      return
+    }
+    setSaving(true)
+    try {
+      await onClassify(row.id, input)
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div
       data-testid={testId}
-      className="flex items-center justify-between border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
+      className="flex items-center justify-between gap-3 border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
     >
-      <p className="font-semibold">
-        <span className="mr-2">{row.emoji}</span>
-        <span>{row.name}</span>
-      </p>
-      <div className="flex items-center gap-3">
-        <p className={`num font-bold ${row.negative ? 'text-red' : ''}`}>
-          {row.value}
-        </p>
-        <GhostButton
-          label="Deactivate"
-          onClick={() => void onDeactivate(row.id)}
-        />
-      </div>
+      {editing ? (
+        <div className="flex flex-1 flex-wrap items-end justify-end gap-2">
+          <SelectField
+            id={`account-kind-${row.id}`}
+            label="Kind"
+            value={values.kind}
+            options={KIND_OPTIONS}
+            onChange={set('kind')}
+          />
+          <SelectField
+            id={`account-tax-${row.id}`}
+            label="Tax treatment"
+            value={values.taxTreatment}
+            options={TAX_TREATMENT_OPTIONS}
+            onChange={set('taxTreatment')}
+          />
+          <label htmlFor={`account-investable-${row.id}`} className="block">
+            <FieldLabel text="Investable" />
+            <input
+              id={`account-investable-${row.id}`}
+              type="checkbox"
+              checked={values.investable}
+              onChange={(event) =>
+                setValues((current) => ({
+                  ...current,
+                  investable: event.target.checked,
+                }))
+              }
+              className="mt-3 block size-4 accent-accent"
+            />
+          </label>
+          <SelectField
+            id={`account-priority-${row.id}`}
+            label="Withdrawal priority"
+            value={values.priority}
+            options={PRIORITY_OPTIONS}
+            onChange={set('priority')}
+          />
+          <EditField
+            id={`account-access-age-${row.id}`}
+            label="Access age"
+            value={values.accessAge}
+            onChange={set('accessAge')}
+          />
+          <SaveButton disabled={saving} onClick={() => void save()} />
+        </div>
+      ) : (
+        <>
+          <p className="font-semibold">
+            <span className="mr-2">{row.emoji}</span>
+            <span>{row.name}</span>
+          </p>
+          <div className="flex items-center gap-3">
+            <p className={`num font-bold ${row.negative ? 'text-red' : ''}`}>
+              {row.value}
+            </p>
+            {onClassify && <EditButton onClick={startEditing} />}
+            <GhostButton
+              label="Deactivate"
+              onClick={() => void onDeactivate(row.id)}
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -240,6 +361,7 @@ function AccountsCard({
   liability,
   rows,
   onAdd,
+  onClassify,
   onDeactivate,
 }: {
   title: string
@@ -250,6 +372,10 @@ function AccountsCard({
   liability: boolean
   rows: AccountRow[]
   onAdd: (input: AccountInput) => Promise<void>
+  onClassify?: (
+    accountId: number,
+    input: AccountClassificationInput,
+  ) => Promise<void>
   onDeactivate: (accountId: number) => Promise<void>
 }) {
   const [values, setValues] = useState({ name: '', emoji: '', initialValue: '' })
@@ -283,6 +409,7 @@ function AccountsCard({
             key={row.id}
             row={row}
             testId={rowTestId}
+            onClassify={onClassify}
             onDeactivate={onDeactivate}
           />
         ))}
@@ -964,6 +1091,14 @@ function Settings() {
     await refetchAccounts()
   }
 
+  const classifyAccount = async (
+    accountId: number,
+    input: AccountClassificationInput,
+  ) => {
+    await updateAccount(accountId, input)
+    await refetchAccounts()
+  }
+
   const removeAccount = async (accountId: number) => {
     await deactivateAccount(accountId)
     await refetchAccounts()
@@ -1046,6 +1181,7 @@ function Settings() {
         liability={false}
         rows={accountRows(data.accounts, data.ledger, false)}
         onAdd={addAccount}
+        onClassify={classifyAccount}
         onDeactivate={removeAccount}
       />
       <AccountsCard
