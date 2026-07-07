@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { todayIso } from '../ledger.ts'
+import { NetWorthContext } from '../netWorth.ts'
 import {
   ACCOUNTS,
   ASSUMPTION,
@@ -199,6 +200,63 @@ describe('Liabilities card', () => {
         initial_value: 20000,
       }),
     )
+  })
+})
+
+describe('Header net worth', () => {
+  // The provider's refresh() reloads /api/net-worth for the header readout;
+  // Settings must call it whenever an account change moves net worth.
+  const renderWithRefresh = () => {
+    const liveRoutes: Record<string, unknown> = routes()
+    stubApi(liveRoutes)
+    const refresh = vi.fn(async () => undefined)
+    render(
+      <NetWorthContext value={{ netWorth: null, refresh }}>
+        <Settings />
+      </NetWorthContext>,
+    )
+    return { liveRoutes, refresh }
+  }
+
+  it('refreshes after adding an account', async () => {
+    const { liveRoutes, refresh } = renderWithRefresh()
+    await screen.findAllByTestId('settings-asset-row')
+
+    const card = screen.getByTestId('assets-card')
+    fireEvent.change(within(card).getByLabelText('Name'), {
+      target: { value: 'Gold coins' },
+    })
+    fireEvent.change(within(card).getByLabelText('Initial value'), {
+      target: { value: '2,500' },
+    })
+    const created = { ...ACCOUNTS[8], id: 11, name: 'Gold coins' }
+    liveRoutes['POST /api/accounts'] = created
+    liveRoutes['/api/accounts'] = [...ACCOUNTS, created]
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('settings-asset-row')).toHaveLength(10),
+    )
+    expect(refresh).toHaveBeenCalled()
+  })
+
+  it('refreshes after deactivating an account', async () => {
+    const { liveRoutes, refresh } = renderWithRefresh()
+    const rows = await screen.findAllByTestId('settings-asset-row')
+
+    liveRoutes['POST /api/accounts/9/deactivate'] = {
+      ...ACCOUNTS[8],
+      active: false,
+    }
+    liveRoutes['/api/accounts'] = ACCOUNTS.map((account) =>
+      account.id === 9 ? { ...account, active: false } : account,
+    )
+    fireEvent.click(within(rows[8]).getByRole('button', { name: 'Deactivate' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('settings-asset-row')).toHaveLength(8),
+    )
+    expect(refresh).toHaveBeenCalled()
   })
 })
 
