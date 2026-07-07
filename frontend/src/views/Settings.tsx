@@ -14,6 +14,7 @@ import type {
   TaxParamInput,
 } from '../api.ts'
 import {
+  archiveCategory,
   createAccount,
   createAssumption,
   createCategory,
@@ -347,9 +348,11 @@ function ConfigLine({
 function EnvelopeRow({
   category,
   onSave,
+  onArchive,
 }: {
   category: Category
   onSave: (categoryId: number, edit: EnvelopeEdit) => Promise<void>
+  onArchive: (categoryId: number) => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -416,6 +419,10 @@ function EnvelopeRow({
           <div className="flex items-center gap-3">
             <p className="num font-bold">{formatUsd(category.planned)} / mo</p>
             <EditButton onClick={startEditing} />
+            <GhostButton
+              label="Archive"
+              onClick={() => void onArchive(category.id)}
+            />
           </div>
         </>
       )}
@@ -427,10 +434,12 @@ function EnvelopesCard({
   categories,
   onAdd,
   onSave,
+  onArchive,
 }: {
   categories: Category[]
   onAdd: (input: CategoryInput) => Promise<void>
   onSave: (categoryId: number, edit: EnvelopeEdit) => Promise<void>
+  onArchive: (categoryId: number) => Promise<void>
 }) {
   const [values, setValues] = useState({ name: '', emoji: '', planned: '' })
   const [adding, setAdding] = useState(false)
@@ -469,6 +478,7 @@ function EnvelopesCard({
             key={category.id}
             category={category}
             onSave={onSave}
+            onArchive={onArchive}
           />
         ))}
       </div>
@@ -975,6 +985,11 @@ function Settings() {
     await refetchCategories()
   }
 
+  const archiveEnvelope = async (categoryId: number) => {
+    await archiveCategory(categoryId)
+    await refetchCategories()
+  }
+
   const saveAssumptions = async (edit: AssumptionsEdit) => {
     if (edit.assumption) {
       await createAssumption(edit.assumption)
@@ -1044,6 +1059,7 @@ function Settings() {
         categories={data.categories}
         onAdd={addEnvelope}
         onSave={saveEnvelope}
+        onArchive={archiveEnvelope}
       />
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <AssumptionsCard

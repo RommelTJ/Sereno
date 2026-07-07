@@ -434,6 +434,8 @@ export const updateCategoryPlan = (categoryId: number, input: CategoryPlanInput)
   postJson(`/api/categories/${categoryId}/plan`, input)
 export const updateCategory = (categoryId: number, input: CategoryUpdate) =>
   putJson(`/api/categories/${categoryId}`, input)
+export const archiveCategory = (categoryId: number) =>
+  postJson(`/api/categories/${categoryId}/archive`, {})
 export const createExpense = (input: ExpenseInput) =>
   postJson('/api/expenses', input)
 export const createIncome = (input: IncomeInput) =>
