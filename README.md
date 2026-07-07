@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.1.0**
+**v1.1.1**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -385,7 +385,9 @@ The forecast slice (the third Plan engine):
   months; liabilities negative in red), each with an add form (name, a
   curated emoji select, and the initial value — later values go through
   the Ledger) and a per-row Deactivate that soft-removes the account
-  while its entered history keeps counting. Fund rows no longer appear
+  while its entered history keeps counting. Adding or deactivating an
+  account refreshes the header net-worth readout immediately, like a
+  Ledger save. Fund rows no longer appear
   on Settings — funds live on Funds & Goals, where their targets and
   progress already are. Below them sit the Envelopes card, the
   Assumptions summary
@@ -428,6 +430,12 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.1.1 — Bug fix: the header net-worth readout now refreshes as soon
+as an account is added or deactivated on Settings & data. The Settings
+account handlers refresh the net-worth context the way a Ledger save
+already did, so a fresh install no longer shows the `$—` placeholder
+(or a stale figure) until a hard reload.
 
 v1.1.0 — Envelope rename & archive. Envelopes are no longer immutable
 after creation: `PUT /api/categories/{id}` renames an envelope's name
