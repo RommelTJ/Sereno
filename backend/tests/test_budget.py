@@ -271,6 +271,134 @@ class TestPostCategoryPlan:
         assert query("SELECT id FROM category_plan") == []
 
 
+class TestPutCategory:
+    def test_renames_the_name_and_emoji(self, client):
+        groceries_id = insert_category("Groceries", emoji="🛒")
+        insert_plan(groceries_id, "2000-01", 500)
+        response = client.put(
+            f"/api/categories/{groceries_id}",
+            json={"name": "Food", "emoji": "🍽️"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {
+            "id": groceries_id,
+            "name": "Food",
+            "emoji": "🍽️",
+            "is_fixed": False,
+            "planned": 500,
+        }
+        assert query("SELECT name, emoji FROM category") == [{"name": "Food", "emoji": "🍽️"}]
+
+    def test_a_null_emoji_clears_it(self, client):
+        gas_id = insert_category("Gas", emoji="🛢️")
+        response = client.put(f"/api/categories/{gas_id}", json={"name": "Gas", "emoji": None})
+        assert response.status_code == 200
+        assert response.json()["emoji"] is None
+        assert query("SELECT emoji FROM category") == [{"emoji": None}]
+
+    def test_leaves_plan_history_untouched(self, client):
+        groceries_id = insert_category("Groceries")
+        insert_plan(groceries_id, "2026-01", 500)
+        insert_plan(groceries_id, "2026-06", 550)
+        response = client.put(f"/api/categories/{groceries_id}", json={"name": "Food"})
+        assert response.status_code == 200
+        assert query("SELECT category_id, effective_month, planned FROM category_plan") == [
+            {"category_id": groceries_id, "effective_month": "2026-01", "planned": 500},
+            {"category_id": groceries_id, "effective_month": "2026-06", "planned": 550},
+        ]
+
+    def test_unknown_category_returns_404(self, client):
+        response = client.put("/api/categories/999", json={"name": "Food"})
+        assert response.status_code == 404
+
+    def test_rejects_a_blank_name(self, client):
+        gas_id = insert_category("Gas")
+        for name in ("", "   "):
+            response = client.put(f"/api/categories/{gas_id}", json={"name": name})
+            assert response.status_code == 422
+        assert query("SELECT name FROM category") == [{"name": "Gas"}]
+
+    def test_rejects_another_active_categorys_name(self, client):
+        insert_category("Groceries")
+        gas_id = insert_category("Gas")
+        for name in ("Groceries", "groceries", "  Groceries  "):
+            response = client.put(f"/api/categories/{gas_id}", json={"name": name})
+            assert response.status_code == 409
+        assert query("SELECT name FROM category ORDER BY id") == [
+            {"name": "Groceries"},
+            {"name": "Gas"},
+        ]
+
+    def test_allows_a_case_only_rename_of_itself(self, client):
+        groceries_id = insert_category("groceries")
+        response = client.put(f"/api/categories/{groceries_id}", json={"name": "Groceries"})
+        assert response.status_code == 200
+        assert response.json()["name"] == "Groceries"
+
+    def test_allows_an_archived_categorys_name(self, client):
+        insert_category("Vices", active=0)
+        gas_id = insert_category("Gas")
+        response = client.put(f"/api/categories/{gas_id}", json={"name": "Vices"})
+        assert response.status_code == 200
+
+
+class TestArchiveCategory:
+    def test_archives_the_envelope_out_of_the_category_list(self, client):
+        groceries_id = insert_category("Groceries", emoji="🛒")
+        insert_plan(groceries_id, "2000-01", 500)
+        response = client.post(f"/api/categories/{groceries_id}/archive")
+        assert response.status_code == 200
+        assert response.json() == {
+            "id": groceries_id,
+            "name": "Groceries",
+            "emoji": "🛒",
+            "is_fixed": False,
+            "planned": 500,
+        }
+        assert query("SELECT active FROM category") == [{"active": 0}]
+        assert client.get("/api/categories").json() == []
+
+    def test_archived_spending_still_counts_in_total_spent(self, client):
+        gas_id = insert_category("Gas")
+        insert_plan(gas_id, "2026-01", 100)
+        payload = {"txn_date": "2026-06-10", "amount": 40, "category_id": gas_id}
+        assert client.post("/api/expenses", json=payload).status_code == 201
+        assert client.post(f"/api/categories/{gas_id}/archive").status_code == 200
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["categories"] == []
+        assert body["total_spent"] == 40
+
+    def test_plans_and_expense_lines_survive_in_the_database(self, client):
+        gas_id = insert_category("Gas")
+        insert_plan(gas_id, "2026-01", 100)
+        payload = {"txn_date": "2026-06-10", "amount": 40, "category_id": gas_id}
+        assert client.post("/api/expenses", json=payload).status_code == 201
+        client.post(f"/api/categories/{gas_id}/archive")
+        assert query("SELECT category_id, planned FROM category_plan") == [
+            {"category_id": gas_id, "planned": 100}
+        ]
+        assert query("SELECT category_id, amount FROM expense_line") == [
+            {"category_id": gas_id, "amount": 40}
+        ]
+
+    def test_archiving_twice_is_idempotent(self, client):
+        gas_id = insert_category("Gas")
+        for _ in range(2):
+            response = client.post(f"/api/categories/{gas_id}/archive")
+            assert response.status_code == 200
+        assert query("SELECT active FROM category") == [{"active": 0}]
+
+    def test_unknown_category_returns_404(self, client):
+        response = client.post("/api/categories/999/archive")
+        assert response.status_code == 404
+
+    def test_the_freed_name_can_be_reused(self, client):
+        vices_id = insert_category("Vices")
+        client.post(f"/api/categories/{vices_id}/archive")
+        response = client.post("/api/categories", json={"name": "Vices", "planned": 150})
+        assert response.status_code == 201
+
+
 class TestPostExpenses:
     def test_appends_an_expense_line(self, client):
         groceries_id = insert_category("Groceries")

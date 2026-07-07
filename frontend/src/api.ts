@@ -287,6 +287,14 @@ export interface CategoryPlanInput {
   effective_month?: string
 }
 
+// PUT /api/categories/{id} renames the dimension row in place — plans and
+// expense lines keep their history; a null emoji clears it. A name matching
+// another active category is a 409.
+export interface CategoryUpdate {
+  name: string
+  emoji: string | null
+}
+
 // kind is derived server-side: a blank target_date means a sinking fund, a
 // set date means a goal; a blank target_amount is an open-ended fund.
 export interface FundInput {
@@ -424,6 +432,10 @@ export const createCategory = (input: CategoryInput) =>
   postJson('/api/categories', input)
 export const updateCategoryPlan = (categoryId: number, input: CategoryPlanInput) =>
   postJson(`/api/categories/${categoryId}/plan`, input)
+export const updateCategory = (categoryId: number, input: CategoryUpdate) =>
+  putJson(`/api/categories/${categoryId}`, input)
+export const archiveCategory = (categoryId: number) =>
+  postJson(`/api/categories/${categoryId}/archive`, {})
 export const createExpense = (input: ExpenseInput) =>
   postJson('/api/expenses', input)
 export const createIncome = (input: IncomeInput) =>

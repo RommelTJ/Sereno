@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.0.0**
+**v1.1.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -159,6 +159,17 @@ The budget slice:
   latest row per month wins). New and revised envelopes flow into the
   Safe-to-spend select, envelope bars, and budget-month math with no
   further wiring.
+- `PUT /api/categories/{id}` — renames an envelope's name and emoji in
+  place (a null emoji clears it). The category row is a dimension, not a
+  fact, so its identity is mutable; plans and expense lines keep their
+  history. A blank name is a 422; a name matching another active
+  category (case-insensitive) is a 409 — the check excludes the category
+  itself, so case-only renames work.
+- `POST /api/categories/{id}/archive` — soft remove, like account
+  deactivation: flips `category.active` to 0 so the envelope drops out
+  of listings and the budget-month envelope list, while its plans and
+  expense lines keep counting in history and its name frees up for
+  reuse. No hard delete.
 - `POST /api/expenses` — appends a spending line. `budget_month` defaults to
   the transaction's month; pass a later month to prepay. `funded_from` is
   `discretionary` or `fund` (then `fund_id` is required).
@@ -384,10 +395,13 @@ The forecast slice (the third Plan engine):
   brackets), and the dark append-only data-model note pointing at
   `docs/design/schema.sql`. The Envelopes card manages the spending
   categories: each envelope's emoji, name, and current planned amount
-  with a per-row Edit that appends an effective-dated plan revision,
-  and an add form (name, a curated emoji select, $ / month) that
-  creates the category with its initial plan — new envelopes appear in
-  Safe-to-spend immediately. Settings is where config changes are
+  with a per-row Edit covering all three (the name and emoji revise the
+  row in place; a changed planned amount appends an effective-dated
+  plan revision — only what actually changed is sent), a per-row
+  Archive that soft-removes the envelope while its plans and spending
+  history keep counting, and an add form (name, a curated emoji select,
+  $ / month) that creates the category with its initial plan — new
+  envelopes appear in Safe-to-spend immediately. Settings is where config changes are
   *persisted*: saving the Assumptions or Social Security cards appends
   new rows effective today (only configs whose values actually changed
   are posted), the tax card's Edit revises the displayed year in place,
@@ -414,6 +428,17 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.1.0 — Envelope rename & archive. Envelopes are no longer immutable
+after creation: `PUT /api/categories/{id}` renames an envelope's name
+and emoji in place (the category row is a dimension, so plans and
+expense lines keep their history), and
+`POST /api/categories/{id}/archive` soft-removes one via the existing
+`active` flag — it drops out of Settings and the budget month while
+its spending keeps counting and its name frees up for reuse. The
+Settings Envelopes card's per-row Edit now covers name, emoji, and
+planned amount (only what actually changed is sent), and each row
+gains an Archive button.
 
 v1.0.0 — Asset & liability management. Accounts are no longer
 seed-only: `POST /api/accounts` creates an asset or liability — name,

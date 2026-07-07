@@ -5,7 +5,6 @@ import type {
   Assumption,
   Category,
   CategoryInput,
-  CategoryPlanInput,
   LedgerMonth,
   SocialSecurityEntry,
   SocialSecurityInput,
@@ -15,6 +14,7 @@ import type {
   TaxParamInput,
 } from '../api.ts'
 import {
+  archiveCategory,
   createAccount,
   createAssumption,
   createCategory,
@@ -29,6 +29,7 @@ import {
   fetchSocialSecurity,
   fetchSpendPlan,
   fetchTaxParams,
+  updateCategory,
   updateCategoryPlan,
   updateTaxParam,
 } from '../api.ts'
@@ -37,6 +38,7 @@ import { formatUsd, todayIso } from '../ledger.ts'
 import type {
   AccountRow,
   AssumptionsEdit,
+  EnvelopeEdit,
   TaxFormValues,
 } from '../settings.ts'
 import {
@@ -47,8 +49,8 @@ import {
   assumptionsFormValues,
   bracketLabel,
   EMOJI_OPTIONS,
+  envelopeEdits,
   envelopeInput,
-  envelopePlanInput,
   formatPct,
   formatRate,
   socialSecurityEdits,
@@ -163,6 +165,36 @@ function EditField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
+    </label>
+  )
+}
+
+// The curated envelope emoji select, shared by the add form and row edit.
+function EmojiSelect({
+  id,
+  value,
+  onChange,
+}: {
+  id: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <label htmlFor={id} className="block">
+      <FieldLabel text="Emoji" />
+      <select
+        id={id}
+        className="mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">—</option>
+        {EMOJI_OPTIONS.map((option) => (
+          <option key={option.label} value={option.emoji}>
+            {option.emoji} {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   )
 }
@@ -315,28 +347,37 @@ function ConfigLine({
 
 function EnvelopeRow({
   category,
-  onRevise,
+  onSave,
+  onArchive,
 }: {
   category: Category
-  onRevise: (categoryId: number, input: CategoryPlanInput) => Promise<void>
+  onSave: (categoryId: number, edit: EnvelopeEdit) => Promise<void>
+  onArchive: (categoryId: number) => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [planned, setPlanned] = useState('')
+  const [values, setValues] = useState({ name: '', emoji: '', planned: '' })
+
+  const set = (key: keyof typeof values) => (value: string) =>
+    setValues((current) => ({ ...current, [key]: value }))
 
   const startEditing = () => {
-    setPlanned(String(category.planned))
+    setValues({
+      name: category.name,
+      emoji: category.emoji ?? '',
+      planned: String(category.planned),
+    })
     setEditing(true)
   }
 
   const save = async () => {
-    const input = envelopePlanInput(planned)
-    if (!input) {
+    const edit = envelopeEdits(values, category)
+    if (!edit) {
       return
     }
     setSaving(true)
     try {
-      await onRevise(category.id, input)
+      await onSave(category.id, edit)
       setEditing(false)
     } finally {
       setSaving(false)
@@ -346,27 +387,44 @@ function EnvelopeRow({
   return (
     <div
       data-testid="settings-envelope-row"
-      className="flex items-center justify-between border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
+      className="flex items-center justify-between gap-3 border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
     >
-      <p className="font-semibold">
-        <span className="mr-2">{category.emoji ?? '🧾'}</span>
-        <span>{category.name}</span>
-      </p>
       {editing ? (
-        <div className="flex items-end gap-2">
+        <div className="flex flex-1 flex-wrap items-end justify-end gap-2">
+          <EditField
+            id={`envelope-name-${category.id}`}
+            label="Name"
+            value={values.name}
+            onChange={set('name')}
+          />
+          <EmojiSelect
+            id={`envelope-emoji-${category.id}`}
+            value={values.emoji}
+            onChange={set('emoji')}
+          />
           <EditField
             id={`envelope-planned-${category.id}`}
             label="$ / month"
-            value={planned}
-            onChange={setPlanned}
+            value={values.planned}
+            onChange={set('planned')}
           />
           <SaveButton disabled={saving} onClick={() => void save()} />
         </div>
       ) : (
-        <div className="flex items-center gap-3">
-          <p className="num font-bold">{formatUsd(category.planned)} / mo</p>
-          <EditButton onClick={startEditing} />
-        </div>
+        <>
+          <p className="font-semibold">
+            <span className="mr-2">{category.emoji ?? '🧾'}</span>
+            <span>{category.name}</span>
+          </p>
+          <div className="flex items-center gap-3">
+            <p className="num font-bold">{formatUsd(category.planned)} / mo</p>
+            <EditButton onClick={startEditing} />
+            <GhostButton
+              label="Archive"
+              onClick={() => void onArchive(category.id)}
+            />
+          </div>
+        </>
       )}
     </div>
   )
@@ -375,11 +433,13 @@ function EnvelopeRow({
 function EnvelopesCard({
   categories,
   onAdd,
-  onRevise,
+  onSave,
+  onArchive,
 }: {
   categories: Category[]
   onAdd: (input: CategoryInput) => Promise<void>
-  onRevise: (categoryId: number, input: CategoryPlanInput) => Promise<void>
+  onSave: (categoryId: number, edit: EnvelopeEdit) => Promise<void>
+  onArchive: (categoryId: number) => Promise<void>
 }) {
   const [values, setValues] = useState({ name: '', emoji: '', planned: '' })
   const [adding, setAdding] = useState(false)
@@ -417,7 +477,8 @@ function EnvelopesCard({
           <EnvelopeRow
             key={category.id}
             category={category}
-            onRevise={onRevise}
+            onSave={onSave}
+            onArchive={onArchive}
           />
         ))}
       </div>
@@ -428,22 +489,11 @@ function EnvelopesCard({
           value={values.name}
           onChange={set('name')}
         />
-        <label htmlFor="envelope-emoji" className="block">
-          <FieldLabel text="Emoji" />
-          <select
-            id="envelope-emoji"
-            className="mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2 text-sm"
-            value={values.emoji}
-            onChange={(event) => set('emoji')(event.target.value)}
-          >
-            <option value="">—</option>
-            {EMOJI_OPTIONS.map((option) => (
-              <option key={option.label} value={option.emoji}>
-                {option.emoji} {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <EmojiSelect
+          id="envelope-emoji"
+          value={values.emoji}
+          onChange={set('emoji')}
+        />
         <EditField
           id="envelope-amount"
           label="$ / month"
@@ -925,8 +975,18 @@ function Settings() {
     await refetchCategories()
   }
 
-  const reviseEnvelope = async (categoryId: number, input: CategoryPlanInput) => {
-    await updateCategoryPlan(categoryId, input)
+  const saveEnvelope = async (categoryId: number, edit: EnvelopeEdit) => {
+    if (edit.update) {
+      await updateCategory(categoryId, edit.update)
+    }
+    if (edit.plan) {
+      await updateCategoryPlan(categoryId, edit.plan)
+    }
+    await refetchCategories()
+  }
+
+  const archiveEnvelope = async (categoryId: number) => {
+    await archiveCategory(categoryId)
     await refetchCategories()
   }
 
@@ -998,7 +1058,8 @@ function Settings() {
       <EnvelopesCard
         categories={data.categories}
         onAdd={addEnvelope}
-        onRevise={reviseEnvelope}
+        onSave={saveEnvelope}
+        onArchive={archiveEnvelope}
       />
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <AssumptionsCard

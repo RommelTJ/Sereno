@@ -31,6 +31,13 @@ const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
   return call ? JSON.parse(call[1]?.body as string) : undefined
 }
 
+const putBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
+  const call = fetchMock.mock.calls.find(
+    ([input, init]) => input === path && init?.method === 'PUT',
+  )
+  return call ? JSON.parse(call[1]?.body as string) : undefined
+}
+
 beforeEach(() => {
   stubApi(routes())
 })
@@ -332,6 +339,176 @@ describe('Envelopes card', () => {
     expect(postBody(fetchMock, '/api/categories/1/plan')).toEqual({
       planned: 550,
     })
+  })
+
+  it('prefills name, emoji, and planned in the row edit', async () => {
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+
+    expect(within(rows[0]).getByLabelText('Name')).toHaveValue('Groceries')
+    expect(within(rows[0]).getByLabelText('Emoji')).toHaveValue('🛒')
+    expect(within(rows[0]).getByLabelText('$ / month')).toHaveValue('500')
+  })
+
+  it('puts the rename and posts the plan revision when all fields change', async () => {
+    const liveRoutes: Record<string, unknown> = {
+      ...routes(),
+      'PUT /api/categories/1': {
+        id: 1,
+        name: 'Food',
+        emoji: '🍽️',
+        is_fixed: false,
+        planned: 550,
+      },
+      'POST /api/categories/1/plan': {
+        id: 12,
+        category_id: 1,
+        effective_month: '2026-07',
+        planned: 550,
+      },
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[0]).getByLabelText('Name'), {
+      target: { value: 'Food' },
+    })
+    fireEvent.change(within(rows[0]).getByLabelText('Emoji'), {
+      target: { value: '🍽️' },
+    })
+    fireEvent.change(within(rows[0]).getByLabelText('$ / month'), {
+      target: { value: '550' },
+    })
+    liveRoutes['/api/categories'] = CATEGORIES.map((category) =>
+      category.id === 1
+        ? { ...category, name: 'Food', emoji: '🍽️', planned: 550 }
+        : category,
+    )
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        within(screen.getAllByTestId('settings-envelope-row')[0]).getByText(
+          'Food',
+        ),
+      ).toBeInTheDocument(),
+    )
+    expect(putBody(fetchMock, '/api/categories/1')).toEqual({
+      name: 'Food',
+      emoji: '🍽️',
+    })
+    expect(postBody(fetchMock, '/api/categories/1/plan')).toEqual({
+      planned: 550,
+    })
+  })
+
+  it('sends no rename when only the planned amount changes', async () => {
+    const liveRoutes: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/categories/1/plan': {
+        id: 12,
+        category_id: 1,
+        effective_month: '2026-07',
+        planned: 550,
+      },
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ / month'), {
+      target: { value: '550' },
+    })
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/categories/1/plan')).toEqual({
+        planned: 550,
+      }),
+    )
+    expect(putBody(fetchMock, '/api/categories/1')).toBeUndefined()
+  })
+
+  it('sends no plan revision when only the name changes', async () => {
+    const liveRoutes: Record<string, unknown> = {
+      ...routes(),
+      'PUT /api/categories/1': {
+        id: 1,
+        name: 'Food',
+        emoji: '🛒',
+        is_fixed: false,
+        planned: 500,
+      },
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[0]).getByLabelText('Name'), {
+      target: { value: 'Food' },
+    })
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(putBody(fetchMock, '/api/categories/1')).toEqual({
+        name: 'Food',
+        emoji: '🛒',
+      }),
+    )
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          input === '/api/categories/1/plan' && init?.method === 'POST',
+      ),
+    ).toBe(false)
+  })
+
+  it('sends nothing when the name is blanked', async () => {
+    const fetchMock = stubApi(routes())
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[0]).getByLabelText('Name'), {
+      target: { value: '   ' },
+    })
+    fireEvent.change(within(rows[0]).getByLabelText('$ / month'), {
+      target: { value: '550' },
+    })
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(putBody(fetchMock, '/api/categories/1')).toBeUndefined()
+    expect(postBody(fetchMock, '/api/categories/1/plan')).toBeUndefined()
+  })
+
+  it('archives an envelope and removes its row', async () => {
+    const liveRoutes: Record<string, unknown> = routes()
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+
+    liveRoutes['POST /api/categories/1/archive'] = CATEGORIES[0]
+    liveRoutes['/api/categories'] = CATEGORIES.filter(
+      (category) => category.id !== 1,
+    )
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Archive' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('settings-envelope-row')).toHaveLength(3),
+    )
+    expect(screen.queryByText('Groceries')).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          input === '/api/categories/1/archive' && init?.method === 'POST',
+      ),
+    ).toBe(true)
   })
 })
 
