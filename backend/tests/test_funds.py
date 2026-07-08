@@ -359,6 +359,61 @@ class TestMonthlyPlanCatchUp:
         assert fund["balance"] == 0
         assert fetch_fund_entries_with_source(fund["id"]) == []
 
+    def test_a_fund_at_target_receives_no_contribution(self, client):
+        # A fully funded goal stops parking money: the plan suspends at the
+        # target instead of contributing forever.
+        fund_id = insert_fund("Emergency fund", target_amount=10000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 10000)
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 10000
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
+
+    def test_a_fund_above_target_receives_no_contribution(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=10000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 12000)
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 12000
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
+
+    def test_the_final_contribution_caps_at_the_remaining_amount(self, client):
+        # The fund lands exactly on target, never past it — "fully funded"
+        # means exactly funded, and no extra money gets parked.
+        fund_id = insert_fund("Emergency fund", target_amount=10000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 9800)
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 10000
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(1), 9800, 0, None),
+            (first_of_month(0), 10000, 200, "monthly_plan"),
+        ]
+
+    def test_the_catch_up_stops_once_the_target_is_reached(self, client):
+        # A multi-month catch-up caps the crossing month and appends nothing
+        # for the months after it.
+        fund_id = insert_fund("Emergency fund", target_amount=1150, monthly_plan=100)
+        insert_fund_entry(fund_id, first_of_month(3), 1000)
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 1150
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(3), 1000, 0, None),
+            (first_of_month(2), 1100, 100, "monthly_plan"),
+            (first_of_month(1), 1150, 50, "monthly_plan"),
+        ]
+
+    def test_an_open_ended_fund_keeps_funding(self, client):
+        # No target means no finish line: the stop never applies to an
+        # open-ended fund.
+        fund_id = insert_fund("Travel fund", monthly_plan=300)
+        insert_fund_entry(fund_id, first_of_month(1), 4200)
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 4500
+        assert fetch_fund_entries_with_source(fund_id)[-1] == (
+            first_of_month(0),
+            4500,
+            300,
+            "monthly_plan",
+        )
+
 
 class TestArchiveFund:
     def test_archives_the_fund_out_of_the_listing(self, client):
