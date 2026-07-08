@@ -360,6 +360,118 @@ describe('editing a fund plan', () => {
   })
 })
 
+describe('topping up a fund', () => {
+  it('shows a Top up button on each fund card', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    for (const row of rows) {
+      expect(
+        within(row).getByRole('button', { name: 'Top up' }),
+      ).toBeInTheDocument()
+    }
+  })
+
+  it('reveals a blank $ amount input with the release hint', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+
+    const input = within(rows[0]).getByLabelText('$ amount')
+    expect(input).toHaveValue('')
+    expect(input).toHaveAttribute('placeholder', 'negative releases')
+  })
+
+  it('closes an open plan editor when the top-up form opens', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+
+    expect(
+      within(rows[0]).queryByLabelText('$ / month'),
+    ).not.toBeInTheDocument()
+    expect(within(rows[0]).getByLabelText('$ amount')).toBeInTheDocument()
+  })
+
+  it('posts the amount and refetches the list', async () => {
+    const toppedUp = { ...FUNDS[0], balance: 10_250 }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/funds/1/top-up': toppedUp,
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
+      target: { value: '250' },
+    })
+    routes['/api/funds'] = [toppedUp, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('$10,250 / $30,000')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({ amount: 250 })
+    expect(
+      within(rows[0]).queryByLabelText('$ amount'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('posts a negative amount as a release', async () => {
+    const released = { ...FUNDS[0], balance: 9_500 }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/funds/1/top-up': released,
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
+      target: { value: '-500' },
+    })
+    routes['/api/funds'] = [released, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('$9,500 / $30,000')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({ amount: -500 })
+  })
+
+  it('does not post a blank amount', async () => {
+    const fetchMock = stubApi({ '/api/funds': FUNDS })
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(postBody(fetchMock, '/api/funds/1/top-up')).toBeUndefined()
+  })
+
+  it('cancels without posting', async () => {
+    const fetchMock = stubApi({ '/api/funds': FUNDS })
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
+      target: { value: '250' },
+    })
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Cancel' }))
+
+    expect(
+      within(rows[0]).queryByLabelText('$ amount'),
+    ).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST'),
+    ).toHaveLength(0)
+  })
+})
+
 describe('responsive layout', () => {
   it('stacks the new-fund form grids into one column on narrow screens', async () => {
     render(<Funds />)
