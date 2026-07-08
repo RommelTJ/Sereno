@@ -1,5 +1,6 @@
-"""The longevity forecast: a year-by-year simulation from age 38 to 95
-in today's dollars, composing the sourcing engine. Each year the
+"""The longevity forecast: a year-by-year simulation from the caller's
+start age to 95 in today's dollars, composing the sourcing engine.
+Each year the
 buckets grow by the real rate (return minus inflation), the balances
 are recorded, and the year's spending need is withdrawn through the
 sourcing waterfall — so the 0% LTCG headroom, the gross-ups, and the
@@ -23,7 +24,6 @@ from sereno.engine.sourcing import (
     source_withdrawals,
 )
 
-START_AGE = 38
 END_AGE = 95
 BALANCE_CHECK_AGE = 90
 
@@ -65,6 +65,7 @@ def _after_draw(bucket: Bucket, draw: BucketDraw) -> Bucket:
 
 def simulate_forecast(
     *,
+    start_age: int,
     spend: float,
     return_pct: float,
     inflation_pct: float,
@@ -78,7 +79,7 @@ def simulate_forecast(
     current = list(buckets)
     series: list[ForecastPoint] = []
     run_out_age: int | None = None
-    for age in range(START_AGE, END_AGE + 1):
+    for age in range(start_age, END_AGE + 1):
         current = [_grow(bucket, real_rate) for bucket in current]
         ss_income = sum(
             12 * benefit.monthly_amount for benefit in social_security if age >= benefit.start_age

@@ -37,6 +37,11 @@ Age = Annotated[float, Query(ge=0)]
 
 ETH_PRIORITY = 1
 
+# Deliberately sanitized — the repo is public, so this is not a real
+# birthday. It anchors the planners' derived current age; no birthdate
+# lives in the schema.
+BIRTHDATE = date(1988, 1, 1)
+
 _PRIORITY_LABELS = {1: "ETH", 2: "Brokerage", 3: "401(k)"}
 
 _LATEST_BALANCES = """
@@ -81,6 +86,13 @@ class Sourcing(BaseModel):
     steps: list[SourcingStep]
     net_delivered: float
     shortfall: float
+
+
+def current_age(today: date | None = None) -> int:
+    """Whole years since BIRTHDATE — the planners' derived age."""
+    today = today or date.today()
+    before_birthday = (today.month, today.day) < (BIRTHDATE.month, BIRTHDATE.day)
+    return today.year - BIRTHDATE.year - int(before_birthday)
 
 
 def current_tax_param(db: sqlite3.Connection) -> TaxParam | None:
