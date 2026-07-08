@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.9.0**
+**v1.10.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -200,8 +200,10 @@ The budget slice:
   Fund-funded expenses stay out of `total_spent` and the envelope bars —
   they were paid from parked money, and the fund's drawdown already
   released the earmark — and `fund_contributions` is the month's automatic
-  monthly-plan funding: money moved into a fund is parked, so it stops
-  being spendable the moment it lands. Reading the budget month applies
+  monthly-plan funding plus its one-time top-ups: money moved into a fund
+  is parked, so it stops being spendable the moment it lands, and a
+  release's negative contribution reads as spendable again. Reading the
+  budget month applies
   the monthly-plan catch-up itself, so the headline never misses a
   contribution the funds list hasn't been asked for yet.
 The funds slice:
@@ -247,6 +249,18 @@ The funds slice:
   archiving: the balance stays parked and the fund drops out of the
   monthly catch-up until a new plan is set. A negative plan is a 422;
   an unknown fund is a 404.
+- `POST /api/funds/{id}/top-up` — a one-time move between the month's
+  safe-to-spend and the fund, the one-off sibling of the automatic
+  monthly contribution: appends a `fund_entry` with the delta as its
+  contribution and `source = 'top_up'`, the new balance computed
+  server-side from the latest entry — nobody types an absolute figure.
+  A positive amount parks money (the headline falls the moment it
+  lands); a negative amount is a partial release, raising the headline
+  back. A release may not exceed the fund's balance (a 422, the mirror
+  of the overdraw guard on fund-funded expenses) — but a top-up beyond
+  the month's remaining safe-to-spend is allowed, like overspending is
+  everywhere else. A zero amount or an archived fund is a 422; an
+  unknown fund is a 404.
 - `POST /api/funds/{id}/archive` — soft remove, like envelope
   archiving: flips `fund.active` to 0 so the fund drops out of the
   funds list, the dashboard parked total, and the safe-to-spend
@@ -404,7 +418,12 @@ The forecast slice (the third Plan engine):
   goal** form (name, a curated emoji select, target, saved, target date —
   blank = sinking fund — and $/month), then each fund with its emoji-led
   name, meta line, `saved / target` amount, progress bar, the
-  server-derived note from `GET /api/funds`, rendered verbatim, an Edit
+  server-derived note from `GET /api/funds`, rendered verbatim, a Top up
+  button that opens an inline $ amount input — Save posts the delta to
+  `POST /api/funds/{id}/top-up`, moving money between the month's
+  safe-to-spend and the fund (a negative amount releases part of the
+  balance back to spendable), and refetches so the balance and note move
+  immediately — an Edit
   button that opens an inline $ / month input prefilled with the current
   plan — Save revises it via `PUT /api/funds/{id}` (a blank input pauses
   funding without archiving) and refetches so the note recalculates,
@@ -531,6 +550,21 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.10.0 — One-time fund top-ups and releases. Funds gain the one-off
+sibling of the automatic monthly contribution:
+`POST /api/funds/{id}/top-up` appends a `fund_entry` with the delta as
+its contribution and `source = 'top_up'` — the new balance is computed
+server-side from the latest entry, so nobody types an absolute figure —
+and the budget month counts top-ups in `fund_contributions` alongside
+the monthly plans, so parking money trims safe-to-spend the moment it
+lands. A negative amount is a partial release, raising the headline
+back: releasing more than the fund holds is a 422, the mirror of the
+overdraw guard on fund-funded expenses, while topping up past the
+month's remaining headline stays allowed, like overspending everywhere
+else. Each Funds & goals row gains a Top up button with an inline
+$ amount input beside Edit and Archive — a negative amount releases
+back to spendable.
 
 v1.9.0 — Monthly funding learns to stop. The lazy catch-up no longer
 funds past 100%: each due month contributes from the fund's balance

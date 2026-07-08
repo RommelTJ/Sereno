@@ -486,6 +486,86 @@ class TestUpdateFund:
         assert response.status_code == 404
 
 
+class TestTopUpFund:
+    def test_appends_a_top_up_entry_dated_today(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 250})
+        assert response.status_code == 201
+        fund = response.json()
+        assert fund["id"] == fund_id
+        assert fund["balance"] == 10250
+        assert fetch_fund_entries_with_source(fund_id)[-1] == (
+            date.today().isoformat(),
+            10250,
+            250,
+            "top_up",
+        )
+
+    def test_the_balance_builds_on_the_latest_entry(self, client):
+        # The client sends only the delta — the server computes the new
+        # balance from the newest entry, so nobody types an absolute figure.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(1), 8000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 500})
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 10500
+
+    def test_the_returned_note_recalculates(self, client):
+        fund_id = insert_fund("Bike fund", kind="goal", target_amount=10000)
+        insert_fund_entry(fund_id, first_of_month(), 9000)
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 1000})
+        assert response.json()["note"] == "✓ fully funded — ready to spend"
+
+    def test_a_negative_amount_releases_part_of_the_balance(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": -400})
+        assert response.status_code == 201
+        assert response.json()["balance"] == 9600
+        assert fetch_fund_entries_with_source(fund_id)[-1] == (
+            date.today().isoformat(),
+            9600,
+            -400,
+            "top_up",
+        )
+
+    def test_a_release_beyond_the_balance_is_a_422(self, client):
+        # The mirror of the overdraw guard on fund-funded expenses: a fund
+        # is an earmark over real cash, so no more can be released than is
+        # parked. No entry is appended.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 100)
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": -250})
+        assert response.status_code == 422
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
+
+    def test_a_release_of_the_full_balance_is_allowed(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 100)
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": -100})
+        assert response.status_code == 201
+        assert response.json()["balance"] == 0
+
+    def test_a_zero_amount_is_a_422(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 0})
+        assert response.status_code == 422
+
+    def test_an_unknown_fund_is_a_404(self, client):
+        response = client.post("/api/funds/999/top-up", json={"amount": 100})
+        assert response.status_code == 404
+
+    def test_an_archived_fund_is_a_422(self, client):
+        # An archived fund is invisible everywhere money is displayed, so
+        # parking money in one would trim safe-to-spend with no surface
+        # showing where it went.
+        fund_id = insert_fund("Old fund", active=0)
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 100})
+        assert response.status_code == 422
+
+
 class TestArchiveFund:
     def test_archives_the_fund_out_of_the_listing(self, client):
         fund_id = insert_fund("Emergency fund", target_amount=30000)

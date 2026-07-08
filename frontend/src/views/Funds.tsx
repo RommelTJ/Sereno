@@ -5,39 +5,65 @@ import {
   createFund,
   createFundEntry,
   fetchFunds,
+  topUpFund,
   updateFund,
 } from '../api.ts'
 import GhostButton from '../components/GhostButton.tsx'
 import NewFundForm from '../components/NewFundForm.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
 import type { NewFund } from '../funds.ts'
-import { fundPlanEdit, fundView, totalParked } from '../funds.ts'
+import { fundPlanEdit, fundView, topUpAmount, totalParked } from '../funds.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
+
+// One inline form open per row at a time: the plan edit and the top-up
+// share the row's footer, so opening one closes the other — and keeps a
+// single Save/Cancel pair on screen.
+type RowForm = 'plan' | 'topup' | null
 
 function FundRow({
   fund,
   onArchive,
   onSavePlan,
+  onTopUp,
 }: {
   fund: Fund
   onArchive: (fundId: number) => Promise<void>
   onSavePlan: (fundId: number, edit: FundUpdate) => Promise<void>
+  onTopUp: (fundId: number, amount: number) => Promise<void>
 }) {
   const view = fundView(fund)
-  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState<RowForm>(null)
   const [saving, setSaving] = useState(false)
   const [monthly, setMonthly] = useState('')
+  const [amount, setAmount] = useState('')
 
   const startEditing = () => {
     setMonthly(fund.monthly_plan === null ? '' : String(fund.monthly_plan))
-    setEditing(true)
+    setForm('plan')
+  }
+
+  const startToppingUp = () => {
+    setAmount('')
+    setForm('topup')
   }
 
   const save = async () => {
     setSaving(true)
     try {
       await onSavePlan(fund.id, fundPlanEdit(monthly))
-      setEditing(false)
+      setForm(null)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveTopUp = async () => {
+    const delta = topUpAmount(amount)
+    if (!delta) return
+    setSaving(true)
+    try {
+      await onTopUp(fund.id, delta)
+      setForm(null)
     } finally {
       setSaving(false)
     }
@@ -54,6 +80,7 @@ function FundRow({
         </p>
         <div className="flex items-baseline gap-3">
           <p className="num text-[13.5px] font-semibold">{view.amount}</p>
+          <GhostButton label="Top up" onClick={startToppingUp} />
           <GhostButton label="Edit" onClick={startEditing} />
           <GhostButton
             label="Archive"
@@ -75,7 +102,7 @@ function FundRow({
       >
         {view.note}
       </p>
-      {editing && (
+      {form === 'plan' && (
         <div className="mt-2 flex items-end gap-2">
           <label htmlFor={`fund-plan-${fund.id}`} className="block">
             <FieldLabel text="$ / month" />
@@ -95,7 +122,30 @@ function FundRow({
           >
             Save
           </button>
-          <GhostButton label="Cancel" onClick={() => setEditing(false)} />
+          <GhostButton label="Cancel" onClick={() => setForm(null)} />
+        </div>
+      )}
+      {form === 'topup' && (
+        <div className="mt-2 flex items-end gap-2">
+          <label htmlFor={`fund-topup-${fund.id}`} className="block">
+            <FieldLabel text="$ amount" />
+            <input
+              id={`fund-topup-${fund.id}`}
+              className="num mt-1 w-[120px] rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+              placeholder="negative releases"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void saveTopUp()}
+            className="cursor-pointer rounded-[8px] bg-accent px-3 py-1 text-[11.5px] font-bold text-white disabled:opacity-60"
+          >
+            Save
+          </button>
+          <GhostButton label="Cancel" onClick={() => setForm(null)} />
         </div>
       )}
     </div>
@@ -131,6 +181,11 @@ function Funds() {
     setFunds(await fetchFunds())
   }
 
+  const topUp = async (fundId: number, amount: number) => {
+    await topUpFund(fundId, { amount })
+    setFunds(await fetchFunds())
+  }
+
   return (
     <div data-testid="view-funds" className="max-w-[760px]">
       {funds && (
@@ -154,6 +209,7 @@ function Funds() {
                 fund={fund}
                 onArchive={archive}
                 onSavePlan={savePlan}
+                onTopUp={topUp}
               />
             ))}
           </div>

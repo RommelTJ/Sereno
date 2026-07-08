@@ -6,8 +6,10 @@ month's stored income events. It moves only when a funding row is appended,
 never when spending lands, so safe_to_spend = funded_in − fund_contributions
 − total_spent: total_spent counts only discretionary lines (fund-funded
 spending was paid from parked money and never lowers the headline), and
-fund_contributions is the month's automatic monthly-plan funding — money
-moved into a fund is parked, so it stops being spendable the moment it lands.
+fund_contributions is the month's automatic monthly-plan funding plus its
+one-time top-ups — money moved into a fund is parked, so it stops being
+spendable the moment it lands, and a release's negative contribution makes
+it spendable again.
 """
 
 import sqlite3
@@ -363,7 +365,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
 
     fund_contributions = db.execute(
         "SELECT COALESCE(SUM(contribution), 0) FROM fund_entry"
-        " WHERE source = 'monthly_plan' AND substr(as_of_date, 1, 7) = ?",
+        " WHERE source IN ('monthly_plan', 'top_up') AND substr(as_of_date, 1, 7) = ?",
         (target,),
     ).fetchone()[0]
 
