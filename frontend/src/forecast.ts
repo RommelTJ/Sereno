@@ -28,44 +28,48 @@ export function formatMillions(value: number): string {
   return `$${millions >= 10 ? millions.toFixed(1) : millions.toFixed(2)}M`
 }
 
-const CHART_AGES = [38, 43, 48, 53, 58, 63, 68, 73, 78, 83, 88, 93]
 const CHART_HEIGHT = 190
 // True Social Security dollars against a multi-million balance would
 // be under a pixel — the income sliver is enlarged to stay visible.
 const SS_MIN_HEIGHT = 7
+// One bar per simulated year is too dense to label each column — the
+// axis marks only the ages divisible by five.
+const LABEL_STEP = 5
 
+// Pixel heights for the stacked bar plus the raw dollars behind them,
+// so the hover tooltip can show the exact per-bucket balances.
 export interface ChartColumn {
   age: number
+  label: string
   eth: number
   brokerage: number
   retirement: number
   ss: number
+  ethUsd: number
+  brokerageUsd: number
+  retirementUsd: number
+  ssUsd: number
 }
 
 export function chartColumns(series: ForecastPoint[]): ChartColumn[] {
-  const picks = CHART_AGES.map(
-    (age) =>
-      series.find((point) => point.age === age) ?? {
-        age,
-        eth: 0,
-        brokerage: 0,
-        retirement: 0,
-        ss_income: 0,
-      },
-  )
   let maxTotal = Math.max(
-    ...picks.map((point) => point.eth + point.brokerage + point.retirement),
+    ...series.map((point) => point.eth + point.brokerage + point.retirement),
   )
   if (maxTotal <= 0) {
     maxTotal = 1
   }
   const height = (value: number) => (value / maxTotal) * CHART_HEIGHT
-  return picks.map((point) => ({
+  return series.map((point) => ({
     age: point.age,
+    label: point.age % LABEL_STEP === 0 ? String(point.age) : '',
     eth: height(point.eth),
     brokerage: height(point.brokerage),
     retirement: height(point.retirement),
     ss: point.ss_income > 0 ? Math.max(SS_MIN_HEIGHT, height(point.ss_income)) : 0,
+    ethUsd: point.eth,
+    brokerageUsd: point.brokerage,
+    retirementUsd: point.retirement,
+    ssUsd: point.ss_income,
   }))
 }
 

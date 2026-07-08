@@ -23,12 +23,12 @@ function BarColumn({ column }: { column: ChartColumn }) {
       data-testid={`forecast-col-${column.age}`}
       className="flex flex-1 flex-col items-center justify-end"
     >
-      <div className="w-[72%] bg-accent" style={{ height: `${column.eth}px` }} />
-      <div className="w-[72%] bg-sidebar" style={{ height: `${column.brokerage}px` }} />
-      <div className="w-[72%] bg-amber" style={{ height: `${column.retirement}px` }} />
+      <div className="w-full bg-accent" style={{ height: `${column.eth}px` }} />
+      <div className="w-full bg-sidebar" style={{ height: `${column.brokerage}px` }} />
+      <div className="w-full bg-amber" style={{ height: `${column.retirement}px` }} />
       <div
         data-testid={`forecast-ss-${column.age}`}
-        className="w-[72%] bg-ss-blue"
+        className="w-full bg-ss-blue"
         style={{ height: `${column.ss}px` }}
       />
     </div>
@@ -238,15 +238,18 @@ function Forecast() {
         <p className="mb-[26px] text-sm font-bold">
           Balance by bucket · age {forecast.start_age} → 100
         </p>
-        <div className="relative flex h-[200px] items-end gap-2 border-b border-[#d9d4c9]">
+        <div className="relative flex h-[200px] items-end gap-[2px] border-b border-[#d9d4c9]">
           {chartColumns(forecast.series).map((column) => (
             <BarColumn key={column.age} column={column} />
           ))}
         </div>
-        <div className="mt-1.5 flex gap-2">
+        <div className="mt-1.5 flex gap-[2px]">
           {chartColumns(forecast.series).map((column) => (
-            <div key={column.age} className="flex-1 text-center text-[10px] text-muted-2">
-              {column.age}
+            <div
+              key={column.age}
+              className="flex-1 overflow-visible text-center text-[10px] text-muted-2"
+            >
+              {column.label}
             </div>
           ))}
         </div>
