@@ -55,17 +55,21 @@ export interface FundRow {
   id: number
   name: string
   amount: string
+  plan: string
 }
 
 // The safe-to-spend funds card's rows: every active fund with its parked
 // balance — the per-fund breakdown of the hero formula's money-in-funds
 // term. The name goes through fundView so emojis render the same way
-// everywhere.
+// everywhere; the plan matches the server-derived note's "$X / mo" and
+// stays blank for a fund saving at no set pace.
 export function fundRows(funds: Fund[]): FundRow[] {
   return funds.map((fund) => ({
     id: fund.id,
     name: fundView(fund).name,
     amount: formatUsd(fund.balance),
+    plan:
+      fund.monthly_plan !== null ? `${formatUsd(fund.monthly_plan)} / mo` : '',
   }))
 }
 

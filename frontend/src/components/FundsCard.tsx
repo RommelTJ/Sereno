@@ -18,7 +18,12 @@ function FundsCard({ funds }: { funds: Fund[] }) {
           className="flex items-center justify-between border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
         >
           <span>{row.name}</span>
-          <span className="num font-semibold text-muted">{row.amount}</span>
+          <span className="flex items-baseline gap-2.5">
+            {row.plan && (
+              <span className="num text-[11.5px] text-muted-2">{row.plan}</span>
+            )}
+            <span className="num font-semibold text-muted">{row.amount}</span>
+          </span>
         </div>
       ))}
     </div>
