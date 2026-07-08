@@ -838,6 +838,34 @@ class TestGetBudgetMonth:
         body = client.get("/api/budget-month", params={"month": last_month}).json()
         assert body["fund_contributions"] == 100
 
+    def test_top_ups_count_against_the_headline(self, client):
+        # A one-time top-up parks money exactly like a monthly-plan
+        # contribution: the delta joins fund_contributions and stops being
+        # spendable the moment it lands.
+        fund_id = insert_fund("Pool fund")
+        insert_fund_entry(fund_id, first_of_month(), 5000)
+        payload = {"txn_date": date.today().isoformat(), "source": "paycheck", "amount": 5000}
+        assert client.post("/api/income", json=payload).status_code == 201
+        top_up = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 250})
+        assert top_up.status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["fund_contributions"] == 250
+        assert body["safe_to_spend"] == 4750
+
+    def test_a_release_raises_the_headline(self, client):
+        # The inverse move: releasing part of an over-saved fund makes the
+        # money spendable again — the negative contribution lifts
+        # safe-to-spend above the baseline.
+        fund_id = insert_fund("Pool fund")
+        insert_fund_entry(fund_id, first_of_month(), 5000)
+        payload = {"txn_date": date.today().isoformat(), "source": "paycheck", "amount": 5000}
+        assert client.post("/api/income", json=payload).status_code == 201
+        release = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": -400})
+        assert release.status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["fund_contributions"] == -400
+        assert body["safe_to_spend"] == 5400
+
     def test_month_defaults_to_the_current_month(self, client):
         today = date.today()
         payload = {"txn_date": today.isoformat(), "amount": 75}
