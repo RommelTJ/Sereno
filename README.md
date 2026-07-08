@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.3.0**
+**v1.4.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -457,6 +457,16 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.4.0 — Fund emojis. Funds & goals join accounts and categories in
+carrying a user-chosen emoji: migration 0005 adds a nullable `emoji`
+column to `fund` (backfilling the seed funds by name), `GET` and
+`POST /api/funds` expose and accept it, and the new-fund form gains
+a curated fund-themed emoji select. Fund cards on Funds & goals and
+the safe-to-spend "Funded from" options now render `emoji + name`
+like the Category picker already did; a fund without an emoji keeps
+its plain name. Existing funds stay emoji-less for now — there is no
+fund edit endpoint yet (#53 tracks the fund lifecycle).
 
 v1.3.0 — Account classification. Accounts created through the UI can
 finally participate in the planner: `PUT /api/accounts/{id}` sets
