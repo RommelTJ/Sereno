@@ -3,7 +3,9 @@ income entry, and the computed budget month powering Safe-to-spend.
 
 The Safe-to-spend baseline is funded_in from v_budget_month — the sum of the
 month's stored income events. It moves only when a funding row is appended,
-never when spending lands, so safe_to_spend = funded_in − total_spent.
+never when spending lands, so safe_to_spend = funded_in − total_spent, where
+total_spent counts only discretionary lines — fund-funded spending was paid
+from parked money and never lowers the headline.
 """
 
 import sqlite3

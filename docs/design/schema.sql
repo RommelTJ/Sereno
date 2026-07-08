@@ -226,12 +226,16 @@ GROUP BY m.month;
 
 -- Safe-to-spend inputs per budget month: cash in vs. earmarked out.
 -- (Discretionary categories can go negative — overspend just reduces this.)
+-- Fund-funded expenses stay out of the spent totals: they were paid from
+-- parked money (the fund draws down instead), so counting them here would
+-- lower safe-to-spend twice. fund_spent keeps that total queryable.
 CREATE VIEW v_budget_month AS
 SELECT budget_month AS month,
        (SELECT COALESCE(SUM(amount),0) FROM income_event  i WHERE i.budget_month = e.budget_month) AS funded_in,
-       SUM(CASE WHEN is_fixed = 1 THEN amount ELSE 0 END) AS fixed_spent,
-       SUM(CASE WHEN is_fixed = 0 THEN amount ELSE 0 END) AS variable_spent,
-       SUM(amount) AS total_spent
+       SUM(CASE WHEN is_fixed = 1 AND funded_from = 'discretionary' THEN amount ELSE 0 END) AS fixed_spent,
+       SUM(CASE WHEN is_fixed = 0 AND funded_from = 'discretionary' THEN amount ELSE 0 END) AS variable_spent,
+       SUM(CASE WHEN funded_from = 'discretionary' THEN amount ELSE 0 END) AS total_spent,
+       SUM(CASE WHEN funded_from = 'fund' THEN amount ELSE 0 END) AS fund_spent
 FROM expense_line e
 GROUP BY budget_month;
 
