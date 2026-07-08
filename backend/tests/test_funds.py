@@ -432,6 +432,60 @@ class TestMonthlyPlanCatchUp:
         ]
 
 
+class TestUpdateFund:
+    def test_revises_the_monthly_plan_in_place(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.put(f"/api/funds/{fund_id}", json={"monthly_plan": 1000})
+        assert response.status_code == 200
+        fund = response.json()
+        assert fund["id"] == fund_id
+        assert fund["monthly_plan"] == 1000
+        assert fund["note"] == "$1,000 / mo · ~1.7 yrs to target"
+        (listed,) = client.get("/api/funds").json()
+        assert listed["monthly_plan"] == 1000
+
+    def test_a_null_plan_pauses_the_fund(self, client):
+        # Setting the plan to blank pauses funding without archiving: the
+        # fund keeps its balance and drops out of the monthly catch-up.
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 10000)
+        response = client.put(f"/api/funds/{fund_id}", json={"monthly_plan": None})
+        assert response.status_code == 200
+        assert response.json()["monthly_plan"] is None
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 10000
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
+
+    def test_a_zero_plan_is_stored_as_null(self, client):
+        # 0 and blank both mean "no plan": normalizing keeps "$0 / mo" from
+        # ever rendering and makes pause a single state.
+        fund_id = insert_fund("Travel fund", monthly_plan=300)
+        insert_fund_entry(fund_id, first_of_month(), 4200)
+        response = client.put(f"/api/funds/{fund_id}", json={"monthly_plan": 0})
+        assert response.status_code == 200
+        assert response.json()["monthly_plan"] is None
+
+    def test_the_entry_history_is_untouched(self, client):
+        # The fund row is a dimension, like a category rename: revising the
+        # plan never touches the append-only fund_entry history.
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        client.put(f"/api/funds/{fund_id}", json={"monthly_plan": 250})
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(), 10000, 0, None),
+        ]
+
+    def test_rejects_a_negative_plan(self, client):
+        fund_id = insert_fund("Emergency fund", monthly_plan=500)
+        response = client.put(f"/api/funds/{fund_id}", json={"monthly_plan": -5})
+        assert response.status_code == 422
+
+    def test_an_unknown_fund_is_a_404(self, client):
+        response = client.put("/api/funds/999", json={"monthly_plan": 100})
+        assert response.status_code == 404
+
+
 class TestArchiveFund:
     def test_archives_the_fund_out_of_the_listing(self, client):
         fund_id = insert_fund("Emergency fund", target_amount=30000)
