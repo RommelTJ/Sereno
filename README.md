@@ -217,7 +217,15 @@ The funds slice:
   with a `monthly_plan` receives any missing contribution entries
   (`source = 'monthly_plan'`, one per 1st-of-month since its latest planned
   or hand-entered row) before the list is computed, idempotently — the
-  append-only, derive-on-read pattern.
+  append-only, derive-on-read pattern. The plan suspends at the target:
+  each due month funds from the fund's balance as of that 1st, the
+  crossing month's contribution is capped at the remaining amount so the
+  fund lands exactly on target, and months spent at target are forgiven
+  rather than owed — a drawdown resumes funding from its own month
+  forward at the normal pace. An open-ended fund (no target) has no
+  finish line, and a goal's target date is a deadline, never a kill
+  switch: a dated goal past its date keeps funding until it hits the
+  target or its plan is paused.
 - `POST /api/funds` — creates a fund. `kind` is derived, never sent: a
   blank `target_date` means a sinking fund, a set date means a goal; a
   blank `target_amount` is an open-ended fund (no finish line, so no
@@ -232,6 +240,13 @@ The funds slice:
   telling their kinds apart: `'spend'` for the drawdown behind a
   fund-funded expense, `'monthly_plan'` for an automatic contribution,
   null for the hand-entered rows this endpoint appends.
+- `PUT /api/funds/{id}` — revises the fund's monthly plan in place —
+  the fund row is a dimension, like a category rename, so the
+  append-only entry history is untouched. A null plan (0 is normalized
+  to NULL, so "$0 / mo" never renders) pauses funding without
+  archiving: the balance stays parked and the fund drops out of the
+  monthly catch-up until a new plan is set. A negative plan is a 422;
+  an unknown fund is a 404.
 - `POST /api/funds/{id}/archive` — soft remove, like envelope
   archiving: flips `fund.active` to 0 so the fund drops out of the
   funds list, the dashboard parked total, and the safe-to-spend
@@ -389,7 +404,11 @@ The forecast slice (the third Plan engine):
   goal** form (name, a curated emoji select, target, saved, target date —
   blank = sinking fund — and $/month), then each fund with its emoji-led
   name, meta line, `saved / target` amount, progress bar, the
-  server-derived note from `GET /api/funds`, rendered verbatim, and an
+  server-derived note from `GET /api/funds`, rendered verbatim, an Edit
+  button that opens an inline $ / month input prefilled with the current
+  plan — Save revises it via `PUT /api/funds/{id}` (a blank input pauses
+  funding without archiving) and refetches so the note recalculates,
+  Cancel closes without a request — and an
   Archive button that retires the fund via `POST /api/funds/{id}/archive`
   and refetches the list — a finished goal disappears from the card, the
   total parked, and the safe-to-spend "Funded from" options, and its
