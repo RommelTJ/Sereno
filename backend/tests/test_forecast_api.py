@@ -4,7 +4,7 @@ target, return and inflation to the assumptions row, and Social
 Security to the per-person stored rows; ?spend=, ?return_pct=,
 ?inflation_pct=, ?ss_you=, ?ss_spouse=, and ?ss_start= override
 transiently (the Forecast screen's sliders never persist). The
-response carries the full series, the run-out age, the age-90
+response carries the full series, the run-out age, the age-100
 balance, and the sensitivity table — whole percentages of the latest
 net worth from 2% to 6%, each rounded to the nearest $1,000 and
 simulated at the resolved assumptions. Null until a tax year,
@@ -21,6 +21,11 @@ from sereno.db.connection import connect
 from sereno.main import app
 
 TODAY = date.today()
+
+# Mirrors the backend's sanitized BIRTHDATE constant (January 1, 1988 —
+# not a real birthday): with a Jan-1 birthdate the derived current age
+# is simply the year difference.
+START_AGE = TODAY.year - 1988
 
 # The seed's 2026 MFJ brackets
 BRACKETS_JSON = json.dumps(
@@ -165,6 +170,13 @@ class TestPrerequisites:
 
 
 class TestForecast:
+    def test_the_start_age_derives_from_the_birthdate(self, client):
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast").json()
+        assert body["start_age"] == START_AGE
+        assert body["series"][0]["age"] == START_AGE
+
     def test_the_full_forecast_with_seeded_config(self, client):
         seed_portfolio()
         seed_config()
@@ -182,17 +194,17 @@ class TestForecast:
         assert body["ss_start"] == 67.0
         assert body["tax_year"] == TODAY.year
 
-        assert [point["age"] for point in body["series"]] == list(range(38, 96))
+        assert [point["age"] for point in body["series"]] == list(range(START_AGE, 101))
         first = body["series"][0]
         assert first["eth"] == pytest.approx(400_000 * 1.04)
         assert first["brokerage"] == pytest.approx(600_000 * 1.04)
         assert first["retirement"] == pytest.approx(500_000 * 1.04)
         assert first["ss_income"] == 0.0
-        assert body["series"][67 - 38]["ss_income"] == pytest.approx(54_000)
+        assert body["series"][67 - START_AGE]["ss_income"] == pytest.approx(54_000)
 
-        # 45,000 against 1.5M growing 4% real: the money outlasts 95.
+        # 45,000 against 1.5M growing 4% real: the money outlasts 100.
         assert body["run_out_age"] is None
-        assert body["balance_at_90"] > 0
+        assert body["balance_at_100"] > 0
 
     def test_the_series_reflects_the_sourcing_waterfall(self, client):
         # Age 38 stakes 3,000 (ETH > 50k) and sells the 42,000 gap out
@@ -229,8 +241,8 @@ class TestForecast:
         assert body["ss_you"] == 1_500.0
         assert body["ss_spouse"] == 1_400.0
         assert body["ss_start"] == 62.0
-        assert body["series"][61 - 38]["ss_income"] == 0.0
-        assert body["series"][62 - 38]["ss_income"] == pytest.approx(34_800)
+        assert body["series"][61 - START_AGE]["ss_income"] == 0.0
+        assert body["series"][62 - START_AGE]["ss_income"] == pytest.approx(34_800)
 
     def test_without_ss_rows_the_benefits_default_to_zero(self, client):
         seed_portfolio()
@@ -277,5 +289,5 @@ class TestSensitivity:
         rows = client.get("/api/forecast").json()["sensitivity"]
         by_spend = {row["spend"]: row for row in rows}
         assert by_spend[30_000.0]["run_out_age"] is None
-        assert by_spend[30_000.0]["balance_at_90"] > 0
+        assert by_spend[30_000.0]["balance_at_100"] > 0
         assert by_spend[90_000.0]["run_out_age"] is not None

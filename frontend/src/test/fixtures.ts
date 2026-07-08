@@ -321,13 +321,14 @@ export const TAX_PARAMS = [
 export const FORECAST: Forecast = {
   spend: 45_000,
   annual_target: 45_000,
+  start_age: 38,
   return_pct: 7,
   inflation_pct: 3,
   ss_you: 1_500,
   ss_spouse: 1_400,
   ss_start: 67,
   tax_year: 2026,
-  series: Array.from({ length: 95 - 38 + 1 }, (_, i) => ({
+  series: Array.from({ length: 100 - 38 + 1 }, (_, i) => ({
     age: 38 + i,
     eth: 200_000,
     brokerage: 800_000,
@@ -335,13 +336,13 @@ export const FORECAST: Forecast = {
     ss_income: 38 + i >= 67 ? 34_800 : 0,
   })),
   run_out_age: null,
-  balance_at_90: 5_512_345,
+  balance_at_100: 5_512_345,
   sensitivity: [
-    { spend: 30_000, run_out_age: null, balance_at_90: 7_200_000 },
-    { spend: 45_000, run_out_age: null, balance_at_90: 5_512_345 },
-    { spend: 60_000, run_out_age: null, balance_at_90: 3_100_000 },
-    { spend: 75_000, run_out_age: 92, balance_at_90: 350_000 },
-    { spend: 90_000, run_out_age: 71, balance_at_90: 0 },
+    { spend: 30_000, run_out_age: null, balance_at_100: 7_200_000 },
+    { spend: 45_000, run_out_age: null, balance_at_100: 5_512_345 },
+    { spend: 60_000, run_out_age: null, balance_at_100: 3_100_000 },
+    { spend: 75_000, run_out_age: 92, balance_at_100: 350_000 },
+    { spend: 90_000, run_out_age: 71, balance_at_100: 0 },
   ],
 }
 

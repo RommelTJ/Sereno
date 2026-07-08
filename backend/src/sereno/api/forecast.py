@@ -1,5 +1,8 @@
 """The forecast slice: the longevity simulation fed by live buckets
-and the stored planning config. Spend defaults to the plan's annual
+and the stored planning config. The start age derives from the
+sanitized BIRTHDATE constant (today's date against January 1, 1988)
+and is echoed in the response so the frontend never hardcodes it.
+Spend defaults to the plan's annual
 target, return and inflation to the assumptions row, and Social
 Security to the per-person stored rows (each on its own start age);
 the query params override each transiently — the Forecast screen's
@@ -17,7 +20,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from sereno.api.config import get_assumptions, get_social_security, get_spend_plan
-from sereno.api.sourcing import current_tax_param, load_buckets
+from sereno.api.sourcing import current_age, current_tax_param, load_buckets
 from sereno.db.connection import get_db
 from sereno.engine.forecast import ForecastResult, SocialSecurityBenefit, simulate_forecast
 from sereno.engine.sourcing import Bracket, Bucket
@@ -54,12 +57,13 @@ class ForecastPointOut(BaseModel):
 class SensitivityRow(BaseModel):
     spend: float
     run_out_age: int | None
-    balance_at_90: float
+    balance_at_100: float
 
 
 class Forecast(BaseModel):
     spend: float
     annual_target: float | None
+    start_age: int
     return_pct: float
     inflation_pct: float
     ss_you: float
@@ -68,7 +72,7 @@ class Forecast(BaseModel):
     tax_year: int
     series: list[ForecastPointOut]
     run_out_age: int | None
-    balance_at_90: float
+    balance_at_100: float
     sensitivity: list[SensitivityRow]
 
 
@@ -145,18 +149,18 @@ def get_forecast(
     else:
         resolved_start = DEFAULT_SS_START_AGE
 
-    def start_age(entry_start: float | None) -> float:
+    def benefit_start(entry_start: float | None) -> float:
         if ss_start is not None:
             return ss_start
         return entry_start if entry_start is not None else resolved_start
 
     benefits = [
         SocialSecurityBenefit(
-            monthly_amount=resolved_you, start_age=start_age(you.start_age if you else None)
+            monthly_amount=resolved_you, start_age=benefit_start(you.start_age if you else None)
         ),
         SocialSecurityBenefit(
             monthly_amount=resolved_spouse,
-            start_age=start_age(spouse.start_age if spouse else None),
+            start_age=benefit_start(spouse.start_age if spouse else None),
         ),
     ]
 
@@ -166,8 +170,11 @@ def get_forecast(
         else None
     )
 
+    start_age = current_age()
+
     def simulate(spend_level: float) -> ForecastResult:
         return simulate_forecast(
+            start_age=start_age,
             spend=spend_level,
             return_pct=resolved_return,
             inflation_pct=resolved_inflation,
@@ -183,13 +190,14 @@ def get_forecast(
         return SensitivityRow(
             spend=level,
             run_out_age=outcome.run_out_age,
-            balance_at_90=outcome.balance_at_90,
+            balance_at_100=outcome.balance_at_100,
         )
 
     result = simulate(target)
     return Forecast(
         spend=target,
         annual_target=plan.annual_target if plan else None,
+        start_age=start_age,
         return_pct=resolved_return,
         inflation_pct=resolved_inflation,
         ss_you=resolved_you,
@@ -198,6 +206,6 @@ def get_forecast(
         tax_year=tax.tax_year,
         series=_series(result, buckets),
         run_out_age=result.run_out_age,
-        balance_at_90=result.balance_at_90,
+        balance_at_100=result.balance_at_100,
         sensitivity=[sensitivity_row(level) for level in _sensitivity_levels(db)],
     )

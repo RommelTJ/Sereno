@@ -13,7 +13,7 @@ const FORECAST_RUNS_OUT = {
   ...FORECAST,
   spend: 200_000,
   run_out_age: 72,
-  balance_at_90: 0,
+  balance_at_100: 0,
 }
 
 // Taxable buckets emptied at 52 — six years short of the 59½ bridge.
@@ -29,13 +29,14 @@ beforeEach(() => {
 })
 
 describe('verdict hero', () => {
-  it('celebrates the verdict with the spend and the age-90 balance', async () => {
+  it('celebrates the verdict with the spend and the age-100 balance', async () => {
     render(<Forecast />)
 
     const hero = await screen.findByTestId('forecast-verdict')
     expect(hero).toHaveTextContent(/at \$45,000 \/ year/i)
     expect(hero).toHaveTextContent("You don't run out.")
     expect(hero).toHaveTextContent('$5.51M')
+    expect(hero).toHaveTextContent(/at age 100/)
     expect(hero).toHaveTextContent(/today's dollars/)
   })
 
@@ -67,16 +68,52 @@ describe('bridge card', () => {
     const bridge = await screen.findByTestId('forecast-bridge')
     expect(bridge).toHaveTextContent('14 yrs')
   })
+
+  it('derives the bridge years and chart range from the start age', async () => {
+    stubApi({
+      '/api/forecast': { ...FORECAST, start_age: 40 },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Forecast />)
+
+    const bridge = await screen.findByTestId('forecast-bridge')
+    expect(bridge).toHaveTextContent('Need to cover 19.5 yrs')
+    expect(screen.getByTestId('forecast-chart')).toHaveTextContent('age 40 → 100')
+  })
 })
 
 describe('balance-by-bucket chart', () => {
-  it('renders twelve sampled age columns', async () => {
+  it('renders one column per simulated year', async () => {
     render(<Forecast />)
 
     const chart = await screen.findByTestId('forecast-chart')
-    expect(within(chart).getAllByTestId(/^forecast-col-/)).toHaveLength(12)
+    expect(within(chart).getAllByTestId(/^forecast-col-/)).toHaveLength(63)
     expect(within(chart).getByTestId('forecast-col-38')).toBeInTheDocument()
-    expect(within(chart).getByTestId('forecast-col-93')).toBeInTheDocument()
+    // 96 sits between the old 5-year picks — only a yearly chart has it.
+    expect(within(chart).getByTestId('forecast-col-96')).toBeInTheDocument()
+    expect(within(chart).getByTestId('forecast-col-100')).toBeInTheDocument()
+  })
+
+  it('thins the axis labels to every fifth age', async () => {
+    render(<Forecast />)
+
+    const chart = await screen.findByTestId('forecast-chart')
+    expect(within(chart).getByText('40')).toBeInTheDocument()
+    expect(within(chart).queryByText('39')).not.toBeInTheDocument()
+  })
+
+  it('gives each bar a hover tooltip with the year and the dollar breakdown', async () => {
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    const tip = screen.getByTestId('forecast-tip-68')
+    // The year age 68 is reached: 30 years past the start age's year.
+    const year = new Date().getFullYear() + 68 - FORECAST.start_age
+    expect(tip).toHaveTextContent(`Age 68 · ${year}`)
+    expect(tip).toHaveTextContent('ETH $200,000')
+    expect(tip).toHaveTextContent('Brokerage $800,000')
+    expect(tip).toHaveTextContent('401(k) $600,000')
+    expect(tip).toHaveTextContent('Soc. Sec. $34,800/yr')
   })
 
   it('floors the Social Security sliver and hides it before the start age', async () => {
@@ -107,7 +144,7 @@ describe('sensitivity table', () => {
 
     const table = await screen.findByTestId('forecast-sensitivity')
     expect(within(table).getByText('$30,000')).toBeInTheDocument()
-    expect(within(table).getByText('✓ $7.20M @ 90')).toBeInTheDocument()
+    expect(within(table).getByText('✓ $7.20M @ 100')).toBeInTheDocument()
     expect(within(table).getByText('to age 91')).toBeInTheDocument()
     expect(within(table).getByText('tight')).toBeInTheDocument()
     expect(within(table).getByText('to age 70')).toBeInTheDocument()

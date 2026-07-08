@@ -198,8 +198,8 @@ function LongevityCard({ forecast }: { forecast: Forecast | null }) {
         at {formatUsd(forecast.spend)}/yr
       </p>
       <p className="num mt-2.5 text-[13px]">
-        ~{formatMillions(forecast.balance_at_90)}{' '}
-        <span className="text-muted-2">projected at age 90</span>
+        ~{formatMillions(forecast.balance_at_100)}{' '}
+        <span className="text-muted-2">projected at age 100</span>
       </p>
     </CardLink>
   )

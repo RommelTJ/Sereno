@@ -93,11 +93,25 @@ describe('sequencing waterfall', () => {
 })
 
 describe('what-if controls', () => {
+  it('loads without an age and shows the server-derived one', async () => {
+    // The server derives the default age from its birthdate constant —
+    // the screen no longer hardcodes 38.
+    const fetchMock = stubApi({
+      '/api/sourcing': { ...SOURCING, age: 41 },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const age = await screen.findByTestId('sourcing-age')
+    expect(fetchMock).toHaveBeenCalledWith('/api/sourcing')
+    expect(age).toHaveValue(41)
+  })
+
   it('refetches when the age changes', async () => {
     const fetchMock = stubApi({ '/api/sourcing': SOURCING, '/api/accounts': ACCOUNTS })
     render(<Withdrawals />)
     const age = await screen.findByTestId('sourcing-age')
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/sourcing?age=38')
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/sourcing')
 
     fireEvent.change(age, { target: { value: '60' } })
 
@@ -111,7 +125,8 @@ describe('what-if controls', () => {
 
     fireEvent.change(spend, { target: { value: '60000' } })
 
-    expect(fetchMock).toHaveBeenLastCalledWith('/api/sourcing?age=38&spend=60000')
+    // The untouched age stays server-derived rather than echoed back.
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/sourcing?spend=60000')
   })
 })
 

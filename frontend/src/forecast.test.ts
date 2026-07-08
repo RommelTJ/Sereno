@@ -32,14 +32,14 @@ function point(
   }
 }
 
-// A full 38→95 series with per-age overrides, mirroring the API shape.
+// A full 38→100 series with per-age overrides, mirroring the API shape.
 function series(
   overrides: Record<
     number,
     Partial<{ eth: number; brokerage: number; retirement: number; ss_income: number }>
   > = {},
 ) {
-  return Array.from({ length: 95 - 38 + 1 }, (_, i) => point(38 + i, overrides[38 + i]))
+  return Array.from({ length: 100 - 38 + 1 }, (_, i) => point(38 + i, overrides[38 + i]))
 }
 
 describe('verdict', () => {
@@ -67,23 +67,48 @@ describe('formatMillions', () => {
 })
 
 describe('chartColumns', () => {
-  it('samples every fifth age from 38 to 93', () => {
-    expect(chartColumns(series()).map((column) => column.age)).toEqual([
-      38, 43, 48, 53, 58, 63, 68, 73, 78, 83, 88, 93,
-    ])
+  it('draws one column per simulated year', () => {
+    expect(chartColumns(series()).map((column) => column.age)).toEqual(
+      Array.from({ length: 100 - 38 + 1 }, (_, i) => 38 + i),
+    )
   })
 
-  it('scales segment heights against the tallest sampled column', () => {
+  it('scales segment heights against the tallest column and keeps the raw dollars', () => {
     const columns = chartColumns(
       series({ 38: { eth: 100_000, brokerage: 50_000, retirement: 50_000 } }),
     )
     expect(columns[0]).toEqual({
       age: 38,
+      label: '',
       eth: 95,
       brokerage: 47.5,
       retirement: 47.5,
       ss: 0,
+      ethUsd: 100_000,
+      brokerageUsd: 50_000,
+      retirementUsd: 50_000,
+      ssUsd: 0,
     })
+  })
+
+  it('labels only the ages divisible by five', () => {
+    const labels = chartColumns(series()).map((column) => column.label)
+    expect(labels.filter(Boolean)).toEqual([
+      '40',
+      '45',
+      '50',
+      '55',
+      '60',
+      '65',
+      '70',
+      '75',
+      '80',
+      '85',
+      '90',
+      '95',
+      '100',
+    ])
+    expect(labels[0]).toBe('')
   })
 
   it('keeps the Social Security sliver at least 7px tall', () => {
@@ -95,7 +120,7 @@ describe('chartColumns', () => {
         93: { ss_income: 1_000 },
       }),
     )
-    expect(columns[11].ss).toBe(7)
+    expect(columns[93 - 38].ss).toBe(7)
   })
 
   it('lets a large sliver keep its true height', () => {
@@ -105,7 +130,7 @@ describe('chartColumns', () => {
         93: { ss_income: 20_000 },
       }),
     )
-    expect(columns[11].ss).toBe(19)
+    expect(columns[93 - 38].ss).toBe(19)
   })
 
   it('hides the sliver before Social Security starts', () => {
@@ -116,10 +141,15 @@ describe('chartColumns', () => {
   it('survives an all-zero series without NaN heights', () => {
     expect(chartColumns(series())[0]).toEqual({
       age: 38,
+      label: '',
       eth: 0,
       brokerage: 0,
       retirement: 0,
       ss: 0,
+      ethUsd: 0,
+      brokerageUsd: 0,
+      retirementUsd: 0,
+      ssUsd: 0,
     })
   })
 })
@@ -131,7 +161,17 @@ describe('bridgeCopy', () => {
     for (let age = 38; age < 52; age += 1) {
       overrides[age] = { eth: 100_000 }
     }
-    expect(bridgeCopy(series(overrides))).toEqual({ years: '14 yrs', ok: false })
+    expect(bridgeCopy(series(overrides), 38)).toEqual({ years: '14 yrs', ok: false })
+  })
+
+  it('counts the bridge years from the caller-supplied start age', () => {
+    // The same age-52 break is only 12 years past a start age of 40 —
+    // the literal 38 came from the prototype handoff.
+    const overrides: Record<number, { eth: number }> = {}
+    for (let age = 38; age < 52; age += 1) {
+      overrides[age] = { eth: 100_000 }
+    }
+    expect(bridgeCopy(series(overrides), 40)).toEqual({ years: '12 yrs', ok: false })
   })
 
   it('celebrates taxable buckets that outlast the bridge', () => {
@@ -139,7 +179,7 @@ describe('bridgeCopy', () => {
     for (let age = 38; age <= 95; age += 1) {
       overrides[age] = { brokerage: 100_000 }
     }
-    expect(bridgeCopy(series(overrides))).toEqual({ years: '31+ yrs', ok: true })
+    expect(bridgeCopy(series(overrides), 38)).toEqual({ years: '31+ yrs', ok: true })
   })
 
   it('ignores the locked retirement bucket', () => {
@@ -147,22 +187,22 @@ describe('bridgeCopy', () => {
     for (let age = 38; age <= 95; age += 1) {
       overrides[age] = { retirement: 500_000 }
     }
-    expect(bridgeCopy(series(overrides))).toEqual({ years: '0 yrs', ok: false })
+    expect(bridgeCopy(series(overrides), 38)).toEqual({ years: '0 yrs', ok: false })
   })
 })
 
 describe('sensitivityRows', () => {
   const rows = [
-    { spend: 30_000, run_out_age: null, balance_at_90: 5_512_345 },
-    { spend: 45_000, run_out_age: 92, balance_at_90: 400_000 },
-    { spend: 60_000, run_out_age: 72, balance_at_90: 0 },
+    { spend: 30_000, run_out_age: null, balance_at_100: 5_512_345 },
+    { spend: 45_000, run_out_age: 92, balance_at_100: 400_000 },
+    { spend: 60_000, run_out_age: 72, balance_at_100: 0 },
   ]
 
-  it('celebrates a level that never runs out with its age-90 balance', () => {
+  it('celebrates a level that never runs out with its age-100 balance', () => {
     expect(sensitivityRows(rows, 45_000)[0]).toMatchObject({
       spend: '$30,000',
       lasts: 'never runs out',
-      outcome: '✓ $5.51M @ 90',
+      outcome: '✓ $5.51M @ 100',
       tone: 'ok',
     })
   })

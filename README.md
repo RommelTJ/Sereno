@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.7.0**
+**v1.8.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -36,10 +36,11 @@ whole thing in plain SQL.
 - **Withdrawal sourcing** — a tax-aware sequencing waterfall: fill the spending gap from
   ETH first inside the 0% long-term-capital-gains headroom, then taxable brokerage, then
   401(k) after 59½. Solves for *net spendable*, not a naive 4%-per-bucket draw.
-- **Longevity forecast** — a year-by-year simulation from age 38 to 95, charted by bucket
-  (ETH, brokerage, 401(k), Social Security). Verdict up front: "You don't run out" or
-  "Lasts to age N", plus a sensitivity table across spend levels and live sliders for
-  return, inflation, and Social Security assumptions.
+- **Longevity forecast** — a year-by-year simulation from the current age (derived
+  from a sanitized birthdate constant) to 100, charted one bar per year by bucket
+  (ETH, brokerage, 401(k), Social Security) with a hover breakdown per bar. Verdict
+  up front: "You don't run out" or "Lasts to age N", plus a sensitivity table across
+  spend levels and live sliders for return, inflation, and Social Security assumptions.
 
 ## Design principles
 
@@ -287,8 +288,11 @@ The sourcing slice (the second Plan engine):
   Buckets aggregate accounts by `withdrawal_priority`; each account
   contributes its newest balance row from any month and its basis
   from open tax lots, falling back to the balance row's `cost_basis`,
-  then to zero. `?age=` is required — no birthdate lives in the
-  schema — and `?spend=` tests a what-if level (it also stands in for
+  then to zero. `?age=` evaluates a what-if age, defaulting to the
+  current age derived from the backend's sanitized `BIRTHDATE`
+  constant (January 1, 1988 — deliberately not a real birthday; no
+  birthdate lives in the schema), and `?spend=` tests a what-if level
+  (it also stands in for
   a missing spend plan). Each step reports gross, tax, net, and any
   gate note; whatever the waterfall cannot deliver comes back as
   `shortfall` — never a naive 4%-per-bucket draw. Null until a tax
@@ -298,8 +302,9 @@ The sourcing slice (the second Plan engine):
 
 The forecast slice (the third Plan engine):
 
-- `GET /api/forecast` — the year-by-year longevity simulation, age 38
-  to 95 in today's dollars. Each year the buckets grow by the real
+- `GET /api/forecast` — the year-by-year longevity simulation, from
+  the birthdate-derived current age to 100 in today's dollars. Each
+  year the buckets grow by the real
   rate (return − inflation), Social Security (per person, from that
   person's start age) and staking income (while the ETH stake stays
   above $50k) reduce the year's need, and the remainder is withdrawn
@@ -310,9 +315,10 @@ The forecast slice (the third Plan engine):
   row, and Social Security to the stored rows; `?spend=`,
   `?return_pct=`, `?inflation_pct=`, `?ss_you=`, `?ss_spouse=`, and
   `?ss_start=` override each transiently — the Forecast screen's
-  sliders never persist. The response carries the resolved inputs,
+  sliders never persist. The response carries the resolved inputs
+  (including the derived `start_age`),
   the per-bucket series with each year's SS income, the run-out age
-  (the first unmeetable year; null when the money lasts), the age-90
+  (the first unmeetable year; null when the money lasts), the age-100
   balance, and the sensitivity table: whole percentages of the
   latest month's net worth from 2% to 6% — the 4% rule of thumb dead
   center — rounded to the nearest $1,000 and each simulated at the
@@ -338,7 +344,7 @@ The forecast slice (the third Plan engine):
   shows the live withdrawal rate, mini band, and zone status from
   `GET /api/guardrails` (muted until a spend plan exists), and the
   Longevity card shows the live verdict, the resolved spend, and the
-  projected age-90 balance from `GET /api/forecast` (muted until the
+  projected age-100 balance from `GET /api/forecast` (muted until the
   forecast's inputs exist) — every dashboard card now reads the API.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
   table (one row per month, newest first, current month highlighted) with one
@@ -416,8 +422,8 @@ The forecast slice (the third Plan engine):
   headroom, then 15% on the gain portion), 401(k) last and only at
   59½ — down to the net delivered, with a shortfall banner when the
   gap goes unfilled. Age and what-if spend inputs re-evaluate the
-  whole waterfall server-side (the screen defaults to age 38 — no
-  birthdate lives in the schema). Right, the per-bucket rule cards
+  whole waterfall server-side (the age defaults to the server's
+  birthdate-derived current age). Right, the per-bucket rule cards
   and the engine rule: never 0.04 × balance per bucket; solve for
   net spendable. Until tax parameters, a spend target, and balances
   exist, the view points at Settings & data — and when no account has
@@ -427,12 +433,16 @@ The forecast slice (the third Plan engine):
   "does the money last?" view, every figure from `GET /api/forecast`.
   The verdict hero ("You don't run out." / "Lasts to age N", red only
   when the money dies before 90) carries the resolved spend and the
-  projected age-90 balance, beside the bridge-to-59½ card — how long
-  the taxable buckets last against the 21.5-year bridge to the
-  401(k). The balance-by-bucket chart samples twelve ages (38 → 93)
-  as CSS stacked bars: ETH, brokerage, 401(k), and the Social
+  projected age-100 balance, beside the bridge-to-59½ card — how long
+  the taxable buckets last against the bridge to the 401(k) (59½
+  minus the derived current age). The balance-by-bucket chart draws
+  one CSS stacked bar per simulated year, the current age → 100 with
+  axis labels thinned to every fifth age: ETH, brokerage, 401(k), and
+  the Social
   Security income sliver at the base, enlarged to a 7px minimum so
-  the income stays visible against multi-million balances. The
+  the income stays visible against multi-million balances; hovering
+  a bar shows the age, its calendar year, and the exact per-bucket
+  dollar breakdown. The
   sensitivity table shows the server's 2–6%-of-net-worth spend levels
   with each outcome (never runs out / tight at 90+ / runs out early)
   and highlights the row nearest the current spend. The assumptions
@@ -502,6 +512,24 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.8.0 — The forecast grows up with its owner. The simulation's start
+age is no longer a hardcoded 38: the backend derives the current age
+from a sanitized `BIRTHDATE` constant (January 1, 1988 — deliberately
+not a real birthday; the repo is public) and passes it into the
+engine, the response echoes `start_age`, and the sourcing API's
+`?age=` defaults to the same derived age — the Withdrawals screen
+drops its client-side `DEFAULT_AGE`. The horizon extends from 95 to
+100 and the verdict balance moves with it (`balance_at_90` →
+`balance_at_100` through the engine, API, and frontend), while the
+green/red verdict threshold stays at 90 — lasting into one's 90s
+still reads as success. The chart stops sampling twelve 5-year
+columns: one bar per simulated year from the current age to 100,
+axis labels thinned to every fifth age, and each bar carries a hover
+tooltip with the age, its calendar year, and the exact ETH,
+brokerage, 401(k), and Social Security dollar breakdown. The bridge
+card's "Need to cover" years are now computed as 59½ minus the start
+age instead of a literal 21.5.
 
 v1.7.0 — Fund balances finally move. Spending funded from a fund now
 draws it down: the expense appends a 'spend' `fund_entry` (balance
