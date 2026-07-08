@@ -104,6 +104,13 @@ def create_fund(fund: FundCreate, db: Db) -> Fund:
             fund.monthly_plan,
         ),
     )
+    # The zero entry anchors the fund's history at creation, the way a new
+    # account gets its first balance_entry — the monthly-plan catch-up dates
+    # its contributions from here even before any saved amount is posted.
+    db.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance) VALUES (?, ?, 0)",
+        (cursor.lastrowid, date.today().isoformat()),
+    )
     db.commit()
     row = db.execute(_FUND_QUERY + " WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return _fund(row)
