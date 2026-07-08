@@ -5,7 +5,9 @@ its newest balance row from any month — unlike guardrails'
 latest-month total, a bucket last updated months ago still sources
 withdrawals — and its basis from open tax lots, falling back to that
 balance row's cost_basis, then to zero (all gain, the conservative
-read). ?age= is required because no birthdate lives in the schema;
+read). ?age= defaults to the current age derived from the sanitized
+BIRTHDATE constant (no birthdate lives in the schema) and evaluates a
+what-if age;
 ?spend= tests a what-if level and stands in for a missing spend plan.
 Null until a tax year, a balance, and a spend target exist.
 """
@@ -33,7 +35,7 @@ Db = Annotated[sqlite3.Connection, Depends(get_db)]
 
 Spend = Annotated[float | None, Query(gt=0)]
 
-Age = Annotated[float, Query(ge=0)]
+Age = Annotated[float | None, Query(ge=0)]
 
 ETH_PRIORITY = 1
 
@@ -129,7 +131,8 @@ def load_buckets(db: sqlite3.Connection) -> list[Bucket]:
 
 
 @router.get("/sourcing")
-def get_sourcing(db: Db, age: Age, spend: Spend = None) -> Sourcing | None:
+def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | None:
+    resolved_age = age if age is not None else float(current_age())
     tax = current_tax_param(db)
     if tax is None:
         return None
@@ -142,7 +145,9 @@ def get_sourcing(db: Db, age: Age, spend: Spend = None) -> Sourcing | None:
         return None
 
     ss_income = sum(
-        12 * entry.monthly_amount for entry in get_social_security(db) if age >= entry.start_age
+        12 * entry.monthly_amount
+        for entry in get_social_security(db)
+        if resolved_age >= entry.start_age
     )
     eth_balance = sum(b.balance for b in buckets if b.headroom_only)
     staking_income = STAKING_INCOME if eth_balance > STAKING_MIN_ETH_BALANCE else 0.0
@@ -154,7 +159,7 @@ def get_sourcing(db: Db, age: Age, spend: Spend = None) -> Sourcing | None:
     )
     result = source_withdrawals(
         target_spend=target,
-        age=age,
+        age=resolved_age,
         income=ss_income + staking_income,
         ordinary_income=staking_income,
         buckets=buckets,
@@ -165,7 +170,7 @@ def get_sourcing(db: Db, age: Age, spend: Spend = None) -> Sourcing | None:
     return Sourcing(
         target_net=result.target_net,
         annual_target=plan.annual_target if plan else None,
-        age=age,
+        age=resolved_age,
         tax_year=tax.tax_year,
         ss_income=ss_income,
         staking_income=staking_income,
