@@ -4,7 +4,7 @@ target, return and inflation to the assumptions row, and Social
 Security to the per-person stored rows; ?spend=, ?return_pct=,
 ?inflation_pct=, ?ss_you=, ?ss_spouse=, and ?ss_start= override
 transiently (the Forecast screen's sliders never persist). The
-response carries the full series, the run-out age, the age-90
+response carries the full series, the run-out age, the age-100
 balance, and the sensitivity table — whole percentages of the latest
 net worth from 2% to 6%, each rounded to the nearest $1,000 and
 simulated at the resolved assumptions. Null until a tax year,
@@ -194,7 +194,7 @@ class TestForecast:
         assert body["ss_start"] == 67.0
         assert body["tax_year"] == TODAY.year
 
-        assert [point["age"] for point in body["series"]] == list(range(START_AGE, 96))
+        assert [point["age"] for point in body["series"]] == list(range(START_AGE, 101))
         first = body["series"][0]
         assert first["eth"] == pytest.approx(400_000 * 1.04)
         assert first["brokerage"] == pytest.approx(600_000 * 1.04)
@@ -202,9 +202,9 @@ class TestForecast:
         assert first["ss_income"] == 0.0
         assert body["series"][67 - START_AGE]["ss_income"] == pytest.approx(54_000)
 
-        # 45,000 against 1.5M growing 4% real: the money outlasts 95.
+        # 45,000 against 1.5M growing 4% real: the money outlasts 100.
         assert body["run_out_age"] is None
-        assert body["balance_at_90"] > 0
+        assert body["balance_at_100"] > 0
 
     def test_the_series_reflects_the_sourcing_waterfall(self, client):
         # Age 38 stakes 3,000 (ETH > 50k) and sells the 42,000 gap out
@@ -289,5 +289,5 @@ class TestSensitivity:
         rows = client.get("/api/forecast").json()["sensitivity"]
         by_spend = {row["spend"]: row for row in rows}
         assert by_spend[30_000.0]["run_out_age"] is None
-        assert by_spend[30_000.0]["balance_at_90"] > 0
+        assert by_spend[30_000.0]["balance_at_100"] > 0
         assert by_spend[90_000.0]["run_out_age"] is not None

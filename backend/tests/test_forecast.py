@@ -1,5 +1,6 @@
-"""The longevity forecast engine: a year-by-year simulation from age 38
-to 95 in today's dollars. Each year the buckets grow by the real rate
+"""The longevity forecast engine: a year-by-year simulation from the
+caller's start age to 100 in today's dollars. Each year the buckets
+grow by the real rate
 (return minus inflation), the balances are recorded, and the year's
 spending need is withdrawn through the sourcing engine's waterfall —
 so the 59½ gate, the 0% LTCG headroom, and the gross-ups all apply per
@@ -67,9 +68,9 @@ def run(
 
 
 class TestSeries:
-    def test_series_spans_ages_38_to_95(self):
+    def test_series_spans_the_start_age_to_100(self):
         result = run()
-        assert [point.age for point in result.series] == list(range(38, 96))
+        assert [point.age for point in result.series] == list(range(38, 101))
 
     def test_the_series_starts_at_the_callers_start_age(self):
         # The engine is pure math over the caller's numbers — deriving
@@ -107,17 +108,17 @@ class TestRunOut:
         result = run(return_pct=5, inflation_pct=5, buckets=[brokerage(100_000)])
         assert result.run_out_age == 40
         # The simulation still records the full series after running out.
-        assert result.series[-1].age == 95
+        assert result.series[-1].age == 100
 
     def test_a_surviving_portfolio_never_runs_out(self):
         result = run()
         assert result.run_out_age is None
 
-    def test_balance_at_90_sums_the_buckets_at_age_90(self):
-        # Untouched, the bucket compounds once per simulated age: 53
-        # steps from 38 through 90.
+    def test_balance_at_100_sums_the_buckets_at_age_100(self):
+        # Untouched, the bucket compounds once per simulated age: 63
+        # steps from 38 through 100.
         result = run(spend=0, buckets=[brokerage(100_000)])
-        assert result.balance_at_90 == pytest.approx(100_000 * 1.04**53)
+        assert result.balance_at_100 == pytest.approx(100_000 * 1.04**63)
 
 
 class TestBasis:
@@ -226,7 +227,7 @@ class TestSocialSecurity:
             ],
         )
         assert result.run_out_age is None
-        assert result.balance_at_90 == pytest.approx(0)
+        assert result.balance_at_100 == pytest.approx(0)
 
 
 class TestStaking:
