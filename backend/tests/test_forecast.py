@@ -43,6 +43,7 @@ def four01k(balance: float) -> Bucket:
 
 def run(
     *,
+    start_age: int = 38,
     spend: float = 40_000.0,
     return_pct: float = 7.0,
     inflation_pct: float = 3.0,
@@ -53,6 +54,7 @@ def run(
     ordinary_brackets: list[Bracket] | None = None,
 ) -> ForecastResult:
     return simulate_forecast(
+        start_age=start_age,
         spend=spend,
         return_pct=return_pct,
         inflation_pct=inflation_pct,
@@ -68,6 +70,12 @@ class TestSeries:
     def test_series_spans_ages_38_to_95(self):
         result = run()
         assert [point.age for point in result.series] == list(range(38, 96))
+
+    def test_the_series_starts_at_the_callers_start_age(self):
+        # The engine is pure math over the caller's numbers — deriving
+        # the age from the birthdate is the API layer's job.
+        result = run(start_age=40)
+        assert result.series[0].age == 40
 
     def test_buckets_grow_by_the_real_rate_before_recording(self):
         # 7% return − 3% inflation = 4% real, applied before the first

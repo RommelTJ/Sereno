@@ -22,6 +22,11 @@ from sereno.main import app
 
 TODAY = date.today()
 
+# Mirrors the backend's sanitized BIRTHDATE constant (January 1, 1988 —
+# not a real birthday): with a Jan-1 birthdate the derived current age
+# is simply the year difference.
+START_AGE = TODAY.year - 1988
+
 # The seed's 2026 MFJ brackets
 BRACKETS_JSON = json.dumps(
     [
@@ -165,6 +170,13 @@ class TestPrerequisites:
 
 
 class TestForecast:
+    def test_the_start_age_derives_from_the_birthdate(self, client):
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast").json()
+        assert body["start_age"] == START_AGE
+        assert body["series"][0]["age"] == START_AGE
+
     def test_the_full_forecast_with_seeded_config(self, client):
         seed_portfolio()
         seed_config()
@@ -182,13 +194,13 @@ class TestForecast:
         assert body["ss_start"] == 67.0
         assert body["tax_year"] == TODAY.year
 
-        assert [point["age"] for point in body["series"]] == list(range(38, 96))
+        assert [point["age"] for point in body["series"]] == list(range(START_AGE, 96))
         first = body["series"][0]
         assert first["eth"] == pytest.approx(400_000 * 1.04)
         assert first["brokerage"] == pytest.approx(600_000 * 1.04)
         assert first["retirement"] == pytest.approx(500_000 * 1.04)
         assert first["ss_income"] == 0.0
-        assert body["series"][67 - 38]["ss_income"] == pytest.approx(54_000)
+        assert body["series"][67 - START_AGE]["ss_income"] == pytest.approx(54_000)
 
         # 45,000 against 1.5M growing 4% real: the money outlasts 95.
         assert body["run_out_age"] is None
@@ -229,8 +241,8 @@ class TestForecast:
         assert body["ss_you"] == 1_500.0
         assert body["ss_spouse"] == 1_400.0
         assert body["ss_start"] == 62.0
-        assert body["series"][61 - 38]["ss_income"] == 0.0
-        assert body["series"][62 - 38]["ss_income"] == pytest.approx(34_800)
+        assert body["series"][61 - START_AGE]["ss_income"] == 0.0
+        assert body["series"][62 - START_AGE]["ss_income"] == pytest.approx(34_800)
 
     def test_without_ss_rows_the_benefits_default_to_zero(self, client):
         seed_portfolio()
