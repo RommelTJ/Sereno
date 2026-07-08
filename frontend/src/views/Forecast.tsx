@@ -17,12 +17,24 @@ import {
 import { formatUsd } from '../ledger.ts'
 import { hasWithdrawalBuckets } from '../sourcing.ts'
 
-function BarColumn({ column }: { column: ChartColumn }) {
+function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
   return (
     <div
       data-testid={`forecast-col-${column.age}`}
-      className="flex flex-1 flex-col items-center justify-end"
+      className="group relative flex flex-1 flex-col items-center justify-end"
     >
+      <div
+        data-testid={`forecast-tip-${column.age}`}
+        className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 hidden w-max -translate-x-1/2 rounded-[8px] bg-ink px-3 py-2 text-[11px] leading-[1.7] text-white group-hover:block"
+      >
+        <p className="font-bold">
+          Age {column.age} · {year}
+        </p>
+        <p className="num">ETH {formatUsd(column.ethUsd)}</p>
+        <p className="num">Brokerage {formatUsd(column.brokerageUsd)}</p>
+        <p className="num">401(k) {formatUsd(column.retirementUsd)}</p>
+        <p className="num">Soc. Sec. {formatUsd(column.ssUsd)}/yr</p>
+      </div>
       <div className="w-full bg-accent" style={{ height: `${column.eth}px` }} />
       <div className="w-full bg-sidebar" style={{ height: `${column.brokerage}px` }} />
       <div className="w-full bg-amber" style={{ height: `${column.retirement}px` }} />
@@ -185,6 +197,9 @@ function Forecast() {
   const outcome = verdict(forecast.run_out_age)
   const bridge = bridgeCopy(forecast.series, forecast.start_age)
   const bounds = spendSliderBounds(forecast.spend)
+  // With a Jan-1 birthdate, age start_age is reached in the current
+  // calendar year, so each later age lands (age − start_age) years out.
+  const currentYear = new Date().getFullYear()
   const spend = overrides.spend ?? forecast.spend
   const returnPct = overrides.return_pct ?? forecast.return_pct
   const inflationPct = overrides.inflation_pct ?? forecast.inflation_pct
@@ -240,7 +255,11 @@ function Forecast() {
         </p>
         <div className="relative flex h-[200px] items-end gap-[2px] border-b border-[#d9d4c9]">
           {chartColumns(forecast.series).map((column) => (
-            <BarColumn key={column.age} column={column} />
+            <BarColumn
+              key={column.age}
+              column={column}
+              year={currentYear + column.age - forecast.start_age}
+            />
           ))}
         </div>
         <div className="mt-1.5 flex gap-[2px]">
