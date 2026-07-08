@@ -131,6 +131,9 @@ CREATE TABLE fund_entry (
     as_of_date   TEXT    NOT NULL,
     balance      NUMERIC NOT NULL,
     contribution NUMERIC NOT NULL DEFAULT 0,
+    source       TEXT,                                    -- 'spend' (fund-funded expense drawdown)
+                                                          -- | 'monthly_plan' (auto contribution)
+                                                          -- | NULL (hand-entered)
     created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX ix_fund_entry ON fund_entry(fund_id, as_of_date);
@@ -226,12 +229,16 @@ GROUP BY m.month;
 
 -- Safe-to-spend inputs per budget month: cash in vs. earmarked out.
 -- (Discretionary categories can go negative — overspend just reduces this.)
+-- Fund-funded expenses stay out of the spent totals: they were paid from
+-- parked money (the fund draws down instead), so counting them here would
+-- lower safe-to-spend twice. fund_spent keeps that total queryable.
 CREATE VIEW v_budget_month AS
 SELECT budget_month AS month,
        (SELECT COALESCE(SUM(amount),0) FROM income_event  i WHERE i.budget_month = e.budget_month) AS funded_in,
-       SUM(CASE WHEN is_fixed = 1 THEN amount ELSE 0 END) AS fixed_spent,
-       SUM(CASE WHEN is_fixed = 0 THEN amount ELSE 0 END) AS variable_spent,
-       SUM(amount) AS total_spent
+       SUM(CASE WHEN is_fixed = 1 AND funded_from = 'discretionary' THEN amount ELSE 0 END) AS fixed_spent,
+       SUM(CASE WHEN is_fixed = 0 AND funded_from = 'discretionary' THEN amount ELSE 0 END) AS variable_spent,
+       SUM(CASE WHEN funded_from = 'discretionary' THEN amount ELSE 0 END) AS total_spent,
+       SUM(CASE WHEN funded_from = 'fund' THEN amount ELSE 0 END) AS fund_spent
 FROM expense_line e
 GROUP BY budget_month;
 
@@ -253,6 +260,10 @@ GROUP BY budget_month;
 --          / investable AS withdrawal_rate
 --   FROM v_net_worth ORDER BY month;
 --
--- This month's safe-to-spend:
---   SELECT funded_in - total_spent AS safe_to_spend
+-- This month's safe-to-spend (automatic fund contributions are parked money,
+-- not spendable; fund-funded expenses are already out of total_spent):
+--   SELECT funded_in - total_spent
+--        - (SELECT COALESCE(SUM(contribution),0) FROM fund_entry
+--           WHERE source = 'monthly_plan' AND substr(as_of_date,1,7) = '2026-07')
+--     AS safe_to_spend
 --   FROM v_budget_month WHERE month = '2026-07';

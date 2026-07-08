@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, NonNegativeFloat, PositiveFloat
 
 from sereno.db.connection import get_db
-from sereno.engine.funds import derive_note
+from sereno.engine.funds import derive_note, due_contribution_months
 
 router = APIRouter()
 
@@ -64,11 +64,16 @@ class FundEntryCreate(BaseModel):
 
 
 class FundEntry(BaseModel):
+    """source tells entry kinds apart: 'spend' for the drawdown behind a
+    fund-funded expense, 'monthly_plan' for an automatic contribution,
+    None for a hand-entered row (the only kind this endpoint appends)."""
+
     id: int
     fund_id: int
     as_of_date: date
     balance: float
     contribution: float
+    source: str | None
 
 
 _FUND_QUERY = (
@@ -79,8 +84,43 @@ _FUND_QUERY = (
 )
 
 
+def apply_monthly_plans(db: sqlite3.Connection, today: date) -> None:
+    """The lazy catch-up behind monthly funding: with no scheduler in the
+    stack, each active fund with a monthly plan receives it as contribution
+    entries dated the 1st of each month, appended whenever funds are read.
+    The schedule anchors on the fund's latest planned or hand-entered row
+    ('spend' drawdowns are not contributions), so a re-read appends nothing
+    and a fund with no entries at all has no schedule to catch up."""
+    funds = db.execute(
+        "SELECT f.id, f.monthly_plan,"
+        " (SELECT e.balance FROM fund_entry e WHERE e.fund_id = f.id"
+        "  ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1) AS balance,"
+        " (SELECT e.as_of_date FROM fund_entry e WHERE e.fund_id = f.id"
+        "  AND COALESCE(e.source, '') != 'spend'"
+        "  ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1) AS anchor"
+        " FROM fund f WHERE f.active = 1 AND f.monthly_plan > 0"
+    ).fetchall()
+    appended = False
+    for fund in funds:
+        if fund["anchor"] is None:
+            continue
+        balance = fund["balance"]
+        anchor = date.fromisoformat(fund["anchor"])
+        for first in due_contribution_months(anchor=anchor, today=today):
+            balance += fund["monthly_plan"]
+            db.execute(
+                "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+                " VALUES (?, ?, ?, ?, 'monthly_plan')",
+                (fund["id"], first.isoformat(), balance, fund["monthly_plan"]),
+            )
+            appended = True
+    if appended:
+        db.commit()
+
+
 @router.get("/funds")
 def list_funds(db: Db) -> list[Fund]:
+    apply_monthly_plans(db, date.today())
     rows = db.execute(_FUND_QUERY + " WHERE active = 1 ORDER BY id")
     return [_fund(row) for row in rows]
 
@@ -98,6 +138,13 @@ def create_fund(fund: FundCreate, db: Db) -> Fund:
             fund.target_date.isoformat() if fund.target_date else None,
             fund.monthly_plan,
         ),
+    )
+    # The zero entry anchors the fund's history at creation, the way a new
+    # account gets its first balance_entry — the monthly-plan catch-up dates
+    # its contributions from here even before any saved amount is posted.
+    db.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance) VALUES (?, ?, 0)",
+        (cursor.lastrowid, date.today().isoformat()),
     )
     db.commit()
     row = db.execute(_FUND_QUERY + " WHERE id = ?", (cursor.lastrowid,)).fetchone()
@@ -135,7 +182,8 @@ def create_fund_entry(entry: FundEntryCreate, db: Db) -> FundEntry:
     )
     db.commit()
     row = db.execute(
-        "SELECT id, fund_id, as_of_date, balance, contribution FROM fund_entry WHERE id = ?",
+        "SELECT id, fund_id, as_of_date, balance, contribution, source"
+        " FROM fund_entry WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
     return FundEntry(**dict(row))

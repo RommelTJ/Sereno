@@ -3,7 +3,11 @@ income entry, and the computed budget month powering Safe-to-spend.
 
 The Safe-to-spend baseline is funded_in from v_budget_month — the sum of the
 month's stored income events. It moves only when a funding row is appended,
-never when spending lands, so safe_to_spend = funded_in − total_spent.
+never when spending lands, so safe_to_spend = funded_in − fund_contributions
+− total_spent: total_spent counts only discretionary lines (fund-funded
+spending was paid from parked money and never lowers the headline), and
+fund_contributions is the month's automatic monthly-plan funding — money
+moved into a fund is parked, so it stops being spendable the moment it lands.
 """
 
 import sqlite3
@@ -13,6 +17,7 @@ from typing import Annotated, Literal, Self
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, PositiveFloat, StringConstraints, model_validator
 
+from sereno.api.funds import apply_monthly_plans
 from sereno.db.connection import get_db
 
 router = APIRouter()
@@ -145,6 +150,7 @@ class ActivityItem(BaseModel):
 class BudgetMonth(BaseModel):
     month: str
     baseline: float
+    fund_contributions: float
     total_spent: float
     safe_to_spend: float
     categories: list[Envelope]
@@ -255,11 +261,35 @@ def create_category_plan(category_id: int, plan: CategoryPlanCreate, db: Db) -> 
     return CategoryPlan(**dict(row))
 
 
+def _draw_down_fund(db: sqlite3.Connection, expense: ExpenseCreate) -> None:
+    """The other half of a fund-funded spend: append a 'spend' fund_entry so
+    the earmark releases as the expense lands — appends, never updates."""
+    balance = db.execute(
+        "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
+        "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
+        (expense.fund_id,),
+    ).fetchone()[0]
+    if expense.amount > balance:
+        raise HTTPException(status_code=422, detail="expense exceeds fund balance")
+    db.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+        " VALUES (?, ?, ?, ?, 'spend')",
+        (
+            expense.fund_id,
+            expense.txn_date.isoformat(),
+            balance - expense.amount,
+            -expense.amount,
+        ),
+    )
+
+
 @router.post("/expenses", status_code=201)
 def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
     _require(db, "category", expense.category_id, "category")
     _require(db, "fund", expense.fund_id, "fund")
     _require(db, "account", expense.account_id, "account")
+    if expense.funded_from == "fund":
+        _draw_down_fund(db, expense)
     cursor = db.execute(
         "INSERT INTO expense_line (txn_date, budget_month, category_id, amount,"
         " is_fixed, funded_from, fund_id, account_id, note)"
@@ -314,6 +344,9 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
 @router.get("/budget-month")
 def budget_month(db: Db, month: Month = None) -> BudgetMonth:
     target = month or _current_month()
+    # The headline must see this month's automatic funding even when the
+    # funds list was never read, so the lazy catch-up runs here too.
+    apply_monthly_plans(db, date.today())
     totals = db.execute(
         "SELECT funded_in, total_spent FROM v_budget_month WHERE month = ?", (target,)
     ).fetchone()
@@ -328,6 +361,12 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         ).fetchone()[0]
         total_spent = 0
 
+    fund_contributions = db.execute(
+        "SELECT COALESCE(SUM(contribution), 0) FROM fund_entry"
+        " WHERE source = 'monthly_plan' AND substr(as_of_date, 1, 7) = ?",
+        (target,),
+    ).fetchone()[0]
+
     envelopes = [
         Envelope(**dict(row), remaining=row["planned"] - row["spent"])
         for row in db.execute(
@@ -336,7 +375,8 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
             "           WHERE p.category_id = c.id AND p.effective_month <= ?"
             "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned,"
             " COALESCE((SELECT SUM(e.amount) FROM expense_line e"
-            "           WHERE e.category_id = c.id AND e.budget_month = ?), 0) AS spent"
+            "           WHERE e.category_id = c.id AND e.budget_month = ?"
+            "           AND e.funded_from = 'discretionary'), 0) AS spent"
             " FROM category c WHERE c.active = 1 ORDER BY c.id",
             (target, target),
         )
@@ -363,8 +403,9 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
     return BudgetMonth(
         month=target,
         baseline=baseline,
+        fund_contributions=fund_contributions,
         total_spent=total_spent,
-        safe_to_spend=baseline - total_spent,
+        safe_to_spend=baseline - fund_contributions - total_spent,
         categories=envelopes,
         activity=[ActivityItem.model_validate(row) for row in merged],
     )

@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.6.0**
+**v1.7.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -181,16 +181,28 @@ The budget slice:
   reuse. No hard delete.
 - `POST /api/expenses` — appends a spending line. `budget_month` defaults to
   the transaction's month; pass a later month to prepay. `funded_from` is
-  `discretionary` or `fund` (then `fund_id` is required).
+  `discretionary` or `fund` (then `fund_id` is required). Fund spending
+  draws the fund down in the same transaction: a `fund_entry` with
+  `source = 'spend'`, the balance minus the amount, and a negative
+  contribution is appended, dated the transaction — and an expense that
+  exceeds the fund's balance is a 422, since a fund is an earmark over
+  real cash.
 - `POST /api/income` — appends an income/funding event (paycheck, transfer,
   staking, …). `budget_month` is the month the inflow funds — the seed's
   Jun 27 paycheck funds July.
 - `GET /api/budget-month` — the computed month (`?month=`, default current):
   per-category planned/spent/remaining envelopes (overspend is allowed and
-  goes negative), the Safe-to-spend headline (`baseline − total_spent`, where
-  the baseline is the month's stored funding — never recomputed from live
-  spend), and the recent-activity list (spending and funding merged, newest
-  first).
+  goes negative), the Safe-to-spend headline
+  (`baseline − fund_contributions − total_spent`, where the baseline is the
+  month's stored funding — never recomputed from live spend), and the
+  recent-activity list (spending and funding merged, newest first).
+  Fund-funded expenses stay out of `total_spent` and the envelope bars —
+  they were paid from parked money, and the fund's drawdown already
+  released the earmark — and `fund_contributions` is the month's automatic
+  monthly-plan funding: money moved into a fund is parked, so it stops
+  being spendable the moment it lands. Reading the budget month applies
+  the monthly-plan catch-up itself, so the headline never misses a
+  contribution the funds list hasn't been asked for yet.
 The funds slice:
 
 - `GET /api/funds` — the active funds (sinking funds and goals: name, emoji,
@@ -199,15 +211,26 @@ The funds slice:
   finish by 2027-08", "$X / mo · ~Y yrs to target", "✓ fully funded — ready
   to spend", …). Notes are computed server-side from the fund's own numbers,
   never hand-typed, so they can't go stale; dates in notes stay ISO —
-  display formatting is the frontend's job.
+  display formatting is the frontend's job. Reading the funds applies the
+  monthly plans lazily: with no scheduler in the stack, each active fund
+  with a `monthly_plan` receives any missing contribution entries
+  (`source = 'monthly_plan'`, one per 1st-of-month since its latest planned
+  or hand-entered row) before the list is computed, idempotently — the
+  append-only, derive-on-read pattern.
 - `POST /api/funds` — creates a fund. `kind` is derived, never sent: a
   blank `target_date` means a sinking fund, a set date means a goal; a
   blank `target_amount` is an open-ended fund (no finish line, so no
   progress percent — just a parked balance and a monthly plan). An
   optional `emoji` labels the fund like accounts and categories have.
+  Creation appends a zero `fund_entry` dated today, the way a new account
+  gets its first balance row — the anchor the monthly-plan catch-up dates
+  its contributions from, even before any saved amount is posted.
 - `POST /api/fund-entries` — appends a dated balance row for a fund
   (append-only, like `balance_entry`); the latest entry is the fund's
-  balance and earlier rows are kept as history.
+  balance and earlier rows are kept as history. Entries carry a `source`
+  telling their kinds apart: `'spend'` for the drawdown behind a
+  fund-funded expense, `'monthly_plan'` for an automatic contribution,
+  null for the hand-entered rows this endpoint appends.
 - `POST /api/funds/{id}/archive` — soft remove, like envelope
   archiving: flips `fund.active` to 0 so the fund drops out of the
   funds list, the dashboard parked total, and the safe-to-spend
@@ -351,7 +374,9 @@ The forecast slice (the third Plan engine):
   funding item" (amount, funds month — the current or next two, so a
   paycheck can prepay next month — and source) posts to `POST /api/income`.
   Every submit refetches the budget month, so the hero and envelopes always
-  show the API's figures rather than client-side math.
+  show the API's figures rather than client-side math — and adding a
+  spending item refetches the funds list too, so a fund-funded spend's
+  drawdown lands on the "Money in funds" card immediately.
 - **Funds & goals** (<http://localhost:5173/funds>) — sinking funds and
   dated goals as one concept, in a single card: a header with the total
   parked and the "notes auto-calculate" hint, the dashed **+ New fund or
@@ -477,6 +502,23 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.7.0 — Fund balances finally move. Spending funded from a fund now
+draws it down: the expense appends a 'spend' `fund_entry` (balance
+minus amount, negative contribution, dated the transaction) in the
+same transaction, and overdrawing a fund is a 422. Fund-funded
+expenses leave safe-to-spend and the envelope bars alone — migration
+0006 filters `v_budget_month`'s spent totals to discretionary lines
+and adds `fund_spent` — and monthly plans fund themselves: with no
+scheduler in the stack, reading the funds or the budget month applies
+each active fund's `monthly_plan` as idempotent catch-up contributions
+dated the 1st of each missed month (migration 0007 adds
+`fund_entry.source`; fund creation anchors the schedule with a zero
+entry), and the month's automatic contributions count against the
+headline: `safe_to_spend = baseline − fund_contributions −
+total_spent`, because money moved into a fund is parked, not
+spendable. The Safe-to-spend screen refetches the funds list after
+adding a spending item so the drawdown shows immediately.
 
 v1.6.0 — Safe-to-spend funds card. The hero formula's money-in-funds
 term is no longer invisible on the screen where spending decisions

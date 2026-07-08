@@ -17,6 +17,22 @@ def _months_until(target: date, today: date) -> int:
     return (target.year - today.year) * 12 + (target.month - today.month)
 
 
+def due_contribution_months(*, anchor: date, today: date) -> list[date]:
+    """Every 1st-of-month strictly after the anchor, up to and including
+    today — the contribution dates a monthly plan still owes. An anchor on
+    a 1st already stands for that month, so its own 1st is never due."""
+    months: list[date] = []
+    year, month = anchor.year, anchor.month
+    while True:
+        month += 1
+        if month > 12:
+            year, month = year + 1, 1
+        first = date(year, month, 1)
+        if first > today:
+            return months
+        months.append(first)
+
+
 def derive_note(
     *,
     target_amount: float | None,

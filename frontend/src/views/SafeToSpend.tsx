@@ -39,7 +39,14 @@ function SafeToSpend() {
 
   const addExpense = async (input: ExpenseInput) => {
     await createExpense(input)
-    setBudget(await fetchBudgetMonth())
+    // A fund-funded spend draws the fund down server-side, so the funds
+    // card refreshes alongside the hero and envelopes.
+    const [nextBudget, nextFunds] = await Promise.all([
+      fetchBudgetMonth(),
+      fetchFunds(),
+    ])
+    setBudget(nextBudget)
+    setFunds(nextFunds)
   }
 
   const addIncome = async (input: IncomeInput) => {

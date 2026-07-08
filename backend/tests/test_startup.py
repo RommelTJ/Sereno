@@ -24,6 +24,8 @@ def test_startup_applies_migrations(monkeypatch, tmp_path):
         "0003_account_emoji.sql",
         "0004_carry_forward_views.sql",
         "0005_fund_emoji.sql",
+        "0006_budget_month_fund_spend.sql",
+        "0007_fund_entry_source.sql",
     ]
 
 

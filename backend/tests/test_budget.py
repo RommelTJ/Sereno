@@ -43,13 +43,41 @@ def insert_plan(category_id, effective_month, planned):
     )
 
 
-def insert_fund(name, kind="sinking"):
-    return execute("INSERT INTO fund (name, kind) VALUES (?, ?)", name, kind)
+def insert_fund(name, kind="sinking", monthly_plan=None):
+    return execute(
+        "INSERT INTO fund (name, kind, monthly_plan) VALUES (?, ?, ?)", name, kind, monthly_plan
+    )
+
+
+def first_of_month(months_back=0):
+    today = date.today()
+    year, month = today.year, today.month - months_back
+    while month < 1:
+        year, month = year - 1, month + 12
+    return date(year, month, 1).isoformat()
+
+
+def insert_fund_entry(fund_id, as_of_date, balance, contribution=0):
+    return execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution) VALUES (?, ?, ?, ?)",
+        fund_id,
+        as_of_date,
+        balance,
+        contribution,
+    )
 
 
 def insert_account(name, kind="cash"):
     return execute(
         "INSERT INTO account (name, kind, tax_treatment) VALUES (?, ?, 'NONE')", name, kind
+    )
+
+
+def fetch_fund_entries(fund_id):
+    return query(
+        "SELECT as_of_date, balance, contribution, source FROM fund_entry"
+        " WHERE fund_id = ? ORDER BY id",
+        fund_id,
     )
 
 
@@ -441,6 +469,7 @@ class TestPostExpenses:
 
     def test_fund_spending_records_the_fund(self, client):
         bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
         response = client.post(
             "/api/expenses",
             json={
@@ -453,6 +482,55 @@ class TestPostExpenses:
         assert response.status_code == 201
         assert response.json()["funded_from"] == "fund"
         assert response.json()["fund_id"] == bike_id
+
+    def test_fund_spending_draws_down_the_fund(self, client):
+        # The other half of the double-entry: the expense line records the
+        # spend, the appended fund_entry releases the earmark.
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        response = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": "2026-06-05",
+                "amount": 1200,
+                "funded_from": "fund",
+                "fund_id": bike_id,
+            },
+        )
+        assert response.status_code == 201
+        assert fetch_fund_entries(bike_id) == [
+            {"as_of_date": "2026-06-01", "balance": 5000, "contribution": 0, "source": None},
+            {
+                "as_of_date": "2026-06-05",
+                "balance": 3800,
+                "contribution": -1200,
+                "source": "spend",
+            },
+        ]
+
+    def test_discretionary_spending_appends_no_fund_entry(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        response = client.post("/api/expenses", json={"txn_date": "2026-06-05", "amount": 100})
+        assert response.status_code == 201
+        assert len(fetch_fund_entries(bike_id)) == 1
+
+    def test_overspending_a_fund_is_rejected(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 1000)
+        response = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": "2026-06-05",
+                "amount": 1200,
+                "funded_from": "fund",
+                "fund_id": bike_id,
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"] == "expense exceeds fund balance"
+        assert query("SELECT id FROM expense_line") == []
+        assert len(fetch_fund_entries(bike_id)) == 1
 
     def test_fund_spending_requires_a_fund_id(self, client):
         response = client.post(
@@ -587,6 +665,7 @@ class TestGetBudgetMonth:
         assert response.json() == {
             "month": "2026-06",
             "baseline": 0,
+            "fund_contributions": 0,
             "total_spent": 0,
             "safe_to_spend": 0,
             "categories": [],
@@ -657,6 +736,32 @@ class TestGetBudgetMonth:
         assert body["total_spent"] == 118.21
         assert body["safe_to_spend"] == 5200 - 118.21
 
+    def test_fund_funded_spending_stays_out_of_the_envelopes(self, client):
+        # Same reasoning as the headline: parked money never drew on the
+        # month's envelope, so the category bar must not move either.
+        travel_id = insert_category("Travel", emoji="✈️")
+        insert_plan(travel_id, "2026-01", 500)
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        self.fund_month(client, 5200)
+        self.spend(client, 100, category_id=travel_id)
+        self.spend(client, 1200, category_id=travel_id, funded_from="fund", fund_id=bike_id)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["categories"][0]["spent"] == 100
+        assert body["categories"][0]["remaining"] == 400
+
+    def test_fund_funded_spending_leaves_the_headline_alone(self, client):
+        # Paid from parked money, not the month's income: the expense is
+        # recorded, but safe-to-spend must not drop a second time.
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        self.fund_month(client, 5200)
+        self.spend(client, 100)
+        self.spend(client, 1200, funded_from="fund", fund_id=bike_id)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["total_spent"] == 100
+        assert body["safe_to_spend"] == 5100
+
     def test_activity_merges_spending_and_funding_newest_first(self, client):
         groceries_id = insert_category("Groceries")
         self.fund_month(client, 2800, txn_date="2026-05-24", note="You paycheck")
@@ -692,6 +797,46 @@ class TestGetBudgetMonth:
         assert body["total_spent"] == 0
         assert body["safe_to_spend"] == 2400
         assert [item["type"] for item in body["activity"]] == ["income"]
+
+    def test_due_contributions_count_against_the_headline(self, client):
+        # Money moved into a fund on the 1st is parked, not spendable: the
+        # budget month applies the catch-up itself and subtracts the month's
+        # automatic contributions from safe-to-spend.
+        fund_id = insert_fund("Emergency fund", monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 10000)
+        payload = {"txn_date": date.today().isoformat(), "source": "paycheck", "amount": 5000}
+        assert client.post("/api/income", json=payload).status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["fund_contributions"] == 500
+        assert body["safe_to_spend"] == 4500
+        assert len(fetch_fund_entries(fund_id)) == 2
+
+    def test_a_month_with_nothing_due_reports_zero_contributions(self, client):
+        self.fund_month(client, 5200)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["fund_contributions"] == 0
+        assert body["safe_to_spend"] == 5200
+
+    def test_manual_contributions_do_not_count(self, client):
+        # Hand-entered fund entries never touched the budget math before
+        # and still don't — only the automatic monthly plan is subtracted.
+        fund_id = insert_fund("Pool fund")
+        insert_fund_entry(fund_id, first_of_month(), 5000, contribution=1000)
+        payload = {"txn_date": date.today().isoformat(), "source": "paycheck", "amount": 5000}
+        assert client.post("/api/income", json=payload).status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["fund_contributions"] == 0
+        assert body["safe_to_spend"] == 5000
+
+    def test_contributions_count_in_their_own_month(self, client):
+        # Two months of catch-up land one contribution per month: last
+        # month's 1st funds last month, not the month being read.
+        fund_id = insert_fund("Emergency fund", monthly_plan=100)
+        insert_fund_entry(fund_id, first_of_month(2), 1000)
+        client.get("/api/budget-month")
+        last_month = first_of_month(1)[:7]
+        body = client.get("/api/budget-month", params={"month": last_month}).json()
+        assert body["fund_contributions"] == 100
 
     def test_month_defaults_to_the_current_month(self, client):
         today = date.today()
