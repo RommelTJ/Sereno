@@ -213,6 +213,39 @@ describe('+ New fund or goal form', () => {
   })
 })
 
+describe('archiving a fund', () => {
+  it('shows an Archive button on each fund card', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    for (const row of rows) {
+      expect(
+        within(row).getByRole('button', { name: 'Archive' }),
+      ).toBeInTheDocument()
+    }
+  })
+
+  it('posts the archive and refetches the list', async () => {
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/funds/1/archive': { ...FUNDS[0], balance: 0 },
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    routes['/api/funds'] = FUNDS.slice(1)
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Archive' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('fund-row')).toHaveLength(2),
+    )
+    expect(screen.queryByText('🚨 Emergency fund')).not.toBeInTheDocument()
+    expect(screen.getByText('$14,200')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/funds/1/archive')).toEqual({})
+  })
+})
+
 describe('responsive layout', () => {
   it('stacks the new-fund form grids into one column on narrow screens', async () => {
     render(<Funds />)
