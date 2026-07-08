@@ -158,11 +158,11 @@ describe('sensitivityRows', () => {
     { spend: 60_000, run_out_age: 72, balance_at_90: 0 },
   ]
 
-  it('celebrates a level that never runs out with its age-90 balance', () => {
+  it('celebrates a level that never runs out with its age-100 balance', () => {
     expect(sensitivityRows(rows, 45_000)[0]).toMatchObject({
       spend: '$30,000',
       lasts: 'never runs out',
-      outcome: '✓ $5.51M @ 90',
+      outcome: '✓ $5.51M @ 100',
       tone: 'ok',
     })
   })

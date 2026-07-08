@@ -29,13 +29,14 @@ beforeEach(() => {
 })
 
 describe('verdict hero', () => {
-  it('celebrates the verdict with the spend and the age-90 balance', async () => {
+  it('celebrates the verdict with the spend and the age-100 balance', async () => {
     render(<Forecast />)
 
     const hero = await screen.findByTestId('forecast-verdict')
     expect(hero).toHaveTextContent(/at \$45,000 \/ year/i)
     expect(hero).toHaveTextContent("You don't run out.")
     expect(hero).toHaveTextContent('$5.51M')
+    expect(hero).toHaveTextContent(/at age 100/)
     expect(hero).toHaveTextContent(/today's dollars/)
   })
 
@@ -107,7 +108,7 @@ describe('sensitivity table', () => {
 
     const table = await screen.findByTestId('forecast-sensitivity')
     expect(within(table).getByText('$30,000')).toBeInTheDocument()
-    expect(within(table).getByText('✓ $7.20M @ 90')).toBeInTheDocument()
+    expect(within(table).getByText('✓ $7.20M @ 100')).toBeInTheDocument()
     expect(within(table).getByText('to age 91')).toBeInTheDocument()
     expect(within(table).getByText('tight')).toBeInTheDocument()
     expect(within(table).getByText('to age 70')).toBeInTheDocument()

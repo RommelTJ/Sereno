@@ -142,7 +142,7 @@ describe('Spend guardrail card', () => {
 })
 
 describe('Longevity card', () => {
-  it('deep-links and shows the live verdict, spend, and age-90 balance', async () => {
+  it('deep-links and shows the live verdict, spend, and age-100 balance', async () => {
     stubDashboard()
     renderDashboard()
 
@@ -151,7 +151,7 @@ describe('Longevity card', () => {
     expect(await within(card).findByText("You don't run out.")).toBeInTheDocument()
     expect(within(card).getByText('at $45,000/yr')).toBeInTheDocument()
     expect(within(card).getByText('~$5.51M')).toBeInTheDocument()
-    expect(within(card).getByText('projected at age 90')).toBeInTheDocument()
+    expect(within(card).getByText('projected at age 100')).toBeInTheDocument()
   })
 
   it('turns red when the money runs out early', async () => {
