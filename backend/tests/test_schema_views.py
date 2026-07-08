@@ -33,6 +33,11 @@ def add_balance(
     )
 
 
+def add_fund(db, name="Bike fund"):
+    cursor = db.execute("INSERT INTO fund (name, kind) VALUES (?, 'sinking')", (name,))
+    return cursor.lastrowid
+
+
 class TestAccountMonthly:
     def test_latest_entry_in_month_wins(self, db):
         checking = add_account(db, "Checking")
@@ -182,11 +187,14 @@ class TestNetWorth:
 
 
 class TestBudgetMonth:
-    def add_expense(self, db, budget_month, amount, is_fixed=0):
+    def add_expense(
+        self, db, budget_month, amount, is_fixed=0, funded_from="discretionary", fund_id=None
+    ):
         db.execute(
-            "INSERT INTO expense_line (txn_date, budget_month, amount, is_fixed)"
-            " VALUES (?, ?, ?, ?)",
-            (f"{budget_month}-15", budget_month, amount, is_fixed),
+            "INSERT INTO expense_line"
+            " (txn_date, budget_month, amount, is_fixed, funded_from, fund_id)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (f"{budget_month}-15", budget_month, amount, is_fixed, funded_from, fund_id),
         )
 
     def test_splits_fixed_and_variable_spend(self, db):
@@ -206,6 +214,25 @@ class TestBudgetMonth:
         self.add_expense(db, "2026-07", 100)
         row = db.execute("SELECT funded_in FROM v_budget_month WHERE month = '2026-07'").fetchone()
         assert row["funded_in"] == 6000
+
+    def test_fund_funded_spend_stays_out_of_the_spent_totals(self, db):
+        # A fund-funded expense was paid from parked money, not the month's
+        # income — it must not lower safe-to-spend a second time.
+        bike = add_fund(db)
+        self.add_expense(db, "2026-07", 300)
+        self.add_expense(db, "2026-07", 1200, funded_from="fund", fund_id=bike)
+        row = db.execute("SELECT * FROM v_budget_month WHERE month = '2026-07'").fetchone()
+        assert row["total_spent"] == 300
+        assert row["variable_spent"] == 300
+        assert row["fixed_spent"] == 0
+        assert row["fund_spent"] == 1200
+
+    def test_a_month_with_only_fund_spending_keeps_its_row(self, db):
+        bike = add_fund(db)
+        self.add_expense(db, "2026-07", 1200, funded_from="fund", fund_id=bike)
+        row = db.execute("SELECT * FROM v_budget_month WHERE month = '2026-07'").fetchone()
+        assert row["total_spent"] == 0
+        assert row["fund_spent"] == 1200
 
     def test_safe_to_spend_example_query(self, db):
         # The example query from docs/design/schema.sql.

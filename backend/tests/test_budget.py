@@ -47,6 +47,16 @@ def insert_fund(name, kind="sinking"):
     return execute("INSERT INTO fund (name, kind) VALUES (?, ?)", name, kind)
 
 
+def insert_fund_entry(fund_id, as_of_date, balance, contribution=0):
+    return execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution) VALUES (?, ?, ?, ?)",
+        fund_id,
+        as_of_date,
+        balance,
+        contribution,
+    )
+
+
 def insert_account(name, kind="cash"):
     return execute(
         "INSERT INTO account (name, kind, tax_treatment) VALUES (?, ?, 'NONE')", name, kind
@@ -656,6 +666,18 @@ class TestGetBudgetMonth:
         assert body["categories"][0]["spent"] == 0
         assert body["total_spent"] == 118.21
         assert body["safe_to_spend"] == 5200 - 118.21
+
+    def test_fund_funded_spending_leaves_the_headline_alone(self, client):
+        # Paid from parked money, not the month's income: the expense is
+        # recorded, but safe-to-spend must not drop a second time.
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        self.fund_month(client, 5200)
+        self.spend(client, 100)
+        self.spend(client, 1200, funded_from="fund", fund_id=bike_id)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["total_spent"] == 100
+        assert body["safe_to_spend"] == 5100
 
     def test_activity_merges_spending_and_funding_newest_first(self, client):
         groceries_id = insert_category("Groceries")
