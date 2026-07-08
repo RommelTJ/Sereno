@@ -12,6 +12,13 @@ const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
   return call ? JSON.parse(call[1]?.body as string) : undefined
 }
 
+const putBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
+  const call = fetchMock.mock.calls.find(
+    ([input, init]) => input === path && init?.method === 'PUT',
+  )
+  return call ? JSON.parse(call[1]?.body as string) : undefined
+}
+
 // What POST /api/funds returns for the form's inputs: a goal (the date is
 // set) with no balance yet — the initial saved amount lands via
 // POST /api/fund-entries.
@@ -243,6 +250,113 @@ describe('archiving a fund', () => {
     expect(screen.queryByText('🚨 Emergency fund')).not.toBeInTheDocument()
     expect(screen.getByText('$14,200')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/funds/1/archive')).toEqual({})
+  })
+})
+
+describe('editing a fund plan', () => {
+  it('shows an Edit button on each fund card', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    for (const row of rows) {
+      expect(
+        within(row).getByRole('button', { name: 'Edit' }),
+      ).toBeInTheDocument()
+    }
+  })
+
+  it('reveals the $ / month input prefilled with the current plan', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+
+    expect(within(rows[0]).getByLabelText('$ / month')).toHaveValue('500')
+  })
+
+  it('prefills a blank input for a fund with no plan', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[1]).getByRole('button', { name: 'Edit' }))
+
+    expect(within(rows[1]).getByLabelText('$ / month')).toHaveValue('')
+  })
+
+  it('saves the revised plan and refetches the list', async () => {
+    const revised = {
+      ...FUNDS[0],
+      monthly_plan: 1_000,
+      note: '$1,000 / mo · ~1.7 yrs to target',
+    }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'PUT /api/funds/1': revised,
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ / month'), {
+      target: { value: '1,000' },
+    })
+    routes['/api/funds'] = [revised, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(
+      await screen.findByText('$1,000 / mo · ~1.7 yrs to target'),
+    ).toBeInTheDocument()
+    expect(putBody(fetchMock, '/api/funds/1')).toEqual({ monthly_plan: 1000 })
+    expect(
+      within(rows[0]).queryByLabelText('$ / month'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('pauses the plan when the input is blank', async () => {
+    const paused = {
+      ...FUNDS[2],
+      monthly_plan: null,
+      note: 'open-ended · add a monthly plan',
+    }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'PUT /api/funds/3': paused,
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[2]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[2]).getByLabelText('$ / month'), {
+      target: { value: '' },
+    })
+    routes['/api/funds'] = [...FUNDS.slice(0, 2), paused]
+
+    fireEvent.click(within(rows[2]).getByRole('button', { name: 'Save' }))
+
+    expect(
+      await screen.findByText('open-ended · add a monthly plan'),
+    ).toBeInTheDocument()
+    expect(putBody(fetchMock, '/api/funds/3')).toEqual({ monthly_plan: null })
+  })
+
+  it('cancels without saving', async () => {
+    const fetchMock = stubApi({ '/api/funds': FUNDS })
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ / month'), {
+      target: { value: '1,000' },
+    })
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Cancel' }))
+
+    expect(
+      within(rows[0]).queryByLabelText('$ / month'),
+    ).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT'),
+    ).toHaveLength(0)
   })
 })
 

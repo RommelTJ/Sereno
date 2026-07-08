@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.8.0**
+**v1.9.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -217,7 +217,15 @@ The funds slice:
   with a `monthly_plan` receives any missing contribution entries
   (`source = 'monthly_plan'`, one per 1st-of-month since its latest planned
   or hand-entered row) before the list is computed, idempotently — the
-  append-only, derive-on-read pattern.
+  append-only, derive-on-read pattern. The plan suspends at the target:
+  each due month funds from the fund's balance as of that 1st, the
+  crossing month's contribution is capped at the remaining amount so the
+  fund lands exactly on target, and months spent at target are forgiven
+  rather than owed — a drawdown resumes funding from its own month
+  forward at the normal pace. An open-ended fund (no target) has no
+  finish line, and a goal's target date is a deadline, never a kill
+  switch: a dated goal past its date keeps funding until it hits the
+  target or its plan is paused.
 - `POST /api/funds` — creates a fund. `kind` is derived, never sent: a
   blank `target_date` means a sinking fund, a set date means a goal; a
   blank `target_amount` is an open-ended fund (no finish line, so no
@@ -232,6 +240,13 @@ The funds slice:
   telling their kinds apart: `'spend'` for the drawdown behind a
   fund-funded expense, `'monthly_plan'` for an automatic contribution,
   null for the hand-entered rows this endpoint appends.
+- `PUT /api/funds/{id}` — revises the fund's monthly plan in place —
+  the fund row is a dimension, like a category rename, so the
+  append-only entry history is untouched. A null plan (0 is normalized
+  to NULL, so "$0 / mo" never renders) pauses funding without
+  archiving: the balance stays parked and the fund drops out of the
+  monthly catch-up until a new plan is set. A negative plan is a 422;
+  an unknown fund is a 404.
 - `POST /api/funds/{id}/archive` — soft remove, like envelope
   archiving: flips `fund.active` to 0 so the fund drops out of the
   funds list, the dashboard parked total, and the safe-to-spend
@@ -389,7 +404,11 @@ The forecast slice (the third Plan engine):
   goal** form (name, a curated emoji select, target, saved, target date —
   blank = sinking fund — and $/month), then each fund with its emoji-led
   name, meta line, `saved / target` amount, progress bar, the
-  server-derived note from `GET /api/funds`, rendered verbatim, and an
+  server-derived note from `GET /api/funds`, rendered verbatim, an Edit
+  button that opens an inline $ / month input prefilled with the current
+  plan — Save revises it via `PUT /api/funds/{id}` (a blank input pauses
+  funding without archiving) and refetches so the note recalculates,
+  Cancel closes without a request — and an
   Archive button that retires the fund via `POST /api/funds/{id}/archive`
   and refetches the list — a finished goal disappears from the card, the
   total parked, and the safe-to-spend "Funded from" options, and its
@@ -512,6 +531,22 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.9.0 — Monthly funding learns to stop. The lazy catch-up no longer
+funds past 100%: each due month contributes from the fund's balance
+as of that 1st, the crossing month is capped at the remaining amount
+so the fund lands exactly on target, and a fund at or past target
+receives nothing — so a fully funded goal stops parking money and
+stops trimming safe-to-spend. Months spent at target are forgiven
+rather than owed: a drawdown resumes funding from its own month
+forward instead of backfilling rows dated before the spend that the
+date-ordered balance query would never see. Open-ended funds keep
+funding at full pace, and a goal's target date stays a deadline, not
+a kill switch. Funds also gain their first edit path:
+`PUT /api/funds/{id}` revises the monthly plan in place (the fund row
+is a dimension — entries and history untouched), a null/0 plan pauses
+funding without archiving, and each Funds & goals row gains an Edit
+button with an inline $ / month input beside Archive.
 
 v1.8.0 — The forecast grows up with its owner. The simulation's start
 age is no longer a hardcoded 38: the backend derives the current age

@@ -323,6 +323,12 @@ export interface FundInput {
   monthly_plan?: number
 }
 
+// Revises the fund's monthly plan in place — the fund row is a dimension,
+// so its entry history is untouched. null pauses funding without archiving.
+export interface FundUpdate {
+  monthly_plan: number | null
+}
+
 // Config edits append: each input becomes a new effective-dated row and
 // the GETs resolve to it. Blank optional fields are omitted, not nulled.
 export interface AssumptionInput {
@@ -472,6 +478,8 @@ export const createFund = (input: FundInput) =>
   postJsonReturning<Fund>('/api/funds', input)
 export const createFundEntry = (input: FundEntryInput) =>
   postJson('/api/fund-entries', input)
+export const updateFund = (fundId: number, input: FundUpdate) =>
+  putJson(`/api/funds/${fundId}`, input)
 export const archiveFund = (fundId: number) =>
   postJson(`/api/funds/${fundId}/archive`, {})
 export const createAssumption = (input: AssumptionInput) =>
