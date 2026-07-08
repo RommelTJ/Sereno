@@ -51,6 +51,24 @@ export function totalParked(funds: Fund[]): number {
   return funds.reduce((sum, fund) => sum + fund.balance, 0)
 }
 
+export interface FundRow {
+  id: number
+  name: string
+  amount: string
+}
+
+// The safe-to-spend funds card's rows: every active fund with its parked
+// balance — the per-fund breakdown of the hero formula's money-in-funds
+// term. The name goes through fundView so emojis render the same way
+// everywhere.
+export function fundRows(funds: Fund[]): FundRow[] {
+  return funds.map((fund) => ({
+    id: fund.id,
+    name: fundView(fund).name,
+    amount: formatUsd(fund.balance),
+  }))
+}
+
 export interface NewFund {
   fund: FundInput
   saved: number

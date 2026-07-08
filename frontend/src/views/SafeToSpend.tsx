@@ -8,6 +8,7 @@ import {
 } from '../api.ts'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
 import FundingForm from '../components/FundingForm.tsx'
+import FundsCard from '../components/FundsCard.tsx'
 import SpendingForm from '../components/SpendingForm.tsx'
 import { formatUsd } from '../ledger.ts'
 
@@ -56,6 +57,7 @@ function SafeToSpend() {
           <div className="flex flex-col gap-5">
             <Hero safeToSpend={budget.safe_to_spend} />
             <EnvelopesCard month={budget.month} envelopes={budget.categories} />
+            <FundsCard funds={funds} />
           </div>
           <div className="flex flex-col gap-5">
             <SpendingForm
