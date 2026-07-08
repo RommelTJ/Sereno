@@ -104,6 +104,27 @@ def create_fund(fund: FundCreate, db: Db) -> Fund:
     return _fund(row)
 
 
+@router.post("/funds/{fund_id}/archive")
+def archive_fund(fund_id: int, db: Db) -> Fund:
+    """Soft remove, like envelope archiving: the fund drops out of listings
+    (GET /api/funds filters on active), while past expense lines keep their
+    fund_id. A final zeroing entry — skipped when the balance is already
+    zero, so archiving twice appends nothing — releases the parked balance
+    back to spendable without breaking the append-only history."""
+    row = db.execute(_FUND_QUERY + " WHERE id = ?", (fund_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="fund not found")
+    if row["balance"] != 0:
+        db.execute(
+            "INSERT INTO fund_entry (fund_id, as_of_date, balance) VALUES (?, ?, 0)",
+            (fund_id, date.today().isoformat()),
+        )
+    db.execute("UPDATE fund SET active = 0 WHERE id = ?", (fund_id,))
+    db.commit()
+    row = db.execute(_FUND_QUERY + " WHERE id = ?", (fund_id,)).fetchone()
+    return _fund(row)
+
+
 @router.post("/fund-entries", status_code=201)
 def create_fund_entry(entry: FundEntryCreate, db: Db) -> FundEntry:
     if db.execute("SELECT 1 FROM fund WHERE id = ?", (entry.fund_id,)).fetchone() is None:
