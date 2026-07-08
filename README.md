@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.6.0**
+**v1.7.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -502,6 +502,23 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.7.0 — Fund balances finally move. Spending funded from a fund now
+draws it down: the expense appends a 'spend' `fund_entry` (balance
+minus amount, negative contribution, dated the transaction) in the
+same transaction, and overdrawing a fund is a 422. Fund-funded
+expenses leave safe-to-spend and the envelope bars alone — migration
+0006 filters `v_budget_month`'s spent totals to discretionary lines
+and adds `fund_spent` — and monthly plans fund themselves: with no
+scheduler in the stack, reading the funds or the budget month applies
+each active fund's `monthly_plan` as idempotent catch-up contributions
+dated the 1st of each missed month (migration 0007 adds
+`fund_entry.source`; fund creation anchors the schedule with a zero
+entry), and the month's automatic contributions count against the
+headline: `safe_to_spend = baseline − fund_contributions −
+total_spent`, because money moved into a fund is parked, not
+spendable. The Safe-to-spend screen refetches the funds list after
+adding a spending item so the drawdown shows immediately.
 
 v1.6.0 — Safe-to-spend funds card. The hero formula's money-in-funds
 term is no longer invisible on the screen where spending decisions
