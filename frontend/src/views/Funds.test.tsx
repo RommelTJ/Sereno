@@ -220,7 +220,7 @@ describe('responsive layout', () => {
     const form = await screen.findByTestId('new-fund-form')
     expect(within(form).getByLabelText('Name').closest('.grid')).toHaveClass(
       'grid-cols-1',
-      'sm:grid-cols-[2fr_1fr_1fr]',
+      'sm:grid-cols-[2fr_1fr_1fr_1fr]',
     )
     expect(
       within(form).getByLabelText('$ / month').closest('.grid'),

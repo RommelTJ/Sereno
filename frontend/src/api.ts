@@ -315,6 +315,7 @@ export interface CategoryUpdate {
 // set date means a goal; a blank target_amount is an open-ended fund.
 export interface FundInput {
   name: string
+  emoji?: string
   target_amount?: number
   target_date?: string
   monthly_plan?: number
