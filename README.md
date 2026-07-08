@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.5.0**
+**v1.6.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -477,6 +477,16 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.6.0 — Safe-to-spend funds card. The hero formula's money-in-funds
+term is no longer invisible on the screen where spending decisions
+happen: a "Money in funds" card sits under the monthly envelopes with
+the total parked in its header and one row per active fund — emoji-led
+name, available balance, and "$X / mo" plan, blank for a fund with no
+monthly plan. Frontend-only: the card reads the `GET /api/funds` list
+the screen already fetches for the "Funded from" options, and the new
+`fundRows` view-model reuses the same emoji-name and `$` formatting
+helpers as every other fund surface.
 
 v1.5.0 — Fund archiving. Funds & goals gain the retirement path
 envelopes got in v1.1.0: `POST /api/funds/{id}/archive` flips the
