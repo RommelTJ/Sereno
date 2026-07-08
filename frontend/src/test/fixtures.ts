@@ -321,6 +321,7 @@ export const TAX_PARAMS = [
 export const FORECAST: Forecast = {
   spend: 45_000,
   annual_target: 45_000,
+  start_age: 38,
   return_pct: 7,
   inflation_pct: 3,
   ss_you: 1_500,

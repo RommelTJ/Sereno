@@ -68,6 +68,18 @@ describe('bridge card', () => {
     const bridge = await screen.findByTestId('forecast-bridge')
     expect(bridge).toHaveTextContent('14 yrs')
   })
+
+  it('derives the bridge years and chart range from the start age', async () => {
+    stubApi({
+      '/api/forecast': { ...FORECAST, start_age: 40 },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Forecast />)
+
+    const bridge = await screen.findByTestId('forecast-bridge')
+    expect(bridge).toHaveTextContent('Need to cover 19.5 yrs')
+    expect(screen.getByTestId('forecast-chart')).toHaveTextContent('age 40 → 100')
+  })
 })
 
 describe('balance-by-bucket chart', () => {

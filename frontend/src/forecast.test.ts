@@ -131,7 +131,17 @@ describe('bridgeCopy', () => {
     for (let age = 38; age < 52; age += 1) {
       overrides[age] = { eth: 100_000 }
     }
-    expect(bridgeCopy(series(overrides))).toEqual({ years: '14 yrs', ok: false })
+    expect(bridgeCopy(series(overrides), 38)).toEqual({ years: '14 yrs', ok: false })
+  })
+
+  it('counts the bridge years from the caller-supplied start age', () => {
+    // The same age-52 break is only 12 years past a start age of 40 —
+    // the literal 38 came from the prototype handoff.
+    const overrides: Record<number, { eth: number }> = {}
+    for (let age = 38; age < 52; age += 1) {
+      overrides[age] = { eth: 100_000 }
+    }
+    expect(bridgeCopy(series(overrides), 40)).toEqual({ years: '12 yrs', ok: false })
   })
 
   it('celebrates taxable buckets that outlast the bridge', () => {
@@ -139,7 +149,7 @@ describe('bridgeCopy', () => {
     for (let age = 38; age <= 95; age += 1) {
       overrides[age] = { brokerage: 100_000 }
     }
-    expect(bridgeCopy(series(overrides))).toEqual({ years: '31+ yrs', ok: true })
+    expect(bridgeCopy(series(overrides), 38)).toEqual({ years: '31+ yrs', ok: true })
   })
 
   it('ignores the locked retirement bucket', () => {
@@ -147,7 +157,7 @@ describe('bridgeCopy', () => {
     for (let age = 38; age <= 95; age += 1) {
       overrides[age] = { retirement: 500_000 }
     }
-    expect(bridgeCopy(series(overrides))).toEqual({ years: '0 yrs', ok: false })
+    expect(bridgeCopy(series(overrides), 38)).toEqual({ years: '0 yrs', ok: false })
   })
 })
 
