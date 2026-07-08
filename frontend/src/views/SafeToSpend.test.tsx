@@ -108,6 +108,16 @@ describe('Funds card', () => {
     expect(within(rows[2]).getByText('Travel fund')).toBeInTheDocument()
     expect(within(rows[2]).getByText('$4,200')).toBeInTheDocument()
   })
+
+  it('shows the monthly plan, blank when a fund has none', async () => {
+    render(<SafeToSpend />)
+
+    const rows = await screen.findAllByTestId('sts-fund-row')
+    expect(within(rows[0]).getByText('$500 / mo')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('$300 / mo')).toBeInTheDocument()
+    // The Bike fund has no monthly plan — no "/ mo" label at all.
+    expect(within(rows[1]).queryByText(/\/ mo/)).not.toBeInTheDocument()
+  })
 })
 
 describe('Add a spending item', () => {
