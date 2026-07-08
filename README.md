@@ -200,8 +200,10 @@ The budget slice:
   Fund-funded expenses stay out of `total_spent` and the envelope bars —
   they were paid from parked money, and the fund's drawdown already
   released the earmark — and `fund_contributions` is the month's automatic
-  monthly-plan funding: money moved into a fund is parked, so it stops
-  being spendable the moment it lands. Reading the budget month applies
+  monthly-plan funding plus its one-time top-ups: money moved into a fund
+  is parked, so it stops being spendable the moment it lands, and a
+  release's negative contribution reads as spendable again. Reading the
+  budget month applies
   the monthly-plan catch-up itself, so the headline never misses a
   contribution the funds list hasn't been asked for yet.
 The funds slice:
@@ -247,6 +249,18 @@ The funds slice:
   archiving: the balance stays parked and the fund drops out of the
   monthly catch-up until a new plan is set. A negative plan is a 422;
   an unknown fund is a 404.
+- `POST /api/funds/{id}/top-up` — a one-time move between the month's
+  safe-to-spend and the fund, the one-off sibling of the automatic
+  monthly contribution: appends a `fund_entry` with the delta as its
+  contribution and `source = 'top_up'`, the new balance computed
+  server-side from the latest entry — nobody types an absolute figure.
+  A positive amount parks money (the headline falls the moment it
+  lands); a negative amount is a partial release, raising the headline
+  back. A release may not exceed the fund's balance (a 422, the mirror
+  of the overdraw guard on fund-funded expenses) — but a top-up beyond
+  the month's remaining safe-to-spend is allowed, like overspending is
+  everywhere else. A zero amount or an archived fund is a 422; an
+  unknown fund is a 404.
 - `POST /api/funds/{id}/archive` — soft remove, like envelope
   archiving: flips `fund.active` to 0 so the fund drops out of the
   funds list, the dashboard parked total, and the safe-to-spend
@@ -404,7 +418,12 @@ The forecast slice (the third Plan engine):
   goal** form (name, a curated emoji select, target, saved, target date —
   blank = sinking fund — and $/month), then each fund with its emoji-led
   name, meta line, `saved / target` amount, progress bar, the
-  server-derived note from `GET /api/funds`, rendered verbatim, an Edit
+  server-derived note from `GET /api/funds`, rendered verbatim, a Top up
+  button that opens an inline $ amount input — Save posts the delta to
+  `POST /api/funds/{id}/top-up`, moving money between the month's
+  safe-to-spend and the fund (a negative amount releases part of the
+  balance back to spendable), and refetches so the balance and note move
+  immediately — an Edit
   button that opens an inline $ / month input prefilled with the current
   plan — Save revises it via `PUT /api/funds/{id}` (a blank input pauses
   funding without archiving) and refetches so the note recalculates,
