@@ -56,6 +56,13 @@ class FundCreate(BaseModel):
     monthly_plan: NonNegativeFloat | None = None
 
 
+class FundUpdate(BaseModel):
+    """A 0 or blank plan is stored as NULL — pausing and clearing are the
+    same state, and "$0 / mo" never renders anywhere."""
+
+    monthly_plan: NonNegativeFloat | None = None
+
+
 class FundEntryCreate(BaseModel):
     fund_id: int
     as_of_date: date
@@ -162,6 +169,23 @@ def create_fund(fund: FundCreate, db: Db) -> Fund:
     )
     db.commit()
     row = db.execute(_FUND_QUERY + " WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return _fund(row)
+
+
+@router.put("/funds/{fund_id}")
+def update_fund(fund_id: int, update: FundUpdate, db: Db) -> Fund:
+    """Revises the monthly plan in place — the fund row is a dimension,
+    like a category rename, so the append-only entry history is untouched.
+    A NULL plan pauses funding without archiving: the balance stays parked
+    and the fund drops out of the monthly catch-up."""
+    if db.execute("SELECT 1 FROM fund WHERE id = ?", (fund_id,)).fetchone() is None:
+        raise HTTPException(status_code=404, detail="fund not found")
+    db.execute(
+        "UPDATE fund SET monthly_plan = ? WHERE id = ?",
+        (update.monthly_plan or None, fund_id),
+    )
+    db.commit()
+    row = db.execute(_FUND_QUERY + " WHERE id = ?", (fund_id,)).fetchone()
     return _fund(row)
 
 
