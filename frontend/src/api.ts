@@ -329,6 +329,14 @@ export interface FundUpdate {
   monthly_plan: number | null
 }
 
+// POST /api/funds/{id}/top-up appends a 'top_up' entry with the delta as
+// its contribution — the server computes the new balance from the latest
+// entry. A positive amount parks money and trims the month's
+// safe-to-spend; a negative amount is a partial release, raising it back.
+export interface FundTopUpInput {
+  amount: number
+}
+
 // Config edits append: each input becomes a new effective-dated row and
 // the GETs resolve to it. Blank optional fields are omitted, not nulled.
 export interface AssumptionInput {
@@ -480,6 +488,8 @@ export const createFundEntry = (input: FundEntryInput) =>
   postJson('/api/fund-entries', input)
 export const updateFund = (fundId: number, input: FundUpdate) =>
   putJson(`/api/funds/${fundId}`, input)
+export const topUpFund = (fundId: number, input: FundTopUpInput) =>
+  postJson(`/api/funds/${fundId}/top-up`, input)
 export const archiveFund = (fundId: number) =>
   postJson(`/api/funds/${fundId}/archive`, {})
 export const createAssumption = (input: AssumptionInput) =>

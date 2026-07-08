@@ -113,6 +113,15 @@ export function fundPlanEdit(rawMonthly: string): FundUpdate {
   return { monthly_plan: parseAmount(rawMonthly) || null }
 }
 
+// The row Top up's raw "$ amount" field → the signed delta to post. A
+// leading minus means a partial release back to spendable; parseAmount
+// strips it, so the sign is read first. Blank and 0 both come back 0 —
+// nothing should be posted.
+export function topUpAmount(raw: string): number {
+  const sign = raw.trim().startsWith('-') ? -1 : 1
+  return sign * parseAmount(raw)
+}
+
 // The curated emoji choices for the new-fund form — fund- and goal-themed,
 // like the account and envelope lists in settings.ts. The DB stores the
 // emoji as free TEXT; this list constrains only the UI.
