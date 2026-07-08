@@ -98,8 +98,10 @@ describe('Add a spending item', () => {
       .getAllByRole('option')
       .map((option) => option.textContent)
     expect(options).toContain('June budget · discretionary')
-    expect(options).toContain('Emergency fund')
-    expect(options).toContain('Bike fund')
+    expect(options).toContain('🚨 Emergency fund')
+    expect(options).toContain('🚲 Bike fund')
+    // A fund without an emoji keeps its plain name.
+    expect(options).toContain('Travel fund')
   })
 
   it('posts the expense and refreshes the hero and envelopes', async () => {
