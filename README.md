@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.8.0**
+**v1.9.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -531,6 +531,22 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.9.0 — Monthly funding learns to stop. The lazy catch-up no longer
+funds past 100%: each due month contributes from the fund's balance
+as of that 1st, the crossing month is capped at the remaining amount
+so the fund lands exactly on target, and a fund at or past target
+receives nothing — so a fully funded goal stops parking money and
+stops trimming safe-to-spend. Months spent at target are forgiven
+rather than owed: a drawdown resumes funding from its own month
+forward instead of backfilling rows dated before the spend that the
+date-ordered balance query would never see. Open-ended funds keep
+funding at full pace, and a goal's target date stays a deadline, not
+a kill switch. Funds also gain their first edit path:
+`PUT /api/funds/{id}` revises the monthly plan in place (the fund row
+is a dimension — entries and history untouched), a null/0 plan pauses
+funding without archiving, and each Funds & goals row gains an Edit
+button with an inline $ / month input beside Archive.
 
 v1.8.0 — The forecast grows up with its owner. The simulation's start
 age is no longer a hardcoded 38: the backend derives the current age
