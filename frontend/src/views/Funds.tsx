@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react'
 import type { Fund } from '../api.ts'
-import { createFund, createFundEntry, fetchFunds } from '../api.ts'
+import { archiveFund, createFund, createFundEntry, fetchFunds } from '../api.ts'
+import GhostButton from '../components/GhostButton.tsx'
 import NewFundForm from '../components/NewFundForm.tsx'
 import type { NewFund } from '../funds.ts'
 import { fundView, totalParked } from '../funds.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
 
-function FundRow({ fund }: { fund: Fund }) {
+function FundRow({
+  fund,
+  onArchive,
+}: {
+  fund: Fund
+  onArchive: (fundId: number) => Promise<void>
+}) {
   const view = fundView(fund)
   return (
     <div data-testid="fund-row">
@@ -17,7 +24,13 @@ function FundRow({ fund }: { fund: Fund }) {
             · {view.meta}
           </span>
         </p>
-        <p className="num text-[13.5px] font-semibold">{view.amount}</p>
+        <div className="flex items-baseline gap-3">
+          <p className="num text-[13.5px] font-semibold">{view.amount}</p>
+          <GhostButton
+            label="Archive"
+            onClick={() => void onArchive(fund.id)}
+          />
+        </div>
       </div>
       {view.barPct !== null && (
         <div className="mt-2 h-[9px] overflow-hidden rounded-[6px] bg-track">
@@ -56,6 +69,11 @@ function Funds() {
     setFunds(await fetchFunds())
   }
 
+  const archive = async (fundId: number) => {
+    await archiveFund(fundId)
+    setFunds(await fetchFunds())
+  }
+
   return (
     <div data-testid="view-funds" className="max-w-[760px]">
       {funds && (
@@ -74,7 +92,7 @@ function Funds() {
           <NewFundForm onAdd={addFund} />
           <div className="mt-[18px] flex flex-col gap-5">
             {funds.map((fund) => (
-              <FundRow key={fund.id} fund={fund} />
+              <FundRow key={fund.id} fund={fund} onArchive={archive} />
             ))}
           </div>
         </div>

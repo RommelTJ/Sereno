@@ -465,6 +465,8 @@ export const createFund = (input: FundInput) =>
   postJsonReturning<Fund>('/api/funds', input)
 export const createFundEntry = (input: FundEntryInput) =>
   postJson('/api/fund-entries', input)
+export const archiveFund = (fundId: number) =>
+  postJson(`/api/funds/${fundId}/archive`, {})
 export const createAssumption = (input: AssumptionInput) =>
   postJson('/api/assumptions', input)
 export const createSpendPlan = (input: SpendPlanInput) =>
