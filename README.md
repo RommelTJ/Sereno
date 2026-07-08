@@ -208,6 +208,17 @@ The funds slice:
 - `POST /api/fund-entries` — appends a dated balance row for a fund
   (append-only, like `balance_entry`); the latest entry is the fund's
   balance and earlier rows are kept as history.
+- `POST /api/funds/{id}/archive` — soft remove, like envelope
+  archiving: flips `fund.active` to 0 so the fund drops out of the
+  funds list, the dashboard parked total, and the safe-to-spend
+  "Funded from" options, and appends a final zeroing `fund_entry`
+  (balance 0, dated at archive time; skipped when the balance is
+  already zero, so archiving twice appends nothing) — funds are
+  virtual earmarks over real cash, so no dollars move: the parked
+  balance simply reads as spendable again, and any query summing
+  `fund_entry` stays honest without joining on `fund.active`. No hard
+  delete — past expense lines keep their `fund_id` and the
+  contribution history survives.
 
 The config slice (the one input source for the Plan engines):
 
@@ -341,8 +352,12 @@ The forecast slice (the third Plan engine):
   parked and the "notes auto-calculate" hint, the dashed **+ New fund or
   goal** form (name, a curated emoji select, target, saved, target date —
   blank = sinking fund — and $/month), then each fund with its emoji-led
-  name, meta line, `saved / target` amount, progress bar, and the
-  server-derived note from `GET /api/funds`, rendered verbatim. Completed funds turn accent green; open-ended funds (no target)
+  name, meta line, `saved / target` amount, progress bar, the
+  server-derived note from `GET /api/funds`, rendered verbatim, and an
+  Archive button that retires the fund via `POST /api/funds/{id}/archive`
+  and refetches the list — a finished goal disappears from the card, the
+  total parked, and the safe-to-spend "Funded from" options, and its
+  balance reads as spendable again. Completed funds turn accent green; open-ended funds (no target)
   show just their balance, with no bar. Submitting the form posts the
   dimension row to `POST /api/funds`, appends any initial saved amount via
   `POST /api/fund-entries`, and refetches the list.
