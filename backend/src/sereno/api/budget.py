@@ -338,7 +338,8 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
             "           WHERE p.category_id = c.id AND p.effective_month <= ?"
             "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned,"
             " COALESCE((SELECT SUM(e.amount) FROM expense_line e"
-            "           WHERE e.category_id = c.id AND e.budget_month = ?), 0) AS spent"
+            "           WHERE e.category_id = c.id AND e.budget_month = ?"
+            "           AND e.funded_from = 'discretionary'), 0) AS spent"
             " FROM category c WHERE c.active = 1 ORDER BY c.id",
             (target, target),
         )
