@@ -89,6 +89,37 @@ describe('Envelopes card', () => {
   })
 })
 
+describe('Funds card', () => {
+  it('shows the total parked in the header', async () => {
+    render(<SafeToSpend />)
+
+    expect(await screen.findByText('Money in funds')).toBeInTheDocument()
+    expect(screen.getByText('$24,200')).toBeInTheDocument()
+  })
+
+  it('renders one row per active fund with its available balance', async () => {
+    render(<SafeToSpend />)
+
+    const rows = await screen.findAllByTestId('sts-fund-row')
+    expect(rows).toHaveLength(3)
+    expect(within(rows[0]).getByText('🚨 Emergency fund')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$10,000')).toBeInTheDocument()
+    // A fund without an emoji keeps its plain name.
+    expect(within(rows[2]).getByText('Travel fund')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('$4,200')).toBeInTheDocument()
+  })
+
+  it('shows the monthly plan, blank when a fund has none', async () => {
+    render(<SafeToSpend />)
+
+    const rows = await screen.findAllByTestId('sts-fund-row')
+    expect(within(rows[0]).getByText('$500 / mo')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('$300 / mo')).toBeInTheDocument()
+    // The Bike fund has no monthly plan — no "/ mo" label at all.
+    expect(within(rows[1]).queryByText(/\/ mo/)).not.toBeInTheDocument()
+  })
+})
+
 describe('Add a spending item', () => {
   it('offers the discretionary budget and each active fund as sources', async () => {
     render(<SafeToSpend />)

@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.5.0**
+**v1.6.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -338,7 +338,12 @@ The forecast slice (the third Plan engine):
   "total cash − bills due − money in funds" formula pill, above the monthly
   envelopes card: one progress bar per category, "spent · left" while under
   budget, "$X over" in red once over — overspending is allowed and simply
-  trims the headline. Beside them, "Add a spending item" (amount, category,
+  trims the headline. Under the envelopes, the "Money in funds" card makes
+  the formula's money-in-funds term visible where spending decisions
+  happen: the total parked in its header and one row per active fund with
+  its emoji-led name, available balance, and "$X / mo" plan — blank for a
+  fund saving at no set pace — straight from the same `GET /api/funds`
+  list the forms already load. Beside them, "Add a spending item" (amount, category,
   and funded-from: the month's discretionary budget or any active fund via
   `GET /api/funds` — funds labeled `emoji + name` like the categories;
   choosing a fund reveals the matching
@@ -472,6 +477,16 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.6.0 — Safe-to-spend funds card. The hero formula's money-in-funds
+term is no longer invisible on the screen where spending decisions
+happen: a "Money in funds" card sits under the monthly envelopes with
+the total parked in its header and one row per active fund — emoji-led
+name, available balance, and "$X / mo" plan, blank for a fund with no
+monthly plan. Frontend-only: the card reads the `GET /api/funds` list
+the screen already fetches for the "Funded from" options, and the new
+`fundRows` view-model reuses the same emoji-name and `$` formatting
+helpers as every other fund surface.
 
 v1.5.0 — Fund archiving. Funds & goals gain the retirement path
 envelopes got in v1.1.0: `POST /api/funds/{id}/archive` flips the
