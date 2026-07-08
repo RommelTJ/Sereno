@@ -9,11 +9,6 @@ import {
   stepMarker,
 } from '../sourcing.ts'
 
-// No birthdate lives in the schema, so the screen owns its starting
-// age — the handoff forecast's age 38 — and the input re-evaluates
-// any other age server-side.
-const DEFAULT_AGE = 38
-
 function StepRow({
   step,
   index,
@@ -78,19 +73,22 @@ function RuleCard({
 function Withdrawals() {
   const [sourcing, setSourcing] = useState<Sourcing | null>()
   const [accounts, setAccounts] = useState<Account[]>()
-  const [age, setAge] = useState(DEFAULT_AGE)
+  // The server derives the default age from its birthdate constant —
+  // the response echoes it, and the input re-evaluates any other age
+  // server-side. Null means untouched: keep the server's default.
+  const [age, setAge] = useState<number | null>(null)
   const [spend, setSpend] = useState<number | null>(null)
 
   useEffect(() => {
     void fetchAccounts().then(setAccounts)
-    void fetchSourcing(DEFAULT_AGE).then(setSourcing)
+    void fetchSourcing().then(setSourcing)
   }, [])
 
-  const reevaluate = (nextAge: number, nextSpend: number | null) => {
-    if (!Number.isFinite(nextAge) || nextAge < 0) {
+  const reevaluate = (nextAge: number | null, nextSpend: number | null) => {
+    if (nextAge != null && (!Number.isFinite(nextAge) || nextAge < 0)) {
       return
     }
-    void fetchSourcing(nextAge, nextSpend ?? undefined).then(setSourcing)
+    void fetchSourcing(nextAge ?? undefined, nextSpend ?? undefined).then(setSourcing)
   }
 
   if (sourcing === undefined || accounts === undefined) {
@@ -138,7 +136,7 @@ function Withdrawals() {
               <input
                 data-testid="sourcing-age"
                 type="number"
-                value={age}
+                value={age ?? sourcing.age}
                 onChange={(event) => {
                   const value = Number(event.target.value)
                   setAge(value)

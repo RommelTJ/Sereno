@@ -187,9 +187,10 @@ export interface TaxParam {
   ordinary_brackets: TaxBracket[] | null
 }
 
-// GET /api/sourcing: the tax-aware waterfall evaluated at a required
-// ?age= and an optional what-if ?spend= (default: the plan's annual
-// target). Null until a tax year, a balance, and a spend target exist.
+// GET /api/sourcing: the tax-aware waterfall evaluated at an optional
+// what-if ?age= (default: the server's birthdate-derived current age)
+// and ?spend= (default: the plan's annual target). Null until a tax
+// year, a balance, and a spend target exist.
 export interface SourcingStep {
   name: string
   treatment: 'LTCG' | 'ORDINARY'
@@ -420,12 +421,17 @@ export const fetchGuardrails = (spend?: number) =>
   getJson<Guardrails | null>(
     spend != null ? `/api/guardrails?spend=${spend}` : '/api/guardrails',
   )
-export const fetchSourcing = (age: number, spend?: number) =>
-  getJson<Sourcing | null>(
-    spend != null
-      ? `/api/sourcing?age=${age}&spend=${spend}`
-      : `/api/sourcing?age=${age}`,
-  )
+export const fetchSourcing = (age?: number, spend?: number) => {
+  const params = new URLSearchParams()
+  if (age != null) {
+    params.set('age', String(age))
+  }
+  if (spend != null) {
+    params.set('spend', String(spend))
+  }
+  const query = params.toString()
+  return getJson<Sourcing | null>(query ? `/api/sourcing?${query}` : '/api/sourcing')
+}
 export const fetchForecast = (overrides: ForecastOverrides = {}) => {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(overrides)) {
