@@ -102,6 +102,20 @@ describe('balance-by-bucket chart', () => {
     expect(within(chart).queryByText('39')).not.toBeInTheDocument()
   })
 
+  it('gives each bar a hover tooltip with the year and the dollar breakdown', async () => {
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    const tip = screen.getByTestId('forecast-tip-68')
+    // The year age 68 is reached: 30 years past the start age's year.
+    const year = new Date().getFullYear() + 68 - FORECAST.start_age
+    expect(tip).toHaveTextContent(`Age 68 · ${year}`)
+    expect(tip).toHaveTextContent('ETH $200,000')
+    expect(tip).toHaveTextContent('Brokerage $800,000')
+    expect(tip).toHaveTextContent('401(k) $600,000')
+    expect(tip).toHaveTextContent('Soc. Sec. $34,800/yr')
+  })
+
   it('floors the Social Security sliver and hides it before the start age', async () => {
     render(<Forecast />)
 
