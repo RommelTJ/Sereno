@@ -236,6 +236,7 @@ export interface SensitivityRow {
 export interface Forecast {
   spend: number
   annual_target: number | null
+  start_age: number
   return_pct: number
   inflation_pct: number
   ss_you: number

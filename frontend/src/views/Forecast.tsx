@@ -183,7 +183,7 @@ function Forecast() {
   }
 
   const outcome = verdict(forecast.run_out_age)
-  const bridge = bridgeCopy(forecast.series)
+  const bridge = bridgeCopy(forecast.series, forecast.start_age)
   const bounds = spendSliderBounds(forecast.spend)
   const spend = overrides.spend ?? forecast.spend
   const returnPct = overrides.return_pct ?? forecast.return_pct
@@ -223,7 +223,7 @@ function Forecast() {
         >
           <p className="text-[11px] font-semibold text-muted-2">BRIDGE TO 401(k) @ 59½</p>
           <p className="mt-[7px] text-[13.5px]">
-            Need to cover <b>21.5 yrs</b>
+            Need to cover <b>{59.5 - forecast.start_age} yrs</b>
           </p>
           <p className={`text-[13.5px] ${bridge.ok ? 'text-accent' : 'text-red'}`}>
             Taxable buckets last <b>{bridge.years}</b> {bridge.ok ? '✓' : '⚠'}
@@ -235,7 +235,9 @@ function Forecast() {
         data-testid="forecast-chart"
         className="mt-5 rounded-card border border-card-border bg-card p-6"
       >
-        <p className="mb-[26px] text-sm font-bold">Balance by bucket · age 38 → 95</p>
+        <p className="mb-[26px] text-sm font-bold">
+          Balance by bucket · age {forecast.start_age} → 100
+        </p>
         <div className="relative flex h-[200px] items-end gap-2 border-b border-[#d9d4c9]">
           {chartColumns(forecast.series).map((column) => (
             <BarColumn key={column.age} column={column} />

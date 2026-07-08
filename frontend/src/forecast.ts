@@ -76,11 +76,11 @@ export interface BridgeCopy {
 
 // How long the taxable buckets (ETH + brokerage) last before the
 // 401(k) unlocks: the first pre-60 year they sit empty broke the
-// bridge that many years after 38.
-export function bridgeCopy(series: ForecastPoint[]): BridgeCopy {
+// bridge that many years after the start age.
+export function bridgeCopy(series: ForecastPoint[], startAge: number): BridgeCopy {
   const broke = series.find((point) => point.age < 60 && point.eth + point.brokerage <= 0)
   if (broke != null) {
-    return { years: `${broke.age - 38} yrs`, ok: false }
+    return { years: `${broke.age - startAge} yrs`, ok: false }
   }
   return { years: '31+ yrs', ok: true }
 }
