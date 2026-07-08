@@ -141,8 +141,16 @@ class TestPrerequisites:
         assert body["target_net"] == 45_000.0
         assert body["annual_target"] is None
 
-    def test_rejects_a_missing_age(self, client):
-        assert client.get("/api/sourcing").status_code == 422
+    def test_a_missing_age_defaults_to_the_birthdate_derived_age(self, client):
+        # Mirrors the backend's sanitized BIRTHDATE constant (January 1,
+        # 1988): with a Jan-1 birthdate the derived current age is
+        # simply the year difference.
+        seed_portfolio()
+        insert_spend_plan()
+        insert_tax_param()
+        response = client.get("/api/sourcing")
+        assert response.status_code == 200
+        assert response.json()["age"] == TODAY.year - 1988
 
     def test_rejects_a_non_positive_spend(self, client):
         params = {"age": 38, "spend": 0}
