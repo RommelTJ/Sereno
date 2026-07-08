@@ -63,6 +63,14 @@ def insert_account(name, kind="cash"):
     )
 
 
+def fetch_fund_entries(fund_id):
+    return query(
+        "SELECT as_of_date, balance, contribution, source FROM fund_entry"
+        " WHERE fund_id = ? ORDER BY id",
+        fund_id,
+    )
+
+
 def query(sql, *params):
     conn = connect()
     try:
@@ -463,6 +471,55 @@ class TestPostExpenses:
         assert response.status_code == 201
         assert response.json()["funded_from"] == "fund"
         assert response.json()["fund_id"] == bike_id
+
+    def test_fund_spending_draws_down_the_fund(self, client):
+        # The other half of the double-entry: the expense line records the
+        # spend, the appended fund_entry releases the earmark.
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        response = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": "2026-06-05",
+                "amount": 1200,
+                "funded_from": "fund",
+                "fund_id": bike_id,
+            },
+        )
+        assert response.status_code == 201
+        assert fetch_fund_entries(bike_id) == [
+            {"as_of_date": "2026-06-01", "balance": 5000, "contribution": 0, "source": None},
+            {
+                "as_of_date": "2026-06-05",
+                "balance": 3800,
+                "contribution": -1200,
+                "source": "spend",
+            },
+        ]
+
+    def test_discretionary_spending_appends_no_fund_entry(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        response = client.post("/api/expenses", json={"txn_date": "2026-06-05", "amount": 100})
+        assert response.status_code == 201
+        assert len(fetch_fund_entries(bike_id)) == 1
+
+    def test_overspending_a_fund_is_rejected(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 1000)
+        response = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": "2026-06-05",
+                "amount": 1200,
+                "funded_from": "fund",
+                "fund_id": bike_id,
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"] == "expense exceeds fund balance"
+        assert query("SELECT id FROM expense_line") == []
+        assert len(fetch_fund_entries(bike_id)) == 1
 
     def test_fund_spending_requires_a_fund_id(self, client):
         response = client.post(
