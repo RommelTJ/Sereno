@@ -1,20 +1,48 @@
 import { useEffect, useState } from 'react'
-import type { Fund } from '../api.ts'
-import { archiveFund, createFund, createFundEntry, fetchFunds } from '../api.ts'
+import type { Fund, FundUpdate } from '../api.ts'
+import {
+  archiveFund,
+  createFund,
+  createFundEntry,
+  fetchFunds,
+  updateFund,
+} from '../api.ts'
 import GhostButton from '../components/GhostButton.tsx'
 import NewFundForm from '../components/NewFundForm.tsx'
+import { FieldLabel } from '../components/SpendingForm.tsx'
 import type { NewFund } from '../funds.ts'
-import { fundView, totalParked } from '../funds.ts'
+import { fundPlanEdit, fundView, totalParked } from '../funds.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
 
 function FundRow({
   fund,
   onArchive,
+  onSavePlan,
 }: {
   fund: Fund
   onArchive: (fundId: number) => Promise<void>
+  onSavePlan: (fundId: number, edit: FundUpdate) => Promise<void>
 }) {
   const view = fundView(fund)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [monthly, setMonthly] = useState('')
+
+  const startEditing = () => {
+    setMonthly(fund.monthly_plan === null ? '' : String(fund.monthly_plan))
+    setEditing(true)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await onSavePlan(fund.id, fundPlanEdit(monthly))
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div data-testid="fund-row">
       <div className="flex items-baseline justify-between">
@@ -26,6 +54,7 @@ function FundRow({
         </p>
         <div className="flex items-baseline gap-3">
           <p className="num text-[13.5px] font-semibold">{view.amount}</p>
+          <GhostButton label="Edit" onClick={startEditing} />
           <GhostButton
             label="Archive"
             onClick={() => void onArchive(fund.id)}
@@ -46,6 +75,29 @@ function FundRow({
       >
         {view.note}
       </p>
+      {editing && (
+        <div className="mt-2 flex items-end gap-2">
+          <label htmlFor={`fund-plan-${fund.id}`} className="block">
+            <FieldLabel text="$ / month" />
+            <input
+              id={`fund-plan-${fund.id}`}
+              className="num mt-1 w-[120px] rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+              placeholder="blank = paused"
+              value={monthly}
+              onChange={(event) => setMonthly(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void save()}
+            className="cursor-pointer rounded-[8px] bg-accent px-3 py-1 text-[11.5px] font-bold text-white disabled:opacity-60"
+          >
+            Save
+          </button>
+          <GhostButton label="Cancel" onClick={() => setEditing(false)} />
+        </div>
+      )}
     </div>
   )
 }
@@ -74,6 +126,11 @@ function Funds() {
     setFunds(await fetchFunds())
   }
 
+  const savePlan = async (fundId: number, edit: FundUpdate) => {
+    await updateFund(fundId, edit)
+    setFunds(await fetchFunds())
+  }
+
   return (
     <div data-testid="view-funds" className="max-w-[760px]">
       {funds && (
@@ -92,7 +149,12 @@ function Funds() {
           <NewFundForm onAdd={addFund} />
           <div className="mt-[18px] flex flex-col gap-5">
             {funds.map((fund) => (
-              <FundRow key={fund.id} fund={fund} onArchive={archive} />
+              <FundRow
+                key={fund.id}
+                fund={fund}
+                onArchive={archive}
+                onSavePlan={savePlan}
+              />
             ))}
           </div>
         </div>

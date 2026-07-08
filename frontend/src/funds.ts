@@ -2,7 +2,7 @@
 // the header total. Notes come verbatim from GET /api/funds — the server
 // derives them; only date display formatting happens here.
 
-import type { Fund, FundInput } from './api.ts'
+import type { Fund, FundInput, FundUpdate } from './api.ts'
 import { formatUsd, parseAmount } from './ledger.ts'
 
 export interface FundView {
@@ -105,6 +105,12 @@ export function newFund(
     },
     saved: parseAmount(rawSaved),
   }
+}
+
+// The row edit's raw "$ / month" field → what to PUT. A blank (or 0) plan
+// becomes null, pausing the fund's monthly funding without archiving it.
+export function fundPlanEdit(rawMonthly: string): FundUpdate {
+  return { monthly_plan: parseAmount(rawMonthly) || null }
 }
 
 // The curated emoji choices for the new-fund form — fund- and goal-themed,
