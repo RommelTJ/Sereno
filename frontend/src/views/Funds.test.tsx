@@ -32,7 +32,9 @@ beforeEach(() => {
 })
 
 const fillForm = async (
-  fields: Partial<Record<'Name' | 'Target $' | 'Saved $' | 'Target date' | '$ / month', string>>,
+  fields: Partial<
+    Record<'Name' | 'Emoji' | 'Target $' | 'Saved $' | 'Target date' | '$ / month', string>
+  >,
 ) => {
   const form = await screen.findByTestId('new-fund-form')
   for (const [label, value] of Object.entries(fields)) {
@@ -145,6 +147,25 @@ describe('+ New fund or goal form', () => {
       balance: 1500,
     })
     expect(within(form).getByLabelText('Name')).toHaveValue('')
+  })
+
+  it('posts the chosen emoji with the new fund', async () => {
+    const fetchMock = stubApi({
+      '/api/funds': FUNDS,
+      'POST /api/funds': { ...CREATED, kind: 'sinking', emoji: '✈️' },
+    })
+    render(<Funds />)
+    const form = await fillForm({ Name: 'Vacation', Emoji: '✈️' })
+
+    fireEvent.click(within(form).getByRole('button', { name: '+ Add' }))
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/funds')).toEqual({
+        name: 'Vacation',
+        emoji: '✈️',
+      }),
+    )
+    expect(within(form).getByLabelText('Emoji')).toHaveValue('')
   })
 
   it('omits a blank target and date so the fund is open-ended', async () => {
