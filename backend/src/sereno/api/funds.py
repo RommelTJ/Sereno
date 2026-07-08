@@ -64,11 +64,16 @@ class FundEntryCreate(BaseModel):
 
 
 class FundEntry(BaseModel):
+    """source tells entry kinds apart: 'spend' for the drawdown behind a
+    fund-funded expense, 'monthly_plan' for an automatic contribution,
+    None for a hand-entered row (the only kind this endpoint appends)."""
+
     id: int
     fund_id: int
     as_of_date: date
     balance: float
     contribution: float
+    source: str | None
 
 
 _FUND_QUERY = (
@@ -135,7 +140,8 @@ def create_fund_entry(entry: FundEntryCreate, db: Db) -> FundEntry:
     )
     db.commit()
     row = db.execute(
-        "SELECT id, fund_id, as_of_date, balance, contribution FROM fund_entry WHERE id = ?",
+        "SELECT id, fund_id, as_of_date, balance, contribution, source"
+        " FROM fund_entry WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
     return FundEntry(**dict(row))

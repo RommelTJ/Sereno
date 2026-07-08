@@ -257,11 +257,35 @@ def create_category_plan(category_id: int, plan: CategoryPlanCreate, db: Db) -> 
     return CategoryPlan(**dict(row))
 
 
+def _draw_down_fund(db: sqlite3.Connection, expense: ExpenseCreate) -> None:
+    """The other half of a fund-funded spend: append a 'spend' fund_entry so
+    the earmark releases as the expense lands — appends, never updates."""
+    balance = db.execute(
+        "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
+        "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
+        (expense.fund_id,),
+    ).fetchone()[0]
+    if expense.amount > balance:
+        raise HTTPException(status_code=422, detail="expense exceeds fund balance")
+    db.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+        " VALUES (?, ?, ?, ?, 'spend')",
+        (
+            expense.fund_id,
+            expense.txn_date.isoformat(),
+            balance - expense.amount,
+            -expense.amount,
+        ),
+    )
+
+
 @router.post("/expenses", status_code=201)
 def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
     _require(db, "category", expense.category_id, "category")
     _require(db, "fund", expense.fund_id, "fund")
     _require(db, "account", expense.account_id, "account")
+    if expense.funded_from == "fund":
+        _draw_down_fund(db, expense)
     cursor = db.execute(
         "INSERT INTO expense_line (txn_date, budget_month, category_id, amount,"
         " is_fixed, funded_from, fund_id, account_id, note)"

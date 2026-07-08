@@ -459,6 +459,7 @@ class TestPostExpenses:
 
     def test_fund_spending_records_the_fund(self, client):
         bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
         response = client.post(
             "/api/expenses",
             json={

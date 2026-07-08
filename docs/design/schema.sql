@@ -131,6 +131,9 @@ CREATE TABLE fund_entry (
     as_of_date   TEXT    NOT NULL,
     balance      NUMERIC NOT NULL,
     contribution NUMERIC NOT NULL DEFAULT 0,
+    source       TEXT,                                    -- 'spend' (fund-funded expense drawdown)
+                                                          -- | 'monthly_plan' (auto contribution)
+                                                          -- | NULL (hand-entered)
     created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX ix_fund_entry ON fund_entry(fund_id, as_of_date);
