@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.7.0**
+**v1.8.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -512,6 +512,24 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.8.0 — The forecast grows up with its owner. The simulation's start
+age is no longer a hardcoded 38: the backend derives the current age
+from a sanitized `BIRTHDATE` constant (January 1, 1988 — deliberately
+not a real birthday; the repo is public) and passes it into the
+engine, the response echoes `start_age`, and the sourcing API's
+`?age=` defaults to the same derived age — the Withdrawals screen
+drops its client-side `DEFAULT_AGE`. The horizon extends from 95 to
+100 and the verdict balance moves with it (`balance_at_90` →
+`balance_at_100` through the engine, API, and frontend), while the
+green/red verdict threshold stays at 90 — lasting into one's 90s
+still reads as success. The chart stops sampling twelve 5-year
+columns: one bar per simulated year from the current age to 100,
+axis labels thinned to every fifth age, and each bar carries a hover
+tooltip with the age, its calendar year, and the exact ETH,
+brokerage, 401(k), and Social Security dollar breakdown. The bridge
+card's "Need to cover" years are now computed as 59½ minus the start
+age instead of a literal 21.5.
 
 v1.7.0 — Fund balances finally move. Spending funded from a fund now
 draws it down: the expense appends a 'spend' `fund_entry` (balance
