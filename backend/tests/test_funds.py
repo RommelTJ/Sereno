@@ -414,6 +414,23 @@ class TestMonthlyPlanCatchUp:
             "monthly_plan",
         )
 
+    def test_a_drawdown_after_months_at_target_resumes_funding_forward(self, client):
+        # Months spent at target are forgiven, not owed: after a drawdown
+        # the plan resumes from the drawdown month forward at its normal
+        # pace. Backfilling the quiet months would date contribution rows
+        # before the spend row, where the date-ordered balance query never
+        # sees them — charged to past budget months, invisible in the fund.
+        fund_id = insert_fund("Emergency fund", target_amount=10000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(3), 10000)
+        insert_fund_entry(fund_id, first_of_month(0), 9000, contribution=-1000, source="spend")
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 9500
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(3), 10000, 0, None),
+            (first_of_month(0), 9000, -1000, "spend"),
+            (first_of_month(0), 9500, 500, "monthly_plan"),
+        ]
+
 
 class TestArchiveFund:
     def test_archives_the_fund_out_of_the_listing(self, client):
