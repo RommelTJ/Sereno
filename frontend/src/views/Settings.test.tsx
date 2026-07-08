@@ -674,12 +674,31 @@ describe('Assumptions card', () => {
     expect(within(card).getByText('$45,000 / yr')).toBeInTheDocument()
   })
 
+  it('shows the initial withdrawal rate and guardrail band', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('assumptions-card')
+    expect(within(card).getByText('Initial rate')).toBeInTheDocument()
+    expect(within(card).getByText('2.94%')).toBeInTheDocument()
+    expect(within(card).getByText('Guardrail band')).toBeInTheDocument()
+    expect(within(card).getByText('±20%')).toBeInTheDocument()
+  })
+
   it('shows placeholders when no config rows exist yet', async () => {
     stubApi({ ...routes(), '/api/assumptions': null, '/api/spend-plan': null })
     render(<Settings />)
 
     const card = await screen.findByTestId('assumptions-card')
-    expect(within(card).getAllByText('—')).toHaveLength(4)
+    expect(within(card).getAllByText('—')).toHaveLength(6)
+  })
+
+  it('prefills the rate and band fields as percentages', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    expect(within(card).getByLabelText('Initial rate %')).toHaveValue('2.94')
+    expect(within(card).getByLabelText('Guardrail band %')).toHaveValue('20')
   })
 })
 
@@ -822,6 +841,92 @@ describe('Editing appends new config rows', () => {
       guardrail_band: 0.2,
     })
     expect(postCalls(fetchMock, '/api/assumptions')).toHaveLength(0)
+  })
+
+  it('saves an edited initial rate as a fraction on a new spend-plan row', async () => {
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/spend-plan': { ...SPEND_PLAN, id: 2, initial_rate: 0.032 },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Initial rate %'), {
+      target: { value: '3.2' },
+    })
+    r['/api/spend-plan'] = { ...SPEND_PLAN, id: 2, initial_rate: 0.032 }
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('3.2%')).toBeInTheDocument()
+    const body = JSON.parse(
+      postCalls(fetchMock, '/api/spend-plan')[0][1]?.body as string,
+    )
+    expect(body).toEqual({
+      effective_date: todayIso(),
+      annual_target: 45_000,
+      initial_rate: 0.032,
+      guardrail_band: 0.2,
+    })
+    expect(postCalls(fetchMock, '/api/assumptions')).toHaveLength(0)
+  })
+
+  it('saves an edited guardrail band as a fraction on a new spend-plan row', async () => {
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/spend-plan': { ...SPEND_PLAN, id: 2, guardrail_band: 0.25 },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Guardrail band %'), {
+      target: { value: '25' },
+    })
+    r['/api/spend-plan'] = { ...SPEND_PLAN, id: 2, guardrail_band: 0.25 }
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('±25%')).toBeInTheDocument()
+    const body = JSON.parse(
+      postCalls(fetchMock, '/api/spend-plan')[0][1]?.body as string,
+    )
+    expect(body).toEqual({
+      effective_date: todayIso(),
+      annual_target: 45_000,
+      initial_rate: 0.0294,
+      guardrail_band: 0.25,
+    })
+  })
+
+  it('clears the anchor when the rate is blanked', async () => {
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/spend-plan': { ...SPEND_PLAN, id: 2, initial_rate: null },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Initial rate %'), {
+      target: { value: '' },
+    })
+    r['/api/spend-plan'] = { ...SPEND_PLAN, id: 2, initial_rate: null }
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(postCalls(fetchMock, '/api/spend-plan')).toHaveLength(1),
+    )
+    const body = JSON.parse(
+      postCalls(fetchMock, '/api/spend-plan')[0][1]?.body as string,
+    )
+    expect(body).toEqual({
+      effective_date: todayIso(),
+      annual_target: 45_000,
+      guardrail_band: 0.2,
+    })
   })
 
   it('saves an edited Social Security amount for that person only', async () => {
