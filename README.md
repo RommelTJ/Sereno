@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.9.0**
+**v1.10.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -550,6 +550,21 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.10.0 — One-time fund top-ups and releases. Funds gain the one-off
+sibling of the automatic monthly contribution:
+`POST /api/funds/{id}/top-up` appends a `fund_entry` with the delta as
+its contribution and `source = 'top_up'` — the new balance is computed
+server-side from the latest entry, so nobody types an absolute figure —
+and the budget month counts top-ups in `fund_contributions` alongside
+the monthly plans, so parking money trims safe-to-spend the moment it
+lands. A negative amount is a partial release, raising the headline
+back: releasing more than the fund holds is a 422, the mirror of the
+overdraw guard on fund-funded expenses, while topping up past the
+month's remaining headline stays allowed, like overspending everywhere
+else. Each Funds & goals row gains a Top up button with an inline
+$ amount input beside Edit and Archive — a negative amount releases
+back to spendable.
 
 v1.9.0 — Monthly funding learns to stop. The lazy catch-up no longer
 funds past 100%: each due month contributes from the fund's balance
