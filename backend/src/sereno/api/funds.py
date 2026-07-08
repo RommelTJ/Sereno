@@ -22,6 +22,7 @@ Db = Annotated[sqlite3.Connection, Depends(get_db)]
 class Fund(BaseModel):
     id: int
     name: str
+    emoji: str | None
     kind: str
     target_amount: float | None
     target_date: str | None
@@ -49,6 +50,7 @@ class FundCreate(BaseModel):
     a set date means a goal. A blank target_amount is an open-ended fund."""
 
     name: str = Field(min_length=1)
+    emoji: str | None = None
     target_amount: PositiveFloat | None = None
     target_date: date | None = None
     monthly_plan: NonNegativeFloat | None = None
@@ -70,7 +72,7 @@ class FundEntry(BaseModel):
 
 
 _FUND_QUERY = (
-    "SELECT id, name, kind, target_amount, target_date, monthly_plan,"
+    "SELECT id, name, emoji, kind, target_amount, target_date, monthly_plan,"
     " COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = fund.id"
     "           ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0) AS balance"
     " FROM fund"
@@ -86,10 +88,11 @@ def list_funds(db: Db) -> list[Fund]:
 @router.post("/funds", status_code=201)
 def create_fund(fund: FundCreate, db: Db) -> Fund:
     cursor = db.execute(
-        "INSERT INTO fund (name, kind, target_amount, target_date, monthly_plan)"
-        " VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO fund (name, emoji, kind, target_amount, target_date, monthly_plan)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
         (
             fund.name,
+            fund.emoji,
             "goal" if fund.target_date else "sinking",
             fund.target_amount,
             fund.target_date.isoformat() if fund.target_date else None,
