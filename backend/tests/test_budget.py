@@ -43,8 +43,18 @@ def insert_plan(category_id, effective_month, planned):
     )
 
 
-def insert_fund(name, kind="sinking"):
-    return execute("INSERT INTO fund (name, kind) VALUES (?, ?)", name, kind)
+def insert_fund(name, kind="sinking", monthly_plan=None):
+    return execute(
+        "INSERT INTO fund (name, kind, monthly_plan) VALUES (?, ?, ?)", name, kind, monthly_plan
+    )
+
+
+def first_of_month(months_back=0):
+    today = date.today()
+    year, month = today.year, today.month - months_back
+    while month < 1:
+        year, month = year - 1, month + 12
+    return date(year, month, 1).isoformat()
 
 
 def insert_fund_entry(fund_id, as_of_date, balance, contribution=0):
@@ -786,6 +796,46 @@ class TestGetBudgetMonth:
         assert body["total_spent"] == 0
         assert body["safe_to_spend"] == 2400
         assert [item["type"] for item in body["activity"]] == ["income"]
+
+    def test_due_contributions_count_against_the_headline(self, client):
+        # Money moved into a fund on the 1st is parked, not spendable: the
+        # budget month applies the catch-up itself and subtracts the month's
+        # automatic contributions from safe-to-spend.
+        fund_id = insert_fund("Emergency fund", monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 10000)
+        payload = {"txn_date": date.today().isoformat(), "source": "paycheck", "amount": 5000}
+        assert client.post("/api/income", json=payload).status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["fund_contributions"] == 500
+        assert body["safe_to_spend"] == 4500
+        assert len(fetch_fund_entries(fund_id)) == 2
+
+    def test_a_month_with_nothing_due_reports_zero_contributions(self, client):
+        self.fund_month(client, 5200)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["fund_contributions"] == 0
+        assert body["safe_to_spend"] == 5200
+
+    def test_manual_contributions_do_not_count(self, client):
+        # Hand-entered fund entries never touched the budget math before
+        # and still don't — only the automatic monthly plan is subtracted.
+        fund_id = insert_fund("Pool fund")
+        insert_fund_entry(fund_id, first_of_month(), 5000, contribution=1000)
+        payload = {"txn_date": date.today().isoformat(), "source": "paycheck", "amount": 5000}
+        assert client.post("/api/income", json=payload).status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["fund_contributions"] == 0
+        assert body["safe_to_spend"] == 5000
+
+    def test_contributions_count_in_their_own_month(self, client):
+        # Two months of catch-up land one contribution per month: last
+        # month's 1st funds last month, not the month being read.
+        fund_id = insert_fund("Emergency fund", monthly_plan=100)
+        insert_fund_entry(fund_id, first_of_month(2), 1000)
+        client.get("/api/budget-month")
+        last_month = first_of_month(1)[:7]
+        body = client.get("/api/budget-month", params={"month": last_month}).json()
+        assert body["fund_contributions"] == 100
 
     def test_month_defaults_to_the_current_month(self, client):
         today = date.today()
