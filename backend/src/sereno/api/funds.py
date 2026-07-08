@@ -9,7 +9,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, NonNegativeFloat, PositiveFloat
+from pydantic import BaseModel, Field, NonNegativeFloat, PositiveFloat, field_validator
 
 from sereno.db.connection import get_db
 from sereno.engine.funds import derive_note, due_contribution_months
@@ -61,6 +61,23 @@ class FundUpdate(BaseModel):
     same state, and "$0 / mo" never renders anywhere."""
 
     monthly_plan: NonNegativeFloat | None = None
+
+
+class FundTopUp(BaseModel):
+    """A one-time move between the month's safe-to-spend and the fund — the
+    one-off sibling of the automatic monthly contribution. A positive amount
+    parks money; a negative amount is a partial release. The server computes
+    the new balance from the latest entry, so nobody types an absolute
+    figure, and a zero amount moves nothing and is rejected."""
+
+    amount: float
+
+    @field_validator("amount")
+    @classmethod
+    def nonzero(cls, amount: float) -> float:
+        if amount == 0:
+            raise ValueError("amount must be nonzero")
+        return amount
 
 
 class FundEntryCreate(BaseModel):
@@ -183,6 +200,38 @@ def update_fund(fund_id: int, update: FundUpdate, db: Db) -> Fund:
     db.execute(
         "UPDATE fund SET monthly_plan = ? WHERE id = ?",
         (update.monthly_plan or None, fund_id),
+    )
+    db.commit()
+    row = db.execute(_FUND_QUERY + " WHERE id = ?", (fund_id,)).fetchone()
+    return _fund(row)
+
+
+@router.post("/funds/{fund_id}/top-up", status_code=201)
+def top_up_fund(fund_id: int, top_up: FundTopUp, db: Db) -> Fund:
+    """Appends a 'top_up' entry with the delta as its contribution, dated
+    today. The budget month counts these alongside the monthly-plan rows,
+    so a top-up trims safe-to-spend the moment it lands and a release
+    raises it back. A release may not exceed the balance (the mirror of
+    the overdraw guard on fund-funded expenses), and an archived fund
+    takes no top-ups — it is invisible everywhere money is displayed, so
+    parking money in one would trim the headline with no surface showing
+    where it went."""
+    fund = db.execute("SELECT active FROM fund WHERE id = ?", (fund_id,)).fetchone()
+    if fund is None:
+        raise HTTPException(status_code=404, detail="fund not found")
+    if not fund["active"]:
+        raise HTTPException(status_code=422, detail="fund is archived")
+    (balance,) = db.execute(
+        "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
+        "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
+        (fund_id,),
+    ).fetchone()
+    if top_up.amount < 0 and -top_up.amount > balance:
+        raise HTTPException(status_code=422, detail="release exceeds fund balance")
+    db.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+        " VALUES (?, ?, ?, ?, 'top_up')",
+        (fund_id, date.today().isoformat(), balance + top_up.amount, top_up.amount),
     )
     db.commit()
     row = db.execute(_FUND_QUERY + " WHERE id = ?", (fund_id,)).fetchone()
