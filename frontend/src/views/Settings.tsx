@@ -36,6 +36,7 @@ import {
   updateTaxParam,
 } from '../api.ts'
 import EmojiSelect from '../components/EmojiSelect.tsx'
+import GhostButton from '../components/GhostButton.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
 import { formatUsd, todayIso } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
@@ -110,24 +111,6 @@ function Card({
       </div>
       {children}
     </div>
-  )
-}
-
-function GhostButton({
-  label,
-  onClick,
-}: {
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="cursor-pointer rounded-[8px] border border-input-border bg-card px-3 py-1 text-[11.5px] font-semibold text-muted"
-    >
-      {label}
-    </button>
   )
 }
 
