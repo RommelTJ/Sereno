@@ -90,14 +90,16 @@ def apply_monthly_plans(db: sqlite3.Connection, today: date) -> None:
     entries dated the 1st of each month, appended whenever funds are read.
     The schedule anchors on the fund's latest planned or hand-entered row
     ('spend' drawdowns are not contributions), so a re-read appends nothing
-    and a fund with no entries at all has no schedule to catch up. The plan
-    suspends at the target: the crossing month's contribution is capped at
-    the remaining amount so the fund lands exactly on target, and a fund at
-    or past it receives nothing (an open-ended fund has no finish line)."""
+    and a fund with no entries at all has no schedule to catch up. Each due
+    month funds from the fund's balance as of that 1st, so the plan
+    suspends at the target — the crossing month's contribution is capped at
+    the remaining amount, a fund at or past it receives nothing, and an
+    open-ended fund has no finish line — and months spent at target are
+    forgiven rather than owed: a drawdown resumes funding from its own
+    month forward instead of backfilling rows the date-ordered balance
+    query would never see."""
     funds = db.execute(
         "SELECT f.id, f.monthly_plan, f.target_amount,"
-        " (SELECT e.balance FROM fund_entry e WHERE e.fund_id = f.id"
-        "  ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1) AS balance,"
         " (SELECT e.as_of_date FROM fund_entry e WHERE e.fund_id = f.id"
         "  AND COALESCE(e.source, '') != 'spend'"
         "  ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1) AS anchor"
@@ -107,19 +109,23 @@ def apply_monthly_plans(db: sqlite3.Connection, today: date) -> None:
     for fund in funds:
         if fund["anchor"] is None:
             continue
-        balance = fund["balance"]
         anchor = date.fromisoformat(fund["anchor"])
         for first in due_contribution_months(anchor=anchor, today=today):
+            (balance,) = db.execute(
+                "SELECT COALESCE((SELECT e.balance FROM fund_entry e"
+                "                 WHERE e.fund_id = ? AND e.as_of_date <= ?"
+                "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
+                (fund["id"], first.isoformat()),
+            ).fetchone()
             contribution = fund["monthly_plan"]
             if fund["target_amount"] is not None:
                 contribution = min(contribution, fund["target_amount"] - balance)
             if contribution <= 0:
                 continue
-            balance += contribution
             db.execute(
                 "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
                 " VALUES (?, ?, ?, ?, 'monthly_plan')",
-                (fund["id"], first.isoformat(), balance, contribution),
+                (fund["id"], first.isoformat(), balance + contribution, contribution),
             )
             appended = True
     if appended:
