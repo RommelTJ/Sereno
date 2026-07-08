@@ -99,8 +99,10 @@ class TestGetFunds:
         pool_id = insert_fund(
             "Pool fund", kind="goal", target_amount=14000, target_date="2027-08-01"
         )
-        insert_fund_entry(emergency_id, "2026-06-01", 10000)
-        insert_fund_entry(pool_id, "2026-06-01", 14000)
+        # Entries dated this month's 1st: the monthly-plan catch-up has
+        # nothing further due, so the listed balances stay put.
+        insert_fund_entry(emergency_id, first_of_month(), 10000)
+        insert_fund_entry(pool_id, first_of_month(), 14000)
         response = client.get("/api/funds")
         assert response.status_code == 200
         assert response.json() == [
@@ -141,7 +143,7 @@ class TestGetFunds:
         assert fund["note"] == "$30,000 to target · add a monthly plan"
 
     def test_the_latest_entry_wins(self, client):
-        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
         insert_fund_entry(fund_id, "2026-06-01", 10000)
         insert_fund_entry(fund_id, "2026-04-01", 8000)
         insert_fund_entry(fund_id, "2026-05-01", 9000)
@@ -157,7 +159,7 @@ class TestGetFunds:
 
     def test_an_open_ended_fund_notes_its_monthly_plan(self, client):
         fund_id = insert_fund("Travel fund", monthly_plan=300)
-        insert_fund_entry(fund_id, "2026-06-01", 4200)
+        insert_fund_entry(fund_id, first_of_month(), 4200)
         (fund,) = client.get("/api/funds").json()
         assert fund["note"] == "$300 / mo · open-ended"
 
