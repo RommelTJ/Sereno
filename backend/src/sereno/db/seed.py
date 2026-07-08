@@ -73,13 +73,13 @@ CATEGORIES = [
 ]
 PLAN_EFFECTIVE_MONTH = "2026-01"
 
-# (name, kind, target_amount, target_date, monthly_plan, balance)
+# (name, emoji, kind, target_amount, target_date, monthly_plan, balance)
 FUNDS = [
-    ("Emergency fund", "sinking", 30000, None, 500, 10000),
-    ("House maintenance", "sinking", 30000, None, 180, 15000),
-    ("1st-year fund", "sinking", 26000, None, 2166, 26000),
-    ("Pool fund", "goal", 14000, "2027-08-01", 0, 5000),
-    ("Bike fund", "goal", 10000, "2026-07-01", 0, 10000),
+    ("Emergency fund", "🚨", "sinking", 30000, None, 500, 10000),
+    ("House maintenance", "🛠️", "sinking", 30000, None, 180, 15000),
+    ("1st-year fund", "🛟", "sinking", 26000, None, 2166, 26000),
+    ("Pool fund", "🏊", "goal", 14000, "2027-08-01", 0, 5000),
+    ("Bike fund", "🚲", "goal", 10000, "2026-07-01", 0, 10000),
 ]
 FUND_ENTRY_DATE = "2026-06-01"
 
@@ -177,16 +177,19 @@ def seed(conn: sqlite3.Connection) -> bool:
     )
 
     conn.executemany(
-        "INSERT INTO fund (name, kind, target_amount, target_date, monthly_plan)"
-        " VALUES (?, ?, ?, ?, ?)",
-        [(name, kind, target, date, monthly) for name, kind, target, date, monthly, _ in FUNDS],
+        "INSERT INTO fund (name, emoji, kind, target_amount, target_date, monthly_plan)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            (name, emoji, kind, target, date, monthly)
+            for name, emoji, kind, target, date, monthly, _ in FUNDS
+        ],
     )
     funds = _ids_by_name(conn, "fund")
     conn.executemany(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution) VALUES (?, ?, ?, ?)",
         [
             (funds[name], FUND_ENTRY_DATE, balance, monthly)
-            for name, _, _, _, monthly, balance in FUNDS
+            for name, _, _, _, _, monthly, balance in FUNDS
         ],
     )
 
