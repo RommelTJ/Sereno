@@ -13,7 +13,7 @@ const FORECAST_RUNS_OUT = {
   ...FORECAST,
   spend: 200_000,
   run_out_age: 72,
-  balance_at_90: 0,
+  balance_at_100: 0,
 }
 
 // Taxable buckets emptied at 52 — six years short of the 59½ bridge.

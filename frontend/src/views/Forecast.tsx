@@ -213,7 +213,7 @@ function Forecast() {
             {outcome.headline}
           </p>
           <p className="num mt-2 text-[13.5px] text-[#3a473f]">
-            Projected <b>{formatMillions(forecast.balance_at_90)}</b> at age 90{' '}
+            Projected <b>{formatMillions(forecast.balance_at_100)}</b> at age 100{' '}
             <span className="text-muted-2">(today's dollars)</span>
           </p>
         </div>

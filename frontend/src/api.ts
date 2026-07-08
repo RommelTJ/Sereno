@@ -230,7 +230,7 @@ export interface ForecastPoint {
 export interface SensitivityRow {
   spend: number
   run_out_age: number | null
-  balance_at_90: number
+  balance_at_100: number
 }
 
 export interface Forecast {
@@ -244,7 +244,7 @@ export interface Forecast {
   tax_year: number
   series: ForecastPoint[]
   run_out_age: number | null
-  balance_at_90: number
+  balance_at_100: number
   sensitivity: SensitivityRow[]
 }
 

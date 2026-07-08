@@ -120,7 +120,7 @@ function outcomeCopy(row: SensitivityRow): Pick<SensitivityRowCopy, 'lasts' | 'o
   if (row.run_out_age == null) {
     return {
       lasts: 'never runs out',
-      outcome: `✓ ${formatMillions(row.balance_at_90)} @ 90`,
+      outcome: `✓ ${formatMillions(row.balance_at_100)} @ 100`,
       tone: 'ok',
     }
   }

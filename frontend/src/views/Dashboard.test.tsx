@@ -156,7 +156,7 @@ describe('Longevity card', () => {
 
   it('turns red when the money runs out early', async () => {
     stubDashboard({
-      '/api/forecast': { ...FORECAST, spend: 90_000, run_out_age: 72, balance_at_90: 0 },
+      '/api/forecast': { ...FORECAST, spend: 90_000, run_out_age: 72, balance_at_100: 0 },
     })
     renderDashboard()
 

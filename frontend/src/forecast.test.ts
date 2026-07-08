@@ -153,9 +153,9 @@ describe('bridgeCopy', () => {
 
 describe('sensitivityRows', () => {
   const rows = [
-    { spend: 30_000, run_out_age: null, balance_at_90: 5_512_345 },
-    { spend: 45_000, run_out_age: 92, balance_at_90: 400_000 },
-    { spend: 60_000, run_out_age: 72, balance_at_90: 0 },
+    { spend: 30_000, run_out_age: null, balance_at_100: 5_512_345 },
+    { spend: 45_000, run_out_age: 92, balance_at_100: 400_000 },
+    { spend: 60_000, run_out_age: 72, balance_at_100: 0 },
   ]
 
   it('celebrates a level that never runs out with its age-100 balance', () => {

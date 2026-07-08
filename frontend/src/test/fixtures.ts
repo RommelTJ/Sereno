@@ -335,13 +335,13 @@ export const FORECAST: Forecast = {
     ss_income: 38 + i >= 67 ? 34_800 : 0,
   })),
   run_out_age: null,
-  balance_at_90: 5_512_345,
+  balance_at_100: 5_512_345,
   sensitivity: [
-    { spend: 30_000, run_out_age: null, balance_at_90: 7_200_000 },
-    { spend: 45_000, run_out_age: null, balance_at_90: 5_512_345 },
-    { spend: 60_000, run_out_age: null, balance_at_90: 3_100_000 },
-    { spend: 75_000, run_out_age: 92, balance_at_90: 350_000 },
-    { spend: 90_000, run_out_age: 71, balance_at_90: 0 },
+    { spend: 30_000, run_out_age: null, balance_at_100: 7_200_000 },
+    { spend: 45_000, run_out_age: null, balance_at_100: 5_512_345 },
+    { spend: 60_000, run_out_age: null, balance_at_100: 3_100_000 },
+    { spend: 75_000, run_out_age: 92, balance_at_100: 350_000 },
+    { spend: 90_000, run_out_age: 71, balance_at_100: 0 },
   ],
 }
 
