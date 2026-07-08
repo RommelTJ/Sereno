@@ -667,6 +667,20 @@ class TestGetBudgetMonth:
         assert body["total_spent"] == 118.21
         assert body["safe_to_spend"] == 5200 - 118.21
 
+    def test_fund_funded_spending_stays_out_of_the_envelopes(self, client):
+        # Same reasoning as the headline: parked money never drew on the
+        # month's envelope, so the category bar must not move either.
+        travel_id = insert_category("Travel", emoji="✈️")
+        insert_plan(travel_id, "2026-01", 500)
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        self.fund_month(client, 5200)
+        self.spend(client, 100, category_id=travel_id)
+        self.spend(client, 1200, category_id=travel_id, funded_from="fund", fund_id=bike_id)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["categories"][0]["spent"] == 100
+        assert body["categories"][0]["remaining"] == 400
+
     def test_fund_funded_spending_leaves_the_headline_alone(self, client):
         # Paid from parked money, not the month's income: the expense is
         # recorded, but safe-to-spend must not drop a second time.
