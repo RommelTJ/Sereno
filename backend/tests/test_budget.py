@@ -665,6 +665,7 @@ class TestGetBudgetMonth:
         assert response.json() == {
             "month": "2026-06",
             "baseline": 0,
+            "fund_contributions": 0,
             "total_spent": 0,
             "safe_to_spend": 0,
             "categories": [],

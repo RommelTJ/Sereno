@@ -236,17 +236,26 @@ class TestBudgetMonth:
 
     def test_safe_to_spend_example_query(self, db):
         # The example query from docs/design/schema.sql.
+        bike = add_fund(db)
         db.execute(
             "INSERT INTO income_event (txn_date, budget_month, source, amount)"
             " VALUES ('2026-06-30', '2026-07', 'paycheck', 6000)"
         )
         self.add_expense(db, "2026-07", 2000, is_fixed=1)
         self.add_expense(db, "2026-07", 450)
+        db.execute(
+            "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+            " VALUES (?, '2026-07-01', 500, 500, 'monthly_plan')",
+            (bike,),
+        )
         row = db.execute(
-            "SELECT funded_in - total_spent AS safe_to_spend"
+            "SELECT funded_in - total_spent"
+            "     - (SELECT COALESCE(SUM(contribution),0) FROM fund_entry"
+            "        WHERE source = 'monthly_plan' AND substr(as_of_date,1,7) = '2026-07')"
+            "   AS safe_to_spend"
             " FROM v_budget_month WHERE month = '2026-07'"
         ).fetchone()
-        assert row["safe_to_spend"] == 3550
+        assert row["safe_to_spend"] == 3050
 
 
 class TestCategoryPlan:

@@ -260,6 +260,10 @@ GROUP BY budget_month;
 --          / investable AS withdrawal_rate
 --   FROM v_net_worth ORDER BY month;
 --
--- This month's safe-to-spend:
---   SELECT funded_in - total_spent AS safe_to_spend
+-- This month's safe-to-spend (automatic fund contributions are parked money,
+-- not spendable; fund-funded expenses are already out of total_spent):
+--   SELECT funded_in - total_spent
+--        - (SELECT COALESCE(SUM(contribution),0) FROM fund_entry
+--           WHERE source = 'monthly_plan' AND substr(as_of_date,1,7) = '2026-07')
+--     AS safe_to_spend
 --   FROM v_budget_month WHERE month = '2026-07';
