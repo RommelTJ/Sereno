@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -44,6 +46,19 @@ def insert_fund_entry(fund_id, as_of_date, balance, contribution=0):
         )
         conn.commit()
         return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def fetch_fund_entries(fund_id):
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT as_of_date, balance, contribution FROM fund_entry"
+            " WHERE fund_id = ? ORDER BY id",
+            (fund_id,),
+        ).fetchall()
+        return [tuple(row) for row in rows]
     finally:
         conn.close()
 
@@ -241,3 +256,51 @@ class TestCreateFundEntry:
             json={"fund_id": fund_id, "as_of_date": "2026-06-01", "balance": -1},
         )
         assert response.status_code == 422
+
+
+class TestArchiveFund:
+    def test_archives_the_fund_out_of_the_listing(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, "2026-06-01", 10000)
+        response = client.post(f"/api/funds/{fund_id}/archive")
+        assert response.status_code == 200
+        assert client.get("/api/funds").json() == []
+
+    def test_returns_the_archived_fund_with_a_zero_balance(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, "2026-06-01", 10000)
+        response = client.post(f"/api/funds/{fund_id}/archive")
+        assert response.status_code == 200
+        fund = response.json()
+        assert fund["id"] == fund_id
+        assert fund["balance"] == 0
+
+    def test_appends_a_zeroing_entry_at_archive_time(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, "2026-06-01", 10000)
+        client.post(f"/api/funds/{fund_id}/archive")
+        assert fetch_fund_entries(fund_id) == [
+            ("2026-06-01", 10000, 0),
+            (date.today().isoformat(), 0, 0),
+        ]
+
+    def test_a_zero_balance_fund_gets_no_zeroing_entry(self, client):
+        fund_id = insert_fund("Travel fund")
+        response = client.post(f"/api/funds/{fund_id}/archive")
+        assert response.status_code == 200
+        assert fetch_fund_entries(fund_id) == []
+
+    def test_archiving_twice_is_idempotent(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, "2026-06-01", 10000)
+        client.post(f"/api/funds/{fund_id}/archive")
+        response = client.post(f"/api/funds/{fund_id}/archive")
+        assert response.status_code == 200
+        assert fetch_fund_entries(fund_id) == [
+            ("2026-06-01", 10000, 0),
+            (date.today().isoformat(), 0, 0),
+        ]
+
+    def test_an_unknown_fund_is_a_404(self, client):
+        response = client.post("/api/funds/999/archive")
+        assert response.status_code == 404
