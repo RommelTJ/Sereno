@@ -36,13 +36,13 @@ def insert_fund(
         conn.close()
 
 
-def insert_fund_entry(fund_id, as_of_date, balance, contribution=0):
+def insert_fund_entry(fund_id, as_of_date, balance, contribution=0, source=None):
     conn = connect()
     try:
         cursor = conn.execute(
-            "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution)"
-            " VALUES (?, ?, ?, ?)",
-            (fund_id, as_of_date, balance, contribution),
+            "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (fund_id, as_of_date, balance, contribution, source),
         )
         conn.commit()
         return cursor.lastrowid
@@ -50,11 +50,34 @@ def insert_fund_entry(fund_id, as_of_date, balance, contribution=0):
         conn.close()
 
 
+def first_of_month(months_back=0):
+    """The 1st of the month months_back before today, ISO — catch-up tests
+    date entries relative to the wall clock so they can't drift stale."""
+    today = date.today()
+    year, month = today.year, today.month - months_back
+    while month < 1:
+        year, month = year - 1, month + 12
+    return date(year, month, 1).isoformat()
+
+
 def fetch_fund_entries(fund_id):
     conn = connect()
     try:
         rows = conn.execute(
             "SELECT as_of_date, balance, contribution FROM fund_entry"
+            " WHERE fund_id = ? ORDER BY id",
+            (fund_id,),
+        ).fetchall()
+        return [tuple(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def fetch_fund_entries_with_source(fund_id):
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT as_of_date, balance, contribution, source FROM fund_entry"
             " WHERE fund_id = ? ORDER BY id",
             (fund_id,),
         ).fetchall()
@@ -263,6 +286,76 @@ class TestCreateFundEntry:
             json={"fund_id": fund_id, "as_of_date": "2026-06-01", "balance": -1},
         )
         assert response.status_code == 422
+
+
+class TestMonthlyPlanCatchUp:
+    def test_a_read_applies_the_missed_contribution(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 10000)
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 10500
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(1), 10000, 0, None),
+            (first_of_month(0), 10500, 500, "monthly_plan"),
+        ]
+
+    def test_a_second_read_appends_nothing(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 10000)
+        client.get("/api/funds")
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 10500
+        assert len(fetch_fund_entries_with_source(fund_id)) == 2
+
+    def test_every_missed_month_catches_up(self, client):
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=100)
+        insert_fund_entry(fund_id, first_of_month(3), 1000)
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 1300
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(3), 1000, 0, None),
+            (first_of_month(2), 1100, 100, "monthly_plan"),
+            (first_of_month(1), 1200, 100, "monthly_plan"),
+            (first_of_month(0), 1300, 100, "monthly_plan"),
+        ]
+
+    def test_a_fund_without_a_plan_is_untouched(self, client):
+        fund_id = insert_fund("Pool fund", target_amount=14000)
+        insert_fund_entry(fund_id, first_of_month(1), 5000)
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 5000
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
+
+    def test_an_archived_fund_is_untouched(self, client):
+        fund_id = insert_fund("Old fund", monthly_plan=500, active=0)
+        insert_fund_entry(fund_id, first_of_month(1), 1000)
+        assert client.get("/api/funds").json() == []
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
+
+    def test_a_drawdown_on_the_first_does_not_hide_the_due_contribution(self, client):
+        # The spend entry is not a contribution: the schedule anchors on the
+        # latest planned or hand-entered row, while the appended balance
+        # still builds on the drawdown the spend left behind.
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 1000)
+        insert_fund_entry(fund_id, first_of_month(0), 800, contribution=-200, source="spend")
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 1300
+        assert fetch_fund_entries_with_source(fund_id)[-1] == (
+            first_of_month(0),
+            1300,
+            500,
+            "monthly_plan",
+        )
+
+    def test_a_fund_with_no_entries_is_skipped(self, client):
+        # Direct SQL can create an entry-less fund; with no anchor there is
+        # no schedule to catch up. Funds created through the API always
+        # carry their creation anchor entry.
+        insert_fund("Bare fund", monthly_plan=500)
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 0
+        assert fetch_fund_entries_with_source(fund["id"]) == []
 
 
 class TestArchiveFund:
