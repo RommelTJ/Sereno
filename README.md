@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.3.0**
+**v1.4.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -193,17 +193,18 @@ The budget slice:
   first).
 The funds slice:
 
-- `GET /api/funds` — the active funds (sinking funds and goals: name, kind,
-  target amount, target date, monthly plan), each with its latest balance
-  from `fund_entry` and an auto-derived note ("needs $X / mo to finish by
-  2027-08", "$X / mo · ~Y yrs to target", "✓ fully funded — ready to
-  spend", …). Notes are computed server-side from the fund's own numbers,
+- `GET /api/funds` — the active funds (sinking funds and goals: name, emoji,
+  kind, target amount, target date, monthly plan), each with its latest
+  balance from `fund_entry` and an auto-derived note ("needs $X / mo to
+  finish by 2027-08", "$X / mo · ~Y yrs to target", "✓ fully funded — ready
+  to spend", …). Notes are computed server-side from the fund's own numbers,
   never hand-typed, so they can't go stale; dates in notes stay ISO —
   display formatting is the frontend's job.
 - `POST /api/funds` — creates a fund. `kind` is derived, never sent: a
   blank `target_date` means a sinking fund, a set date means a goal; a
   blank `target_amount` is an open-ended fund (no finish line, so no
-  progress percent — just a parked balance and a monthly plan).
+  progress percent — just a parked balance and a monthly plan). An
+  optional `emoji` labels the fund like accounts and categories have.
 - `POST /api/fund-entries` — appends a dated balance row for a fund
   (append-only, like `balance_entry`); the latest entry is the fund's
   balance and earlier rows are kept as history.
@@ -328,7 +329,8 @@ The forecast slice (the third Plan engine):
   budget, "$X over" in red once over — overspending is allowed and simply
   trims the headline. Beside them, "Add a spending item" (amount, category,
   and funded-from: the month's discretionary budget or any active fund via
-  `GET /api/funds`; choosing a fund reveals the matching
+  `GET /api/funds` — funds labeled `emoji + name` like the categories;
+  choosing a fund reveals the matching
   Cash-Plus-withdrawal reminder) posts to `POST /api/expenses`, and "Add a
   funding item" (amount, funds month — the current or next two, so a
   paycheck can prepay next month — and source) posts to `POST /api/income`.
@@ -337,10 +339,10 @@ The forecast slice (the third Plan engine):
 - **Funds & goals** (<http://localhost:5173/funds>) — sinking funds and
   dated goals as one concept, in a single card: a header with the total
   parked and the "notes auto-calculate" hint, the dashed **+ New fund or
-  goal** form (name, target, saved, target date — blank = sinking fund —
-  and $/month), then each fund with its meta line, `saved / target` amount,
-  progress bar, and the server-derived note from `GET /api/funds`, rendered
-  verbatim. Completed funds turn accent green; open-ended funds (no target)
+  goal** form (name, a curated emoji select, target, saved, target date —
+  blank = sinking fund — and $/month), then each fund with its emoji-led
+  name, meta line, `saved / target` amount, progress bar, and the
+  server-derived note from `GET /api/funds`, rendered verbatim. Completed funds turn accent green; open-ended funds (no target)
   show just their balance, with no bar. Submitting the form posts the
   dimension row to `POST /api/funds`, appends any initial saved amount via
   `POST /api/fund-entries`, and refetches the list.
@@ -455,6 +457,16 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.4.0 — Fund emojis. Funds & goals join accounts and categories in
+carrying a user-chosen emoji: migration 0005 adds a nullable `emoji`
+column to `fund` (backfilling the seed funds by name), `GET` and
+`POST /api/funds` expose and accept it, and the new-fund form gains
+a curated fund-themed emoji select. Fund cards on Funds & goals and
+the safe-to-spend "Funded from" options now render `emoji + name`
+like the Category picker already did; a fund without an emoji keeps
+its plain name. Existing funds stay emoji-less for now — there is no
+fund edit endpoint yet (#53 tracks the fund lifecycle).
 
 v1.3.0 — Account classification. Accounts created through the UI can
 finally participate in the planner: `PUT /api/accounts/{id}` sets

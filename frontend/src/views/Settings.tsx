@@ -35,6 +35,7 @@ import {
   updateCategoryPlan,
   updateTaxParam,
 } from '../api.ts'
+import EmojiSelect from '../components/EmojiSelect.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
 import { formatUsd, todayIso } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
@@ -202,36 +203,6 @@ function SelectField({
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}
-
-// The curated envelope emoji select, shared by the add form and row edit.
-function EmojiSelect({
-  id,
-  value,
-  onChange,
-}: {
-  id: string
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <label htmlFor={id} className="block">
-      <FieldLabel text="Emoji" />
-      <select
-        id={id}
-        className="mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2 text-sm"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">—</option>
-        {EMOJI_OPTIONS.map((option) => (
-          <option key={option.label} value={option.emoji}>
-            {option.emoji} {option.label}
           </option>
         ))}
       </select>
@@ -528,6 +499,7 @@ function EnvelopeRow({
           <EmojiSelect
             id={`envelope-emoji-${category.id}`}
             value={values.emoji}
+            options={EMOJI_OPTIONS}
             onChange={set('emoji')}
           />
           <EditField
@@ -620,6 +592,7 @@ function EnvelopesCard({
         <EmojiSelect
           id="envelope-emoji"
           value={values.emoji}
+          options={EMOJI_OPTIONS}
           onChange={set('emoji')}
         />
         <EditField

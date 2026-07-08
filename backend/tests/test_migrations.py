@@ -66,3 +66,23 @@ def test_account_emoji_backfills_existing_seed_accounts(conn, tmp_path):
     assert migrate(conn, tmp_path) == [emoji_migration]
     emojis = dict(conn.execute("SELECT name, emoji FROM account"))
     assert emojis == {"Ethereum": "⚡", "Mortgage": "🏡"}
+
+
+def test_fund_emoji_backfills_existing_seed_funds(conn, tmp_path):
+    # A database migrated before 0005 existed, already holding the
+    # seed-named funds, gets its emojis backfilled by name.
+    for name in (
+        "0001_initial_schema.sql",
+        "0002_category_plan.sql",
+        "0003_account_emoji.sql",
+        "0004_carry_forward_views.sql",
+    ):
+        (tmp_path / name).write_text((MIGRATIONS_DIR / name).read_text())
+    migrate(conn, tmp_path)
+    conn.execute("INSERT INTO fund (name, kind) VALUES ('Emergency fund', 'sinking')")
+    conn.execute("INSERT INTO fund (name, kind) VALUES ('Bike fund', 'goal')")
+    emoji_migration = "0005_fund_emoji.sql"
+    (tmp_path / emoji_migration).write_text((MIGRATIONS_DIR / emoji_migration).read_text())
+    assert migrate(conn, tmp_path) == [emoji_migration]
+    emojis = dict(conn.execute("SELECT name, emoji FROM fund"))
+    assert emojis == {"Emergency fund": "🚨", "Bike fund": "🚲"}

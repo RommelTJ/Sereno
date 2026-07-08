@@ -114,6 +114,7 @@ export interface BudgetMonth {
 export interface Fund {
   id: number
   name: string
+  emoji: string | null
   kind: string
   target_amount: number | null
   target_date: string | null
@@ -314,6 +315,7 @@ export interface CategoryUpdate {
 // set date means a goal; a blank target_amount is an open-ended fund.
 export interface FundInput {
   name: string
+  emoji?: string
   target_amount?: number
   target_date?: string
   monthly_plan?: number

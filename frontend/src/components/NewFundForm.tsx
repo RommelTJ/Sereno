@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { NewFund } from '../funds.ts'
-import { newFund } from '../funds.ts'
+import { FUND_EMOJI_OPTIONS, newFund } from '../funds.ts'
+import EmojiSelect from './EmojiSelect.tsx'
 import { FieldLabel } from './SpendingForm.tsx'
 
 const inputClasses =
@@ -8,6 +9,7 @@ const inputClasses =
 
 function NewFundForm({ onAdd }: { onAdd: (input: NewFund) => Promise<void> }) {
   const [name, setName] = useState('')
+  const [emoji, setEmoji] = useState('')
   const [target, setTarget] = useState('')
   const [saved, setSaved] = useState('')
   const [date, setDate] = useState('')
@@ -15,12 +17,13 @@ function NewFundForm({ onAdd }: { onAdd: (input: NewFund) => Promise<void> }) {
   const [adding, setAdding] = useState(false)
 
   const handleAdd = async () => {
-    const input = newFund(name, target, saved, date, monthly)
+    const input = newFund(name, emoji, target, saved, date, monthly)
     if (!input) return
     setAdding(true)
     try {
       await onAdd(input)
       setName('')
+      setEmoji('')
       setTarget('')
       setSaved('')
       setDate('')
@@ -36,7 +39,7 @@ function NewFundForm({ onAdd }: { onAdd: (input: NewFund) => Promise<void> }) {
       className="mt-4 rounded-[14px] border border-dashed border-[#d4cdbf] bg-[#faf8f3] p-[18px]"
     >
       <h2 className="mb-3 text-[13px] font-bold">+ New fund or goal</h2>
-      <div className="grid grid-cols-1 gap-[11px] sm:grid-cols-[2fr_1fr_1fr]">
+      <div className="grid grid-cols-1 gap-[11px] sm:grid-cols-[2fr_1fr_1fr_1fr]">
         <label htmlFor="new-fund-name" className="block">
           <FieldLabel text="Name" />
           <input
@@ -47,6 +50,12 @@ function NewFundForm({ onAdd }: { onAdd: (input: NewFund) => Promise<void> }) {
             onChange={(event) => setName(event.target.value)}
           />
         </label>
+        <EmojiSelect
+          id="new-fund-emoji"
+          value={emoji}
+          options={FUND_EMOJI_OPTIONS}
+          onChange={setEmoji}
+        />
         <label htmlFor="new-fund-target" className="block">
           <FieldLabel text="Target $" />
           <input

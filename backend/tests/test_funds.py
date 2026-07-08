@@ -19,13 +19,14 @@ def insert_fund(
     target_date=None,
     monthly_plan=None,
     active=1,
+    emoji=None,
 ):
     conn = connect()
     try:
         cursor = conn.execute(
-            "INSERT INTO fund (name, kind, target_amount, target_date, monthly_plan, active)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            (name, kind, target_amount, target_date, monthly_plan, active),
+            "INSERT INTO fund (name, kind, target_amount, target_date, monthly_plan, active, emoji)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (name, kind, target_amount, target_date, monthly_plan, active, emoji),
         )
         conn.commit()
         return cursor.lastrowid
@@ -54,7 +55,9 @@ class TestGetFunds:
         assert response.json() == []
 
     def test_returns_the_fund_dimension_rows_ordered_by_id(self, client):
-        emergency_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        emergency_id = insert_fund(
+            "Emergency fund", target_amount=30000, monthly_plan=500, emoji="🚨"
+        )
         pool_id = insert_fund(
             "Pool fund", kind="goal", target_amount=14000, target_date="2027-08-01"
         )
@@ -66,6 +69,7 @@ class TestGetFunds:
             {
                 "id": emergency_id,
                 "name": "Emergency fund",
+                "emoji": "🚨",
                 "kind": "sinking",
                 "target_amount": 30000,
                 "target_date": None,
@@ -76,6 +80,7 @@ class TestGetFunds:
             {
                 "id": pool_id,
                 "name": "Pool fund",
+                "emoji": None,
                 "kind": "goal",
                 "target_amount": 14000,
                 "target_date": "2027-08-01",
@@ -156,6 +161,18 @@ class TestCreateFund:
         created = client.post("/api/funds", json={"name": "Bike fund"}).json()
         listed = client.get("/api/funds").json()
         assert [fund["id"] for fund in listed] == [created["id"]]
+
+    def test_persists_the_emoji(self, client):
+        response = client.post("/api/funds", json={"name": "Pool fund", "emoji": "🏊"})
+        assert response.status_code == 201
+        assert response.json()["emoji"] == "🏊"
+        (fund,) = client.get("/api/funds").json()
+        assert fund["emoji"] == "🏊"
+
+    def test_an_omitted_emoji_is_null(self, client):
+        response = client.post("/api/funds", json={"name": "Pool fund"})
+        assert response.status_code == 201
+        assert response.json()["emoji"] is None
 
     def test_rejects_a_non_positive_target(self, client):
         response = client.post("/api/funds", json={"name": "Bad fund", "target_amount": 0})

@@ -87,7 +87,7 @@ function SpendingForm({ month, categories, funds, onAdd }: SpendingFormProps) {
           </option>
           {funds.map((fund) => (
             <option key={fund.id} value={`fund:${fund.id}`}>
-              {fund.name}
+              {fund.emoji ? `${fund.emoji} ${fund.name}` : fund.name}
             </option>
           ))}
         </select>

@@ -70,6 +70,18 @@ class TestSeedPopulatesEveryTable:
             "Mortgage": "🏡",
         }
 
+    def test_seeds_an_emoji_per_fund(self, db):
+        seed(db)
+        rows = db.execute("SELECT name, emoji FROM fund")
+        emojis = {row["name"]: row["emoji"] for row in rows}
+        assert emojis == {
+            "Emergency fund": "🚨",
+            "House maintenance": "🛠️",
+            "1st-year fund": "🛟",
+            "Pool fund": "🏊",
+            "Bike fund": "🚲",
+        }
+
 
 class TestSeedSatisfiesTheViews:
     def test_net_worth_covers_twelve_months(self, db):

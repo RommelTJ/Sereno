@@ -18,6 +18,7 @@ const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
 const CREATED = {
   id: 9,
   name: 'Vacation',
+  emoji: null,
   kind: 'goal',
   target_amount: 5_000,
   target_date: '2027-03-01',
@@ -31,7 +32,9 @@ beforeEach(() => {
 })
 
 const fillForm = async (
-  fields: Partial<Record<'Name' | 'Target $' | 'Saved $' | 'Target date' | '$ / month', string>>,
+  fields: Partial<
+    Record<'Name' | 'Emoji' | 'Target $' | 'Saved $' | 'Target date' | '$ / month', string>
+  >,
 ) => {
   const form = await screen.findByTestId('new-fund-form')
   for (const [label, value] of Object.entries(fields)) {
@@ -56,7 +59,7 @@ describe('Funds & goals card', () => {
 
     const rows = await screen.findAllByTestId('fund-row')
     expect(rows).toHaveLength(3)
-    expect(within(rows[0]).getByText('Emergency fund')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('🚨 Emergency fund')).toBeInTheDocument()
     expect(within(rows[0]).getByText('· sinking · no date')).toBeInTheDocument()
     expect(within(rows[0]).getByText('$10,000 / $30,000')).toBeInTheDocument()
     const bar = within(rows[0]).getByTestId('fund-bar')
@@ -64,6 +67,13 @@ describe('Funds & goals card', () => {
     expect(bar.style.width).toBe(`${(10_000 / 30_000) * 100}%`)
     const note = within(rows[0]).getByText('$500 / mo · ~3.3 yrs to target')
     expect(note).toHaveClass('text-muted-2')
+  })
+
+  it('leaves the name plain when a fund has no emoji', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    expect(within(rows[2]).getByText('Travel fund')).toBeInTheDocument()
   })
 
   it('formats a goal meta line from its ISO target date', async () => {
@@ -139,6 +149,25 @@ describe('+ New fund or goal form', () => {
     expect(within(form).getByLabelText('Name')).toHaveValue('')
   })
 
+  it('posts the chosen emoji with the new fund', async () => {
+    const fetchMock = stubApi({
+      '/api/funds': FUNDS,
+      'POST /api/funds': { ...CREATED, kind: 'sinking', emoji: '✈️' },
+    })
+    render(<Funds />)
+    const form = await fillForm({ Name: 'Vacation', Emoji: '✈️' })
+
+    fireEvent.click(within(form).getByRole('button', { name: '+ Add' }))
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/funds')).toEqual({
+        name: 'Vacation',
+        emoji: '✈️',
+      }),
+    )
+    expect(within(form).getByLabelText('Emoji')).toHaveValue('')
+  })
+
   it('omits a blank target and date so the fund is open-ended', async () => {
     const fetchMock = stubApi({
       '/api/funds': FUNDS,
@@ -191,7 +220,7 @@ describe('responsive layout', () => {
     const form = await screen.findByTestId('new-fund-form')
     expect(within(form).getByLabelText('Name').closest('.grid')).toHaveClass(
       'grid-cols-1',
-      'sm:grid-cols-[2fr_1fr_1fr]',
+      'sm:grid-cols-[2fr_1fr_1fr_1fr]',
     )
     expect(
       within(form).getByLabelText('$ / month').closest('.grid'),
