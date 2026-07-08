@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.4.0**
+**v1.5.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -472,6 +472,18 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.5.0 — Fund archiving. Funds & goals gain the retirement path
+envelopes got in v1.1.0: `POST /api/funds/{id}/archive` flips the
+existing `fund.active` flag and appends a final zeroing `fund_entry`
+dated at archive time (skipped when the balance is already zero, so
+archiving twice appends nothing), releasing the parked balance back
+to spendable while the append-only history stays honest. Archived
+funds drop out of the Funds & goals screen, the dashboard "parked
+across N funds" total, and the safe-to-spend "Funded from" options;
+past expense lines keep their `fund_id`. Each fund card gains an
+Archive ghost button — the button style is now a shared component —
+that posts the archive and refetches the list.
 
 v1.4.0 — Fund emojis. Funds & goals join accounts and categories in
 carrying a user-chosen emoji: migration 0005 adds a nullable `emoji`
