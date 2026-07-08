@@ -18,6 +18,7 @@ const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
 const CREATED = {
   id: 9,
   name: 'Vacation',
+  emoji: null,
   kind: 'goal',
   target_amount: 5_000,
   target_date: '2027-03-01',
@@ -56,7 +57,7 @@ describe('Funds & goals card', () => {
 
     const rows = await screen.findAllByTestId('fund-row')
     expect(rows).toHaveLength(3)
-    expect(within(rows[0]).getByText('Emergency fund')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('🚨 Emergency fund')).toBeInTheDocument()
     expect(within(rows[0]).getByText('· sinking · no date')).toBeInTheDocument()
     expect(within(rows[0]).getByText('$10,000 / $30,000')).toBeInTheDocument()
     const bar = within(rows[0]).getByTestId('fund-bar')
@@ -64,6 +65,13 @@ describe('Funds & goals card', () => {
     expect(bar.style.width).toBe(`${(10_000 / 30_000) * 100}%`)
     const note = within(rows[0]).getByText('$500 / mo · ~3.3 yrs to target')
     expect(note).toHaveClass('text-muted-2')
+  })
+
+  it('leaves the name plain when a fund has no emoji', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    expect(within(rows[2]).getByText('Travel fund')).toBeInTheDocument()
   })
 
   it('formats a goal meta line from its ISO target date', async () => {

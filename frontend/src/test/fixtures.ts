@@ -156,11 +156,13 @@ export const CATEGORIES = [
 
 // Active funds, exactly as GET /api/funds returns them: dimension rows plus
 // the latest fund_entry balance and the server-derived note. The Bike fund
-// is fully funded; the Travel fund is open-ended (no target).
+// is fully funded; the Travel fund is open-ended (no target) and has no
+// emoji, covering the plain-name fallback.
 export const FUNDS = [
   {
     id: 1,
     name: 'Emergency fund',
+    emoji: '🚨',
     kind: 'sinking',
     target_amount: 30_000,
     target_date: null,
@@ -171,6 +173,7 @@ export const FUNDS = [
   {
     id: 2,
     name: 'Bike fund',
+    emoji: '🚲',
     kind: 'goal',
     target_amount: 10_000,
     target_date: '2026-07-01',
@@ -181,6 +184,7 @@ export const FUNDS = [
   {
     id: 3,
     name: 'Travel fund',
+    emoji: null,
     kind: 'sinking',
     target_amount: null,
     target_date: null,
