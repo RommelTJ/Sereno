@@ -210,6 +210,34 @@ describe('Add a spending item', () => {
     })
   })
 
+  it('refreshes the funds card after a spend draws a fund down', async () => {
+    const routes: Record<string, unknown> = {
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/expenses': { id: 101 },
+    }
+    stubApi(routes)
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('spending-form')
+
+    fireEvent.change(within(form).getByLabelText('Funded from'), {
+      target: { value: 'fund:1' },
+    })
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '1,200' },
+    })
+    // The server appends the drawdown, so the refetched list must land on
+    // the funds card — a stale $10,000 would misstate what's spendable.
+    routes['/api/funds'] = FUNDS.map((fund) =>
+      fund.id === 1 ? { ...fund, balance: 8_800 } : fund,
+    )
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add spending row' }),
+    )
+
+    expect(await screen.findByText('$8,800')).toBeInTheDocument()
+  })
+
   it('does not post when the amount is empty', async () => {
     const fetchMock = stubApi({
       '/api/budget-month': BUDGET_MONTH,
