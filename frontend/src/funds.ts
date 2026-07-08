@@ -25,13 +25,14 @@ export function monthYearLabel(isoDate: string): string {
 }
 
 // An open-ended fund (no target) has no percent complete and no done state —
-// barPct is null and the amount is just the balance.
+// barPct is null and the amount is just the balance. The name carries the
+// fund's emoji when set, so every consumer renders them together.
 export function fundView(fund: Fund): FundView {
   const target = fund.target_amount
   const done = target !== null && fund.balance >= target
   return {
     id: fund.id,
-    name: fund.name,
+    name: fund.emoji ? `${fund.emoji} ${fund.name}` : fund.name,
     meta:
       fund.kind === 'goal' && fund.target_date
         ? `goal · ${monthYearLabel(fund.target_date)}`

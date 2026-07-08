@@ -114,6 +114,7 @@ export interface BudgetMonth {
 export interface Fund {
   id: number
   name: string
+  emoji: string | null
   kind: string
   target_amount: number | null
   target_date: string | null
