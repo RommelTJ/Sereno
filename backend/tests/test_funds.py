@@ -177,6 +177,13 @@ class TestCreateFund:
         listed = client.get("/api/funds").json()
         assert [fund["id"] for fund in listed] == [created["id"]]
 
+    def test_creating_a_fund_appends_an_anchor_entry(self, client):
+        # A fund's history starts at creation: the zero entry anchors the
+        # monthly-plan catch-up even before any saved amount is posted.
+        response = client.post("/api/funds", json={"name": "Travel fund", "monthly_plan": 300})
+        fund_id = response.json()["id"]
+        assert fetch_fund_entries(fund_id) == [(date.today().isoformat(), 0, 0)]
+
     def test_persists_the_emoji(self, client):
         response = client.post("/api/funds", json={"name": "Pool fund", "emoji": "🏊"})
         assert response.status_code == 201
