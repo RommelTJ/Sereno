@@ -57,7 +57,7 @@ class ForecastPointOut(BaseModel):
 class SensitivityRow(BaseModel):
     spend: float
     run_out_age: int | None
-    balance_at_90: float
+    balance_at_100: float
 
 
 class Forecast(BaseModel):
@@ -72,7 +72,7 @@ class Forecast(BaseModel):
     tax_year: int
     series: list[ForecastPointOut]
     run_out_age: int | None
-    balance_at_90: float
+    balance_at_100: float
     sensitivity: list[SensitivityRow]
 
 
@@ -190,7 +190,7 @@ def get_forecast(
         return SensitivityRow(
             spend=level,
             run_out_age=outcome.run_out_age,
-            balance_at_90=outcome.balance_at_90,
+            balance_at_100=outcome.balance_at_100,
         )
 
     result = simulate(target)
@@ -206,6 +206,6 @@ def get_forecast(
         tax_year=tax.tax_year,
         series=_series(result, buckets),
         run_out_age=result.run_out_age,
-        balance_at_90=result.balance_at_90,
+        balance_at_100=result.balance_at_100,
         sensitivity=[sensitivity_row(level) for level in _sensitivity_levels(db)],
     )

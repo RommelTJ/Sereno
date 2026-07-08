@@ -1,5 +1,5 @@
 """The longevity forecast: a year-by-year simulation from the caller's
-start age to 95 in today's dollars, composing the sourcing engine.
+start age to 100 in today's dollars, composing the sourcing engine.
 Each year the
 buckets grow by the real rate (return minus inflation), the balances
 are recorded, and the year's spending need is withdrawn through the
@@ -24,8 +24,8 @@ from sereno.engine.sourcing import (
     source_withdrawals,
 )
 
-END_AGE = 95
-BALANCE_CHECK_AGE = 90
+END_AGE = 100
+BALANCE_CHECK_AGE = 100
 
 # The waterfall's gross-up arithmetic can leave a float residue; a
 # shortfall under a cent is a met year, not a run-out.
@@ -49,7 +49,7 @@ class ForecastPoint:
 class ForecastResult:
     series: tuple[ForecastPoint, ...]
     run_out_age: int | None
-    balance_at_90: float
+    balance_at_100: float
 
 
 def _grow(bucket: Bucket, real_rate: float) -> Bucket:
@@ -105,7 +105,7 @@ def simulate_forecast(
         if run_out_age is None and year.shortfall > _SHORTFALL_TOLERANCE:
             run_out_age = age
 
-    balance_at_90 = sum(sum(point.balances) for point in series if point.age == BALANCE_CHECK_AGE)
+    balance_at_100 = sum(sum(point.balances) for point in series if point.age == BALANCE_CHECK_AGE)
     return ForecastResult(
-        series=tuple(series), run_out_age=run_out_age, balance_at_90=balance_at_90
+        series=tuple(series), run_out_age=run_out_age, balance_at_100=balance_at_100
     )
