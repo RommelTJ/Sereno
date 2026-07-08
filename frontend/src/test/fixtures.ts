@@ -328,7 +328,7 @@ export const FORECAST: Forecast = {
   ss_spouse: 1_400,
   ss_start: 67,
   tax_year: 2026,
-  series: Array.from({ length: 95 - 38 + 1 }, (_, i) => ({
+  series: Array.from({ length: 100 - 38 + 1 }, (_, i) => ({
     age: 38 + i,
     eth: 200_000,
     brokerage: 800_000,

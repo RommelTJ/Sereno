@@ -83,13 +83,23 @@ describe('bridge card', () => {
 })
 
 describe('balance-by-bucket chart', () => {
-  it('renders twelve sampled age columns', async () => {
+  it('renders one column per simulated year', async () => {
     render(<Forecast />)
 
     const chart = await screen.findByTestId('forecast-chart')
-    expect(within(chart).getAllByTestId(/^forecast-col-/)).toHaveLength(12)
+    expect(within(chart).getAllByTestId(/^forecast-col-/)).toHaveLength(63)
     expect(within(chart).getByTestId('forecast-col-38')).toBeInTheDocument()
-    expect(within(chart).getByTestId('forecast-col-93')).toBeInTheDocument()
+    // 96 sits between the old 5-year picks — only a yearly chart has it.
+    expect(within(chart).getByTestId('forecast-col-96')).toBeInTheDocument()
+    expect(within(chart).getByTestId('forecast-col-100')).toBeInTheDocument()
+  })
+
+  it('thins the axis labels to every fifth age', async () => {
+    render(<Forecast />)
+
+    const chart = await screen.findByTestId('forecast-chart')
+    expect(within(chart).getByText('40')).toBeInTheDocument()
+    expect(within(chart).queryByText('39')).not.toBeInTheDocument()
   })
 
   it('floors the Social Security sliver and hides it before the start age', async () => {

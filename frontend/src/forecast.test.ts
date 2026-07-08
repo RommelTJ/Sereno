@@ -32,14 +32,14 @@ function point(
   }
 }
 
-// A full 38→95 series with per-age overrides, mirroring the API shape.
+// A full 38→100 series with per-age overrides, mirroring the API shape.
 function series(
   overrides: Record<
     number,
     Partial<{ eth: number; brokerage: number; retirement: number; ss_income: number }>
   > = {},
 ) {
-  return Array.from({ length: 95 - 38 + 1 }, (_, i) => point(38 + i, overrides[38 + i]))
+  return Array.from({ length: 100 - 38 + 1 }, (_, i) => point(38 + i, overrides[38 + i]))
 }
 
 describe('verdict', () => {
@@ -67,23 +67,48 @@ describe('formatMillions', () => {
 })
 
 describe('chartColumns', () => {
-  it('samples every fifth age from 38 to 93', () => {
-    expect(chartColumns(series()).map((column) => column.age)).toEqual([
-      38, 43, 48, 53, 58, 63, 68, 73, 78, 83, 88, 93,
-    ])
+  it('draws one column per simulated year', () => {
+    expect(chartColumns(series()).map((column) => column.age)).toEqual(
+      Array.from({ length: 100 - 38 + 1 }, (_, i) => 38 + i),
+    )
   })
 
-  it('scales segment heights against the tallest sampled column', () => {
+  it('scales segment heights against the tallest column and keeps the raw dollars', () => {
     const columns = chartColumns(
       series({ 38: { eth: 100_000, brokerage: 50_000, retirement: 50_000 } }),
     )
     expect(columns[0]).toEqual({
       age: 38,
+      label: '',
       eth: 95,
       brokerage: 47.5,
       retirement: 47.5,
       ss: 0,
+      ethUsd: 100_000,
+      brokerageUsd: 50_000,
+      retirementUsd: 50_000,
+      ssUsd: 0,
     })
+  })
+
+  it('labels only the ages divisible by five', () => {
+    const labels = chartColumns(series()).map((column) => column.label)
+    expect(labels.filter(Boolean)).toEqual([
+      '40',
+      '45',
+      '50',
+      '55',
+      '60',
+      '65',
+      '70',
+      '75',
+      '80',
+      '85',
+      '90',
+      '95',
+      '100',
+    ])
+    expect(labels[0]).toBe('')
   })
 
   it('keeps the Social Security sliver at least 7px tall', () => {
@@ -95,7 +120,7 @@ describe('chartColumns', () => {
         93: { ss_income: 1_000 },
       }),
     )
-    expect(columns[11].ss).toBe(7)
+    expect(columns[93 - 38].ss).toBe(7)
   })
 
   it('lets a large sliver keep its true height', () => {
@@ -105,7 +130,7 @@ describe('chartColumns', () => {
         93: { ss_income: 20_000 },
       }),
     )
-    expect(columns[11].ss).toBe(19)
+    expect(columns[93 - 38].ss).toBe(19)
   })
 
   it('hides the sliver before Social Security starts', () => {
@@ -116,10 +141,15 @@ describe('chartColumns', () => {
   it('survives an all-zero series without NaN heights', () => {
     expect(chartColumns(series())[0]).toEqual({
       age: 38,
+      label: '',
       eth: 0,
       brokerage: 0,
       retirement: 0,
       ss: 0,
+      ethUsd: 0,
+      brokerageUsd: 0,
+      retirementUsd: 0,
+      ssUsd: 0,
     })
   })
 })
