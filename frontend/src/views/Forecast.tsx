@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import type {
   Account,
+  BindingConstraint,
   Forecast as ForecastData,
   ForecastOverrides,
   PlannedPurchaseInput,
 } from '../api.ts'
-import { fetchAccounts, fetchForecast } from '../api.ts'
+import { fetchAccounts, fetchForecast, fetchMaxAffordable } from '../api.ts'
 import type { ChartColumn, SensitivityRowCopy } from '../forecast.ts'
 import {
+  bindingConstraintCopy,
   bridgeCopy,
   chartColumns,
   ethGrowthSliderBounds,
@@ -176,17 +178,21 @@ function PurchaseRow({
   purchase,
   minYear,
   maxYear,
+  constraint,
   onUpdate,
   onRename,
   onRemove,
+  onMax,
 }: {
   index: number
   purchase: PlannedPurchaseInput
   minYear: number
   maxYear: number
+  constraint: BindingConstraint | undefined
   onUpdate: (patch: Partial<PlannedPurchaseInput>) => void
   onRename: (name: string) => void
   onRemove: () => void
+  onMax: () => void
 }) {
   const bounds = purchaseAmountSliderBounds(purchase.amount)
   return (
@@ -242,6 +248,24 @@ function PurchaseRow({
         onChange={(event) => onUpdate({ amount: Number(event.target.value) })}
         className="mt-1 w-full accent-accent"
       />
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <button
+          data-testid={`forecast-purchase-max-${index}`}
+          type="button"
+          onClick={onMax}
+          className="rounded-[8px] border border-input-border px-2 py-1 text-[11.5px] font-semibold"
+        >
+          Max affordable
+        </button>
+        {constraint != null && (
+          <p
+            data-testid={`forecast-purchase-constraint-${index}`}
+            className="flex-1 text-right text-[10.5px] leading-[1.4] text-muted-2"
+          >
+            {bindingConstraintCopy(constraint)}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
@@ -250,6 +274,9 @@ function Forecast() {
   const [forecast, setForecast] = useState<ForecastData | null>()
   const [accounts, setAccounts] = useState<Account[]>()
   const [overrides, setOverrides] = useState<ForecastOverrides>({})
+  // The solver's answer per row index — cleared the moment the row
+  // moves, since the ceiling was solved for the old inputs.
+  const [constraints, setConstraints] = useState<Record<number, BindingConstraint>>({})
 
   useEffect(() => {
     void fetchAccounts().then(setAccounts)
@@ -274,6 +301,7 @@ function Forecast() {
   }
 
   const updatePurchase = (index: number, patch: Partial<PlannedPurchaseInput>) => {
+    setConstraints(({ [index]: _stale, ...rest }) => rest)
     applyOverride({
       purchases: purchases.map((purchase, i) =>
         i === index ? { ...purchase, ...patch } : purchase,
@@ -282,7 +310,27 @@ function Forecast() {
   }
 
   const removePurchase = (index: number) => {
+    // Indices shift under the remaining rows, so no solved ceiling
+    // survives a removal.
+    setConstraints({})
     applyOverride({ purchases: purchases.filter((_, i) => i !== index) })
+  }
+
+  const fillMaxAffordable = (index: number) => {
+    const others = purchases.filter((_, i) => i !== index)
+    void fetchMaxAffordable(purchases[index].year, {
+      ...overrides,
+      purchases: others,
+    }).then((result) => {
+      if (result == null) {
+        return
+      }
+      updatePurchase(index, { amount: result.max_amount })
+      setConstraints((current) => ({
+        ...current,
+        [index]: result.binding_constraint,
+      }))
+    })
   }
 
   const renamePurchase = (index: number, name: string) => {
@@ -580,9 +628,11 @@ function Forecast() {
                 purchase={purchase}
                 minYear={new Date().getFullYear()}
                 maxYear={new Date().getFullYear() + 100 - forecast.start_age}
+                constraint={constraints[index]}
                 onUpdate={(patch) => updatePurchase(index, patch)}
                 onRename={(name) => renamePurchase(index, name)}
                 onRemove={() => removePurchase(index)}
+                onMax={() => fillMaxAffordable(index)}
               />
             ))}
           </div>
