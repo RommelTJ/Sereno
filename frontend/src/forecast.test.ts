@@ -5,13 +5,17 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  bindingConstraintCopy,
   bridgeCopy,
   chartColumns,
   ethGrowthSliderBounds,
   formatMillions,
+  purchaseAmountSliderBounds,
+  purchaseCostRows,
   sensitivityRows,
   spendSliderBounds,
   verdict,
+  verdictDelta,
 } from './forecast.ts'
 
 function point(
@@ -89,6 +93,10 @@ describe('chartColumns', () => {
       brokerageUsd: 50_000,
       retirementUsd: 50_000,
       ssUsd: 0,
+      cap: 0,
+      marker: '',
+      purchaseUsd: null,
+      shortUsd: null,
     })
   })
 
@@ -151,7 +159,194 @@ describe('chartColumns', () => {
       brokerageUsd: 0,
       retirementUsd: 0,
       ssUsd: 0,
+      cap: 0,
+      marker: '',
+      purchaseUsd: null,
+      shortUsd: null,
     })
+  })
+})
+
+describe('chartColumns with purchases', () => {
+  const purchase = { year: 2033, age: 45, amount: 800_000, ongoing_delta: 0 }
+
+  it('marks purchase years with a diamond and carries the amount', () => {
+    const columns = chartColumns(series({ 38: { eth: 200_000 } }), {
+      purchases: [purchase],
+    })
+    expect(columns[45 - 38].marker).toBe('◆')
+    expect(columns[45 - 38].purchaseUsd).toBe(800_000)
+    expect(columns[44 - 38].marker).toBe('')
+    expect(columns[44 - 38].purchaseUsd).toBeNull()
+  })
+
+  it('sums purchases due the same year under one marker', () => {
+    const columns = chartColumns(series({ 38: { eth: 200_000 } }), {
+      purchases: [purchase, { year: 2033, age: 45, amount: 70_000, ongoing_delta: 0 }],
+    })
+    expect(columns[45 - 38].purchaseUsd).toBe(870_000)
+  })
+
+  it('carries the short on an unaffordable year', () => {
+    const columns = chartColumns(series({ 38: { eth: 200_000 } }), {
+      purchases: [purchase],
+      unaffordable: [{ year: 2033, age: 45, short: 278_149 }],
+    })
+    expect(columns[45 - 38].shortUsd).toBe(278_149)
+    expect(columns[44 - 38].shortUsd).toBeNull()
+  })
+
+  it('caps each column with the forgone growth against the baseline', () => {
+    // Baseline 200,000 vs 150,000 with the purchases: the chart
+    // scales to the taller baseline (190px), the column reaches
+    // 142.5px, and the hatched cap fills the 47.5px the purchases
+    // forwent.
+    const flat = (value: number) =>
+      series(
+        Object.fromEntries(
+          Array.from({ length: 63 }, (_, i) => [38 + i, { eth: value }]),
+        ),
+      )
+    const columns = chartColumns(flat(150_000), { baseline: flat(200_000) })
+    expect(columns[0].eth).toBe(142.5)
+    expect(columns[0].cap).toBe(47.5)
+  })
+
+  it('keeps a zero cap without a baseline', () => {
+    const columns = chartColumns(series({ 38: { eth: 200_000 } }))
+    expect(columns.every((column) => column.cap === 0)).toBe(true)
+  })
+})
+
+describe('verdictDelta', () => {
+  const baseline = { run_out_age: null, balance_at_100: 5_512_345, series: [] }
+  const purchase = { year: 2036, age: 48, amount: 800_000, ongoing_delta: 0 }
+
+  it('is null with no purchases', () => {
+    expect(
+      verdictDelta({
+        purchases: [],
+        run_out_age: null,
+        balance_at_100: 5_512_345,
+        baseline,
+      }),
+    ).toBeNull()
+  })
+
+  it('prices the purchases against the baseline when both last', () => {
+    expect(
+      verdictDelta({
+        purchases: [purchase],
+        run_out_age: null,
+        balance_at_100: 4_112_345,
+        baseline,
+      }),
+    ).toBe('$1.40M lower at 100 than without the purchases')
+  })
+
+  it('notes a higher terminal when a sale funds the plan', () => {
+    expect(
+      verdictDelta({
+        purchases: [{ ...purchase, amount: -400_000 }],
+        run_out_age: null,
+        balance_at_100: 6_112_345,
+        baseline,
+      }),
+    ).toBe('$0.60M higher at 100 than without the purchases')
+  })
+
+  it('counts the years lost when the purchases shorten the plan', () => {
+    expect(
+      verdictDelta({
+        purchases: [purchase],
+        run_out_age: 87,
+        balance_at_100: 0,
+        baseline,
+      }),
+    ).toBe('14 yrs earlier than without the purchases')
+  })
+
+  it('measures against a baseline that itself runs out', () => {
+    expect(
+      verdictDelta({
+        purchases: [purchase],
+        run_out_age: 87,
+        balance_at_100: 0,
+        baseline: { ...baseline, run_out_age: 92, balance_at_100: 0 },
+      }),
+    ).toBe('5 yrs earlier than without the purchases')
+  })
+})
+
+describe('purchaseCostRows', () => {
+  it('labels each row with its purchase and prices the outcome without it', () => {
+    const rows = purchaseCostRows(
+      [{ year: 2036, amount: 800_000, run_out_age: null, balance_at_100: 6_912_345 }],
+      [{ name: 'House', year: 2036, amount: 800_000 }],
+    )
+    expect(rows[0]).toEqual({
+      name: 'House',
+      year: 2036,
+      amount: '$800,000',
+      lasts: 'never runs out',
+      outcome: '✓ $6.91M @ 100',
+      tone: 'ok',
+    })
+  })
+
+  it('keeps the sensitivity tones for tight and failing outcomes', () => {
+    const rows = purchaseCostRows(
+      [
+        { year: 2036, amount: 800_000, run_out_age: 92, balance_at_100: 0 },
+        { year: 2041, amount: 70_000, run_out_age: 72, balance_at_100: 0 },
+      ],
+      [
+        { name: 'House', year: 2036, amount: 800_000 },
+        { name: 'Car', year: 2041, amount: 70_000 },
+      ],
+    )
+    expect(rows[0]).toMatchObject({ lasts: 'to age 91', tone: 'tight' })
+    expect(rows[1]).toMatchObject({ name: 'Car', lasts: 'to age 71', tone: 'bad' })
+  })
+
+  it('falls back to the year when the purchase is unnamed', () => {
+    const rows = purchaseCostRows(
+      [{ year: 2036, amount: 800_000, run_out_age: null, balance_at_100: 6_912_345 }],
+      [{ name: '', year: 2036, amount: 800_000 }],
+    )
+    expect(rows[0].name).toBe('Purchase in 2036')
+  })
+})
+
+describe('purchaseAmountSliderBounds', () => {
+  it('spans zero to a million by default', () => {
+    expect(purchaseAmountSliderBounds(250_000)).toEqual({
+      min: 0,
+      max: 1_000_000,
+      step: 1_000,
+    })
+  })
+
+  it('widens the ceiling so a bigger purchase stays reachable', () => {
+    expect(purchaseAmountSliderBounds(2_400_500)).toEqual({
+      min: 0,
+      max: 2_401_000,
+      step: 1_000,
+    })
+  })
+})
+
+describe('bindingConstraintCopy', () => {
+  it('names the purchase year itself as the cap', () => {
+    expect(bindingConstraintCopy('purchase_year_liquidity')).toBe(
+      'capped by the buckets reachable that year — a later year can raise the ceiling',
+    )
+  })
+
+  it('names longevity as the cap', () => {
+    expect(bindingConstraintCopy('longevity')).toBe(
+      'capped by long-run longevity, not the year itself',
+    )
   })
 })
 
