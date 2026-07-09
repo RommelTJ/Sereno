@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.14.0**
+**v1.14.1**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -588,6 +588,17 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.14.1 — Emoji options find a home. The three curated picker lists —
+assets, envelopes, funds — move out of `settings.ts` and `funds.ts`
+into a shared `emoji.ts`. The lists stay separate on purpose: the same
+emoji means different things per domain (⚡ is Ethereum on an asset,
+Electric on an envelope), so only their location changes. The account
+add form drops its hand-rolled `<select>` for the shared `EmojiSelect`
+the envelope and fund forms already use, so every picker picks up
+future styling and accessibility fixes from one component. A pure
+frontend refactor — no behavior change, no backend or migration
+impact.
 
 v1.14.0 — Funds finish their edit path. `PUT /api/funds/{id}` learns to
 revise a fund's `name` and `emoji` alongside its monthly plan: the fund

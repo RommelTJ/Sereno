@@ -131,20 +131,3 @@ export function topUpAmount(raw: string): number {
   const sign = raw.trim().startsWith('-') ? -1 : 1
   return sign * parseAmount(raw)
 }
-
-// The curated emoji choices for the new-fund form — fund- and goal-themed,
-// like the account and envelope lists in settings.ts. The DB stores the
-// emoji as free TEXT; this list constrains only the UI.
-export const FUND_EMOJI_OPTIONS = [
-  { emoji: '🚨', label: 'Emergency' },
-  { emoji: '🛠️', label: 'Maintenance' },
-  { emoji: '🛟', label: 'Safety net' },
-  { emoji: '🏊', label: 'Pool' },
-  { emoji: '🚲', label: 'Bike' },
-  { emoji: '✈️', label: 'Travel' },
-  { emoji: '🏠', label: 'House' },
-  { emoji: '🚗', label: 'Car' },
-  { emoji: '🎁', label: 'Gifts' },
-  { emoji: '💍', label: 'Wedding' },
-  { emoji: '🎓', label: 'Education' },
-]

@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { FUND_EMOJI_OPTIONS } from '../emoji.ts'
 import type { NewFund } from '../funds.ts'
-import { FUND_EMOJI_OPTIONS, newFund } from '../funds.ts'
+import { newFund } from '../funds.ts'
 import EmojiSelect from './EmojiSelect.tsx'
 import { FieldLabel } from './SpendingForm.tsx'
 

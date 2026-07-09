@@ -1,6 +1,6 @@
 [project]
 name = "sereno"
-version = "1.14.0"
+version = "1.14.1"
 description = "Sereno backend — a private, LAN-only personal finance tracker"
 readme = "README.md"
 requires-python = ">=3.13"

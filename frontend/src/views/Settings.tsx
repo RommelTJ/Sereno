@@ -38,6 +38,7 @@ import {
 import EmojiSelect from '../components/EmojiSelect.tsx'
 import GhostButton from '../components/GhostButton.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
+import { ASSET_EMOJI_OPTIONS, EMOJI_OPTIONS } from '../emoji.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
 import type {
@@ -49,13 +50,11 @@ import type {
 import {
   accountInput,
   accountRows,
-  ASSET_EMOJI_OPTIONS,
   assumptionsEdits,
   assumptionsFormValues,
   bracketLabel,
   classificationInput,
   classificationValues,
-  EMOJI_OPTIONS,
   envelopeEdits,
   envelopeInput,
   formatPct,
@@ -376,22 +375,12 @@ function AccountsCard({
           value={values.name}
           onChange={set('name')}
         />
-        <label htmlFor={`${idPrefix}-emoji`} className="block">
-          <FieldLabel text="Emoji" />
-          <select
-            id={`${idPrefix}-emoji`}
-            className="mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2 text-sm"
-            value={values.emoji}
-            onChange={(event) => set('emoji')(event.target.value)}
-          >
-            <option value="">—</option>
-            {ASSET_EMOJI_OPTIONS.map((option) => (
-              <option key={option.label} value={option.emoji}>
-                {option.emoji} {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <EmojiSelect
+          id={`${idPrefix}-emoji`}
+          value={values.emoji}
+          options={ASSET_EMOJI_OPTIONS}
+          onChange={set('emoji')}
+        />
         <EditField
           id={`${idPrefix}-value`}
           label="Initial value"
