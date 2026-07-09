@@ -1,7 +1,11 @@
 """The longevity forecast engine: a year-by-year simulation from the
 caller's start age to 100 in today's dollars. Each year the buckets
 grow by the real rate
-(return minus inflation), the balances are recorded, and the year's
+(return minus inflation) — except the ETH bucket, which grows at its
+own nominal rate minus inflation when eth_growth_pct is given (null
+keeps the blended rate, and a rate at or below −100% real empties the
+bucket rather than inverting it) — the balances are recorded, and the
+year's
 spending need is withdrawn through the sourcing engine's waterfall —
 so the 59½ gate, the 0% LTCG headroom, and the gross-ups all apply per
 simulated year. Growth is all gain (basis stays put); sales reduce
@@ -48,6 +52,7 @@ def run(
     spend: float = 40_000.0,
     return_pct: float = 7.0,
     inflation_pct: float = 3.0,
+    eth_growth_pct: float | None = None,
     buckets: list[Bucket] | None = None,
     social_security: Sequence[SocialSecurityBenefit] = (),
     ltcg_0_ceiling: float = 96_700.0,
@@ -59,6 +64,7 @@ def run(
         spend=spend,
         return_pct=return_pct,
         inflation_pct=inflation_pct,
+        eth_growth_pct=eth_growth_pct,
         buckets=buckets if buckets is not None else [brokerage(2_000_000)],
         social_security=social_security,
         ltcg_0_ceiling=ltcg_0_ceiling,
@@ -142,6 +148,30 @@ class TestBasis:
         gain_39 = 1 - basis_39 / bal_39
         gross_39 = 10_000 / (1 - 0.15 * gain_39)
         assert result.series[2].balances == (pytest.approx((bal_39 - gross_39) * 1.04),)
+
+
+class TestEthGrowth:
+    def test_the_eth_bucket_grows_at_its_own_real_rate(self):
+        # 15% nominal − 3% inflation = 12% real for ETH; the brokerage
+        # keeps the blended 7 − 3 = 4%.
+        result = run(spend=0, eth_growth_pct=15, buckets=[eth(100_000), brokerage(100_000)])
+        assert result.series[0].balances == (pytest.approx(112_000), pytest.approx(104_000))
+
+    def test_eth_growth_is_nominal_and_inflation_subtracts(self):
+        # 3% nominal against 3% inflation is 0% real: the bucket holds
+        # flat in today's dollars, exactly how return_pct is treated.
+        result = run(spend=0, eth_growth_pct=3, buckets=[eth(100_000)])
+        assert result.series[0].balances == (pytest.approx(100_000),)
+
+    def test_a_null_eth_growth_keeps_the_blended_rate(self):
+        result = run(spend=0, eth_growth_pct=None, buckets=[eth(100_000)])
+        assert result.series[0].balances == (pytest.approx(104_000),)
+
+    def test_a_rate_below_minus_one_hundred_real_empties_rather_than_inverts(self):
+        # −120 nominal − 3 inflation = −123% real: the multiplier would
+        # go negative, so the bucket floors at zero instead.
+        result = run(spend=0, eth_growth_pct=-120, buckets=[eth(100_000)])
+        assert result.series[0].balances == (0.0,)
 
 
 class TestBridge:
