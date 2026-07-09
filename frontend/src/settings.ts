@@ -310,6 +310,8 @@ export interface AssumptionsFormValues {
   inflationPct: string
   ethGrowthPct: string
   spend: string
+  initialRatePct: string
+  bandPct: string
 }
 
 export function assumptionsFormValues(
@@ -324,6 +326,11 @@ export function assumptionsFormValues(
         ? String(assumption.eth_growth_pct)
         : '',
     spend: spendPlan ? String(spendPlan.annual_target) : '',
+    initialRatePct:
+      spendPlan?.initial_rate != null
+        ? toPercent(spendPlan.initial_rate)
+        : '',
+    bandPct: spendPlan ? toPercent(spendPlan.guardrail_band) : '',
   }
 }
 
@@ -334,8 +341,9 @@ export interface AssumptionsEdit {
 
 // Build the POST bodies for the assumptions-card Save: one append per
 // config whose values actually changed, so the history stays meaningful.
-// A spend change carries the guardrail knobs forward — they are edited
-// nowhere yet (the Guardrails slice reads them as stored).
+// The rate and band fields hold percent ("2.94") for the stored fractions
+// (0.0294). A blank rate clears the anchor — Guardrails returns to its
+// empty state — and a blank band falls to the schema's ±20% default.
 export function assumptionsEdits(
   values: AssumptionsFormValues,
   assumption: Assumption | null,
@@ -360,14 +368,19 @@ export function assumptionsEdits(
     }
   }
   const spend = parseNumber(values.spend)
-  if (spend != null && spend !== spendPlan?.annual_target) {
+  const initialRate = toFraction(values.initialRatePct) ?? null
+  const band = toFraction(values.bandPct)
+  const planChanged =
+    !spendPlan ||
+    spend !== spendPlan.annual_target ||
+    initialRate !== spendPlan.initial_rate ||
+    (band ?? 0.2) !== spendPlan.guardrail_band
+  if (spend != null && planChanged) {
     edit.spendPlan = {
       effective_date: today,
       annual_target: spend,
-      ...(spendPlan?.initial_rate != null && {
-        initial_rate: spendPlan.initial_rate,
-      }),
-      ...(spendPlan != null && { guardrail_band: spendPlan.guardrail_band }),
+      ...(initialRate != null && { initial_rate: initialRate }),
+      ...(band != null && { guardrail_band: band }),
     }
   }
   return edit
@@ -432,6 +445,12 @@ export function socialSecurityEdits(
 function toFraction(raw: string): number | undefined {
   const pct = parseNumber(raw)
   return pct == null ? undefined : Number((pct / 100).toFixed(6))
+}
+
+// Stored fraction (0.0294) → percent string ("2.94") — toFraction's
+// inverse, for prefilling the percent fields.
+function toPercent(fraction: number): string {
+  return String(+(fraction * 100).toFixed(4))
 }
 
 export interface TaxBracketValues {

@@ -668,6 +668,18 @@ function AssumptionsCard({
             value={values.spend}
             onChange={set('spend')}
           />
+          <EditField
+            id="assumption-initial-rate"
+            label="Initial rate %"
+            value={values.initialRatePct}
+            onChange={set('initialRatePct')}
+          />
+          <EditField
+            id="assumption-band"
+            label="Guardrail band %"
+            value={values.bandPct}
+            onChange={set('bandPct')}
+          />
         </div>
       ) : (
         <div className="mt-3">
@@ -689,6 +701,19 @@ function AssumptionsCard({
             value={
               spendPlan ? `${formatUsd(spendPlan.annual_target)} / yr` : '—'
             }
+          />
+          <ConfigLine
+            label="Initial rate"
+            value={
+              spendPlan?.initial_rate != null
+                ? formatRate(spendPlan.initial_rate)
+                : '—'
+            }
+            hint="· at retirement"
+          />
+          <ConfigLine
+            label="Guardrail band"
+            value={spendPlan ? `±${formatRate(spendPlan.guardrail_band)}` : '—'}
           />
         </div>
       )}
