@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import {
   bridgeCopy,
   chartColumns,
+  ethGrowthSliderBounds,
   formatMillions,
   sensitivityRows,
   spendSliderBounds,
@@ -255,5 +256,19 @@ describe('spendSliderBounds', () => {
 
   it('rounds an off-step spend outward to a step boundary', () => {
     expect(spendSliderBounds(44_500)).toEqual({ min: 44_000, max: 160_000, step: 1_000 })
+  })
+})
+
+describe('ethGrowthSliderBounds', () => {
+  it("spans ETH's historical yearly range when the rate sits inside it", () => {
+    expect(ethGrowthSliderBounds(15)).toEqual({ min: -85, max: 470, step: 1 })
+  })
+
+  it('widens the ceiling so an out-of-range stored rate stays reachable', () => {
+    expect(ethGrowthSliderBounds(500.4)).toEqual({ min: -85, max: 501, step: 1 })
+  })
+
+  it('widens the floor the same way, outward to a step boundary', () => {
+    expect(ethGrowthSliderBounds(-90.2)).toEqual({ min: -91, max: 470, step: 1 })
   })
 })
