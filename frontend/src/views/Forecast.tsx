@@ -3,6 +3,7 @@ import type {
   Account,
   Forecast as ForecastData,
   ForecastOverrides,
+  PlannedPurchaseInput,
 } from '../api.ts'
 import { fetchAccounts, fetchForecast } from '../api.ts'
 import type { ChartColumn, SensitivityRowCopy } from '../forecast.ts'
@@ -11,6 +12,7 @@ import {
   chartColumns,
   ethGrowthSliderBounds,
   formatMillions,
+  purchaseAmountSliderBounds,
   sensitivityRows,
   spendSliderBounds,
   verdict,
@@ -148,6 +150,81 @@ function SsField({
   )
 }
 
+function PurchaseRow({
+  index,
+  purchase,
+  minYear,
+  maxYear,
+  onUpdate,
+  onRename,
+  onRemove,
+}: {
+  index: number
+  purchase: PlannedPurchaseInput
+  minYear: number
+  maxYear: number
+  onUpdate: (patch: Partial<PlannedPurchaseInput>) => void
+  onRename: (name: string) => void
+  onRemove: () => void
+}) {
+  const bounds = purchaseAmountSliderBounds(purchase.amount)
+  return (
+    <div className="mt-3 rounded-[8px] border border-hairline p-2.5">
+      <div className="flex items-center gap-2">
+        <input
+          data-testid={`forecast-purchase-name-${index}`}
+          type="text"
+          value={purchase.name}
+          onChange={(event) => onRename(event.target.value)}
+          className="min-w-0 flex-1 rounded-[8px] border border-input-border px-[9px] py-1.5 text-[13px]"
+        />
+        <input
+          data-testid={`forecast-purchase-year-${index}`}
+          type="number"
+          min={minYear}
+          max={maxYear}
+          value={purchase.year}
+          onChange={(event) => {
+            const next = Number(event.target.value)
+            if (
+              event.target.value !== '' &&
+              Number.isInteger(next) &&
+              next >= minYear &&
+              next <= maxYear
+            ) {
+              onUpdate({ year: next })
+            }
+          }}
+          className="num w-[78px] rounded-[8px] border border-input-border px-[9px] py-1.5 text-[13px]"
+        />
+        <button
+          data-testid={`forecast-purchase-remove-${index}`}
+          type="button"
+          aria-label="Remove purchase"
+          onClick={onRemove}
+          className="px-1 text-[13px] text-muted-2"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="mt-2 flex justify-between text-xs text-muted">
+        <span>Amount</span>
+        <span className="num font-bold text-ink">{formatUsd(purchase.amount)}</span>
+      </div>
+      <input
+        data-testid={`forecast-purchase-amount-${index}`}
+        type="range"
+        min={bounds.min}
+        max={bounds.max}
+        step={bounds.step}
+        value={purchase.amount}
+        onChange={(event) => onUpdate({ amount: Number(event.target.value) })}
+        className="mt-1 w-full accent-accent"
+      />
+    </div>
+  )
+}
+
 function Forecast() {
   const [forecast, setForecast] = useState<ForecastData | null>()
   const [accounts, setAccounts] = useState<Account[]>()
@@ -162,6 +239,39 @@ function Forecast() {
     const next = { ...overrides, ...patch }
     setOverrides(next)
     void fetchForecast(next).then(setForecast)
+  }
+
+  const purchases = overrides.purchases ?? []
+
+  const addPurchase = () => {
+    applyOverride({
+      purchases: [
+        ...purchases,
+        { name: 'New purchase', year: new Date().getFullYear() + 1, amount: 50_000 },
+      ],
+    })
+  }
+
+  const updatePurchase = (index: number, patch: Partial<PlannedPurchaseInput>) => {
+    applyOverride({
+      purchases: purchases.map((purchase, i) =>
+        i === index ? { ...purchase, ...patch } : purchase,
+      ),
+    })
+  }
+
+  const removePurchase = (index: number) => {
+    applyOverride({ purchases: purchases.filter((_, i) => i !== index) })
+  }
+
+  const renamePurchase = (index: number, name: string) => {
+    // The name never travels: update the row without a refetch.
+    setOverrides({
+      ...overrides,
+      purchases: purchases.map((purchase, i) =>
+        i === index ? { ...purchase, name } : purchase,
+      ),
+    })
   }
 
   if (forecast === undefined || accounts === undefined) {
@@ -374,6 +484,36 @@ function Forecast() {
                 onChange={(value) => applyOverride({ ss_start: value })}
               />
             </div>
+          </div>
+          <div data-testid="forecast-purchases" className="mt-4 border-t border-hairline pt-3.5">
+            <div className="flex items-center justify-between text-xs text-muted">
+              <span>
+                Planned purchases <span className="text-faint">· what-if only</span>
+              </span>
+              <button
+                data-testid="forecast-purchase-add"
+                type="button"
+                onClick={addPurchase}
+                className="rounded-[8px] border border-input-border px-2 py-1 text-[12px] font-semibold"
+              >
+                + Add
+              </button>
+            </div>
+            {purchases.map((purchase, index) => (
+              <PurchaseRow
+                // Rows have no identity beyond their position in the
+                // transient what-if list.
+                // eslint-disable-next-line react/no-array-index-key
+                key={index}
+                index={index}
+                purchase={purchase}
+                minYear={new Date().getFullYear()}
+                maxYear={new Date().getFullYear() + 100 - forecast.start_age}
+                onUpdate={(patch) => updatePurchase(index, patch)}
+                onRename={(name) => renamePurchase(index, name)}
+                onRemove={() => removePurchase(index)}
+              />
+            ))}
           </div>
           <p className="mt-3.5 text-[11px] text-muted-2">
             Real return {(returnPct - inflationPct).toFixed(1)}% · ETH spent first · SS{' '}
