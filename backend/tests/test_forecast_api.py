@@ -368,6 +368,56 @@ class TestPurchases:
         assert by_spend[30_000.0]["balance_at_100"] < base_by_spend[30_000.0]["balance_at_100"]
 
 
+class TestBaseline:
+    def test_the_baseline_is_the_no_purchase_outcome(self, client):
+        # One call answers both "where do I land?" and "what did the
+        # purchases cost me?" — the baseline matches a purchase-free
+        # request, series included, so the chart can draw the
+        # divergence.
+        seed_portfolio()
+        seed_config()
+        base = client.get("/api/forecast").json()
+        body = client.get("/api/forecast", params={"purchase": f"{year_at(45)}:800000"}).json()
+        assert body["baseline"]["run_out_age"] == base["run_out_age"]
+        assert body["baseline"]["balance_at_100"] == pytest.approx(base["balance_at_100"])
+        assert body["baseline"]["series"] == base["series"]
+        assert body["balance_at_100"] < base["balance_at_100"]
+
+    def test_without_purchases_the_baseline_equals_the_headline(self, client):
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast").json()
+        assert body["baseline"]["run_out_age"] == body["run_out_age"]
+        assert body["baseline"]["balance_at_100"] == pytest.approx(body["balance_at_100"])
+        assert body["baseline"]["series"] == body["series"]
+
+    def test_each_purchase_reports_the_outcome_without_it(self, client):
+        # One row per purchase, dropping just that one: the house row's
+        # outcome carries the car and vice versa — the marginal cost of
+        # each, not the total.
+        seed_portfolio()
+        seed_config()
+        house = f"{year_at(45)}:400000"
+        car = f"{year_at(50)}:80000"
+        body = client.get("/api/forecast", params=[("purchase", house), ("purchase", car)]).json()
+        car_only = client.get("/api/forecast", params={"purchase": car}).json()
+        house_only = client.get("/api/forecast", params={"purchase": house}).json()
+
+        costs = body["purchase_costs"]
+        assert [(row["year"], row["amount"]) for row in costs] == [
+            (year_at(45), 400_000.0),
+            (year_at(50), 80_000.0),
+        ]
+        assert costs[0]["balance_at_100"] == pytest.approx(car_only["balance_at_100"])
+        assert costs[0]["run_out_age"] == car_only["run_out_age"]
+        assert costs[1]["balance_at_100"] == pytest.approx(house_only["balance_at_100"])
+
+    def test_no_purchases_means_no_cost_rows(self, client):
+        seed_portfolio()
+        seed_config()
+        assert client.get("/api/forecast").json()["purchase_costs"] == []
+
+
 class TestSensitivity:
     def test_levels_are_whole_percentages_of_net_worth(self, client):
         # 1.5M of balances → 2% through 6%, the 4% middle the classic
