@@ -307,7 +307,11 @@ describe('editing a fund plan', () => {
     expect(
       await screen.findByText('$1,000 / mo · ~1.7 yrs to target'),
     ).toBeInTheDocument()
-    expect(putBody(fetchMock, '/api/funds/1')).toEqual({ monthly_plan: 1000 })
+    expect(putBody(fetchMock, '/api/funds/1')).toEqual({
+      name: 'Emergency fund',
+      emoji: '🚨',
+      monthly_plan: 1000,
+    })
     expect(
       within(rows[0]).queryByLabelText('$ / month'),
     ).not.toBeInTheDocument()
@@ -337,7 +341,11 @@ describe('editing a fund plan', () => {
     expect(
       await screen.findByText('open-ended · add a monthly plan'),
     ).toBeInTheDocument()
-    expect(putBody(fetchMock, '/api/funds/3')).toEqual({ monthly_plan: null })
+    expect(putBody(fetchMock, '/api/funds/3')).toEqual({
+      name: 'Travel fund',
+      emoji: null,
+      monthly_plan: null,
+    })
   })
 
   it('cancels without saving', async () => {
@@ -357,6 +365,82 @@ describe('editing a fund plan', () => {
     expect(
       fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT'),
     ).toHaveLength(0)
+  })
+})
+
+describe('editing a fund name and emoji', () => {
+  it('reveals the name and emoji inputs prefilled with the current values', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+
+    expect(within(rows[0]).getByLabelText('Name')).toHaveValue('Emergency fund')
+    expect(within(rows[0]).getByLabelText('Emoji')).toHaveValue('🚨')
+  })
+
+  it('prefills a blank emoji for a fund with none', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[2]).getByRole('button', { name: 'Edit' }))
+
+    expect(within(rows[2]).getByLabelText('Name')).toHaveValue('Travel fund')
+    expect(within(rows[2]).getByLabelText('Emoji')).toHaveValue('')
+  })
+
+  it('saves the renamed fund and refetches the list', async () => {
+    const renamed = { ...FUNDS[2], name: 'Japan fund', emoji: '✈️' }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'PUT /api/funds/3': renamed,
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[2]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[2]).getByLabelText('Name'), {
+      target: { value: 'Japan fund' },
+    })
+    fireEvent.change(within(rows[2]).getByLabelText('Emoji'), {
+      target: { value: '✈️' },
+    })
+    routes['/api/funds'] = [...FUNDS.slice(0, 2), renamed]
+
+    fireEvent.click(within(rows[2]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText(/Japan fund/)).toBeInTheDocument()
+    expect(putBody(fetchMock, '/api/funds/3')).toEqual({
+      name: 'Japan fund',
+      emoji: '✈️',
+      monthly_plan: 300,
+    })
+  })
+
+  it('clears the emoji when the blank option is picked', async () => {
+    const cleared = { ...FUNDS[0], emoji: null }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'PUT /api/funds/1': cleared,
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[0]).getByLabelText('Emoji'), {
+      target: { value: '' },
+    })
+    routes['/api/funds'] = [cleared, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(putBody(fetchMock, '/api/funds/1')).toEqual({
+        name: 'Emergency fund',
+        emoji: null,
+        monthly_plan: 500,
+      }),
+    )
   })
 })
 
