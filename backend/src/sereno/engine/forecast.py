@@ -1,7 +1,10 @@
 """The longevity forecast: a year-by-year simulation from the caller's
 start age to 100 in today's dollars, composing the sourcing engine.
 Each year the
-buckets grow by the real rate (return minus inflation), the balances
+buckets grow by the real rate (return minus inflation) — except the
+ETH bucket, which grows at its own nominal rate minus inflation when
+eth_growth_pct is given (null keeps the blended rate, so the stored
+column stays optional) — the balances
 are recorded, and the year's spending need is withdrawn through the
 sourcing waterfall — so the 0% LTCG headroom, the gross-ups, and the
 59½ gate all apply per simulated year. Growth is all gain (the basis
@@ -53,7 +56,9 @@ class ForecastResult:
 
 
 def _grow(bucket: Bucket, real_rate: float) -> Bucket:
-    return replace(bucket, balance=bucket.balance * (1 + real_rate))
+    # A real rate at or below −100% empties the bucket; a negative
+    # multiplier would invert the balance and corrupt the waterfall.
+    return replace(bucket, balance=bucket.balance * max(0.0, 1 + real_rate))
 
 
 def _after_draw(bucket: Bucket, draw: BucketDraw) -> Bucket:
@@ -69,6 +74,7 @@ def simulate_forecast(
     spend: float,
     return_pct: float,
     inflation_pct: float,
+    eth_growth_pct: float | None = None,
     buckets: list[Bucket],
     social_security: Sequence[SocialSecurityBenefit] = (),
     ltcg_0_ceiling: float,
@@ -76,11 +82,14 @@ def simulate_forecast(
     ordinary_brackets: list[Bracket] | None,
 ) -> ForecastResult:
     real_rate = (return_pct - inflation_pct) / 100
+    eth_rate = real_rate if eth_growth_pct is None else (eth_growth_pct - inflation_pct) / 100
     current = list(buckets)
     series: list[ForecastPoint] = []
     run_out_age: int | None = None
     for age in range(start_age, END_AGE + 1):
-        current = [_grow(bucket, real_rate) for bucket in current]
+        current = [
+            _grow(bucket, eth_rate if bucket.headroom_only else real_rate) for bucket in current
+        ]
         ss_income = sum(
             12 * benefit.monthly_amount for benefit in social_security if age >= benefit.start_age
         )
