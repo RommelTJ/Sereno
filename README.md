@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.13.0**
+**v1.14.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -588,6 +588,23 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.14.0 — Funds finish their edit path. `PUT /api/funds/{id}` learns to
+revise a fund's `name` and `emoji` alongside its monthly plan: the fund
+row is a dimension, not a fact — the same reasoning that already makes a
+category renameable — so its identity fields are mutable while the
+append-only `fund_entry` history stays untouched. A typo in a fund's
+name no longer costs the fund. The update is partial rather than a
+replace: every field is optional and only those the body carries are
+written, so the plan-only body the screen sent before still pauses a
+fund, a rename can't coalesce an active plan into a pause, and an
+explicit null emoji clears one while an omitted emoji keeps it. The
+Funds & goals row Edit form grows a Name input and the same curated
+emoji select the new-fund form uses, each prefilled from the fund, and
+Save round-trips all three. `target_amount` and `target_date` stay
+fixed at creation: `target_date` derives `kind`, so editing it would let
+a fund change kind after the fact — a behavior change, not a display
+one, and its own issue.
 
 v1.13.0 — The activity feed goes full-history. Fund entries join
 expenses and income as the third source in `GET /api/budget-month`'s
