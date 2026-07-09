@@ -64,19 +64,10 @@ export interface ActivityRow {
   tone: ActivityTone
 }
 
-// The newest five spend/funding items as display rows. An expense's emoji
-// comes from its category's envelope; every activity item funds the
-// fetched month, so a credit's sub names it; a "treat" — an expense in an
+// One activity item as a display row. An expense's emoji comes from its
+// category's envelope in the passed month; every activity item funds that
+// month, so a credit's sub names it; a "treat" — an expense in an
 // over-budget envelope — shows in red.
-export function recentActivity(
-  budget: BudgetMonth,
-  funds: Fund[],
-): ActivityRow[] {
-  return budget.activity
-    .slice(0, 5)
-    .map((item) => activityRow(item, budget, funds))
-}
-
 export function activityRow(
   item: ActivityItem,
   budget: BudgetMonth,
