@@ -16,6 +16,9 @@ const FORECAST_RUNS_OUT = {
   balance_at_100: 0,
 }
 
+// New purchases land in next year's simulation by default.
+const NEXT_YEAR = new Date().getFullYear() + 1
+
 // Taxable buckets emptied at 52 — six years short of the 59½ bridge.
 const FORECAST_BROKEN_BRIDGE = {
   ...FORECAST,
@@ -79,6 +82,92 @@ describe('bridge card', () => {
     const bridge = await screen.findByTestId('forecast-bridge')
     expect(bridge).toHaveTextContent('Need to cover 19.5 yrs')
     expect(screen.getByTestId('forecast-chart')).toHaveTextContent('age 40 → 100')
+  })
+})
+
+describe('planned purchases section', () => {
+  it('starts empty with only the add control', async () => {
+    render(<Forecast />)
+
+    const section = await screen.findByTestId('forecast-purchases')
+    expect(section).toHaveTextContent('Planned purchases')
+    expect(screen.getByTestId('forecast-purchase-add')).toBeInTheDocument()
+    expect(screen.queryByTestId('forecast-purchase-name-0')).not.toBeInTheDocument()
+  })
+
+  it('adds a purchase and refetches with its param', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `purchase=${NEXT_YEAR}%3A50000`,
+    )
+    expect(screen.getByTestId('forecast-purchase-name-0')).toHaveValue('New purchase')
+  })
+
+  it('re-runs the simulation as the amount slider moves', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.change(screen.getByTestId('forecast-purchase-amount-0'), {
+      target: { value: '250000' },
+    })
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `purchase=${NEXT_YEAR}%3A250000`,
+    )
+  })
+
+  it('moves the purchase year through its input', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.change(screen.getByTestId('forecast-purchase-year-0'), {
+      target: { value: '2040' },
+    })
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain('purchase=2040%3A50000')
+  })
+
+  it('stacks purchases as repeated params', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.click(screen.getByTestId('forecast-purchase-add'))
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `purchase=${NEXT_YEAR}%3A50000&purchase=${NEXT_YEAR}%3A50000`,
+    )
+  })
+
+  it('removes a purchase and refetches without it', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.click(screen.getByTestId('forecast-purchase-remove-0'))
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).not.toContain('purchase=')
+    expect(screen.queryByTestId('forecast-purchase-name-0')).not.toBeInTheDocument()
+  })
+
+  it('keeps names client-side without refetching', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    const calls = fetchMock.mock.calls.length
+    fireEvent.change(screen.getByTestId('forecast-purchase-name-0'), {
+      target: { value: 'House' },
+    })
+
+    expect(fetchMock.mock.calls.length).toBe(calls)
+    expect(screen.getByTestId('forecast-purchase-name-0')).toHaveValue('House')
   })
 })
 
