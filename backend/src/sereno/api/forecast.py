@@ -8,7 +8,11 @@ null ETH growth keeps the ETH bucket on the blended rate — the column
 is optional, never a prerequisite), and Social
 Security to the per-person stored rows (each on its own start age);
 the query params override each transiently — the Forecast screen's
-sliders are what-ifs, only Settings persists config. The sensitivity
+sliders are what-ifs, only Settings persists config. Planned
+purchases ride along the same way: repeated
+purchase=year:amount[:ongoing_delta] params map through the derived
+age onto the simulation, echo back resolved, and report the years
+whose lump didn't fit as unaffordable. The sensitivity
 table simulates whole percentages of the latest month's net worth
 from 2% to 6%, each level rounded to the nearest $1,000, so the 4%
 rule of thumb sits dead center. Null until a tax year, balances, a
@@ -16,15 +20,22 @@ spend target, and return/inflation figures exist.
 """
 
 import sqlite3
+from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from sereno.api.config import get_assumptions, get_social_security, get_spend_plan
 from sereno.api.sourcing import current_age, current_tax_param, load_buckets
 from sereno.db.connection import get_db
-from sereno.engine.forecast import ForecastResult, SocialSecurityBenefit, simulate_forecast
+from sereno.engine.forecast import (
+    END_AGE,
+    ForecastResult,
+    PlannedPurchase,
+    SocialSecurityBenefit,
+    simulate_forecast,
+)
 from sereno.engine.sourcing import Bracket, Bucket
 
 router = APIRouter()
@@ -38,6 +49,8 @@ Rate = Annotated[float | None, Query()]
 Monthly = Annotated[float | None, Query(ge=0)]
 
 StartAge = Annotated[float | None, Query(ge=0)]
+
+Purchases = Annotated[list[str] | None, Query()]
 
 SENSITIVITY_PERCENTAGES = (2, 3, 4, 5, 6)
 
@@ -54,6 +67,19 @@ class ForecastPointOut(BaseModel):
     brokerage: float
     retirement: float
     ss_income: float
+
+
+class PurchaseOut(BaseModel):
+    year: int
+    age: int
+    amount: float
+    ongoing_delta: float
+
+
+class UnaffordableOut(BaseModel):
+    year: int
+    age: int
+    short: float
 
 
 class SensitivityRow(BaseModel):
@@ -73,9 +99,11 @@ class Forecast(BaseModel):
     ss_spouse: float
     ss_start: float
     tax_year: int
+    purchases: list[PurchaseOut]
     series: list[ForecastPointOut]
     run_out_age: int | None
     balance_at_100: float
+    unaffordable: list[UnaffordableOut]
     sensitivity: list[SensitivityRow]
 
 
@@ -104,6 +132,38 @@ def _sensitivity_levels(db: sqlite3.Connection) -> list[float]:
     return [round(net_worth * pct / 100 / 1_000) * 1_000.0 for pct in SENSITIVITY_PERCENTAGES]
 
 
+def _parse_purchases(raw: list[str], start_age: int) -> list[PurchaseOut]:
+    """purchase=year:amount[:ongoing_delta], the year mapped onto the
+    simulation's age axis through the birthdate-derived current age.
+    Malformed values, past years, and years beyond the age-100 horizon
+    are 422s — a repeated scalar param should be hard to malform
+    silently."""
+    current_year = date.today().year
+    purchases: list[PurchaseOut] = []
+    for value in raw:
+        parts = value.split(":")
+        try:
+            if len(parts) not in (2, 3):
+                raise ValueError
+            year = int(parts[0])
+            amount = float(parts[1])
+            ongoing_delta = float(parts[2]) if len(parts) == 3 else 0.0
+        except ValueError:
+            detail = f"malformed purchase {value!r}: use year:amount[:ongoing_delta]"
+            raise HTTPException(status_code=422, detail=detail) from None
+        age = start_age + (year - current_year)
+        if year < current_year:
+            detail = f"purchase year {year} is in the past"
+            raise HTTPException(status_code=422, detail=detail)
+        if age > END_AGE:
+            detail = f"purchase year {year} falls beyond age {END_AGE}"
+            raise HTTPException(status_code=422, detail=detail)
+        purchases.append(
+            PurchaseOut(year=year, age=age, amount=amount, ongoing_delta=ongoing_delta)
+        )
+    return purchases
+
+
 @router.get("/forecast")
 def get_forecast(
     db: Db,
@@ -114,7 +174,12 @@ def get_forecast(
     ss_you: Monthly = None,
     ss_spouse: Monthly = None,
     ss_start: StartAge = None,
+    purchase: Purchases = None,
 ) -> Forecast | None:
+    start_age = current_age()
+    # Parsed before the prerequisite checks: a malformed purchase is a
+    # 422 even on an empty database, like any other invalid param.
+    purchases = _parse_purchases(purchase or [], start_age)
     tax = current_tax_param(db)
     if tax is None:
         return None
@@ -179,7 +244,10 @@ def get_forecast(
         else None
     )
 
-    start_age = current_age()
+    engine_purchases = [
+        PlannedPurchase(age=p.age, amount=p.amount, ongoing_delta=p.ongoing_delta)
+        for p in purchases
+    ]
 
     def simulate(spend_level: float) -> ForecastResult:
         return simulate_forecast(
@@ -190,6 +258,7 @@ def get_forecast(
             eth_growth_pct=resolved_eth_growth,
             buckets=buckets,
             social_security=benefits,
+            purchases=engine_purchases,
             ltcg_0_ceiling=tax.ltcg_0_ceiling,
             std_deduction=tax.std_deduction or 0.0,
             ordinary_brackets=brackets,
@@ -215,8 +284,15 @@ def get_forecast(
         ss_spouse=resolved_spouse,
         ss_start=resolved_start,
         tax_year=tax.tax_year,
+        purchases=purchases,
         series=_series(result, buckets),
         run_out_age=result.run_out_age,
         balance_at_100=result.balance_at_100,
+        unaffordable=[
+            UnaffordableOut(
+                year=date.today().year + (miss.age - start_age), age=miss.age, short=miss.short
+            )
+            for miss in result.unaffordable
+        ],
         sensitivity=[sensitivity_row(level) for level in _sensitivity_levels(db)],
     )
