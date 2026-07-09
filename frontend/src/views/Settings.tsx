@@ -60,6 +60,7 @@ import {
   envelopeInput,
   formatPct,
   formatRate,
+  guardrailPreview,
   KIND_OPTIONS,
   PRIORITY_OPTIONS,
   socialSecurityEdits,
@@ -630,6 +631,8 @@ function AssumptionsCard({
   const set = (key: keyof typeof values) => (value: string) =>
     setValues((current) => ({ ...current, [key]: value }))
 
+  const preview = guardrailPreview(values)
+
   return (
     <Card
       title="Assumptions"
@@ -668,6 +671,26 @@ function AssumptionsCard({
             value={values.spend}
             onChange={set('spend')}
           />
+          <EditField
+            id="assumption-initial-rate"
+            label="Initial rate %"
+            value={values.initialRatePct}
+            onChange={set('initialRatePct')}
+          />
+          <EditField
+            id="assumption-band"
+            label="Guardrail band %"
+            value={values.bandPct}
+            onChange={set('bandPct')}
+          />
+          {preview && (
+            <p
+              data-testid="band-preview"
+              className="text-[11.5px] text-muted-2 sm:col-span-2"
+            >
+              {preview}
+            </p>
+          )}
         </div>
       ) : (
         <div className="mt-3">
@@ -689,6 +712,19 @@ function AssumptionsCard({
             value={
               spendPlan ? `${formatUsd(spendPlan.annual_target)} / yr` : '—'
             }
+          />
+          <ConfigLine
+            label="Initial rate"
+            value={
+              spendPlan?.initial_rate != null
+                ? formatRate(spendPlan.initial_rate)
+                : '—'
+            }
+            hint="· at retirement"
+          />
+          <ConfigLine
+            label="Guardrail band"
+            value={spendPlan ? `±${formatRate(spendPlan.guardrail_band)}` : '—'}
           />
         </div>
       )}

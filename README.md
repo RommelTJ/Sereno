@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.10.0**
+**v1.11.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -446,10 +446,11 @@ The forecast slice (the third Plan engine):
   trigger cards naming the portfolio levels where the next rule fires.
   The slider's bounds derive from the band edges, so both rails are
   always reachable whatever the portfolio and plan sizes are. Until a
-  spend plan and balances exist, the view points at Settings & data —
-  and when no account is marked investable at all, the empty state says
-  so and points at the account Edit instead, since balances alone could
-  never light it up.
+  spend plan and balances exist, the view links to the Assumptions card
+  under Settings & data, where the annual target, the at-retirement
+  initial rate, and the guardrail band are all set — and when no account
+  is marked investable at all, the empty state says so and points at the
+  account Edit instead, since balances alone could never light it up.
 - **Withdrawal sourcing** (<http://localhost:5173/withdrawals>) — the
   "where does the money come from?" view, every figure from
   `GET /api/sourcing`. Left, the sequencing waterfall: target net
@@ -511,7 +512,8 @@ The forecast slice (the third Plan engine):
   on Settings — funds live on Funds & Goals, where their targets and
   progress already are. Below them sit the Envelopes card, the
   Assumptions summary
-  (return, inflation, ETH growth, planned spend), the Social Security
+  (return, inflation, ETH growth, planned spend, the at-retirement
+  initial withdrawal rate, and the guardrail band), the Social Security
   panel (You/Spouse $/mo and start age), the latest year's tax
   parameters (LTCG ceilings, NIIT, standard deduction, ordinary
   brackets), and the dark append-only data-model note pointing at
@@ -528,6 +530,11 @@ The forecast slice (the third Plan engine):
   new rows effective today (only configs whose values actually changed
   are posted), the tax card's Edit revises the displayed year in place,
   and + Add creates the next year prefilled from the current one. The
+  Assumptions card's rate and band fields take percentages for the
+  stored fractions and preview the derived guardrails — initial rate ×
+  (1 ± band) — live under the fields; a blank rate clears the anchor
+  (Guardrails returns to its empty state), and a blank band falls back
+  to the ±20% default. The
   Forecast screen's future sliders stay transient what-if overrides.
 
 ### Tests, linters, and type checkers
@@ -550,6 +557,20 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.11.0 — The Guardrails anchor becomes editable. The Assumptions card
+gains "Initial rate %" and "Guardrail band %" fields beside the planned
+spend: saving appends a new effective-dated `spend_plan` row through
+the existing single write path, so a database populated entirely
+through the UI can finally light up the Guardrails screen. The fields
+take percentages for the stored fractions (2.94 ↔ 0.0294), preview the
+derived guardrails — initial rate × (1 ± band) — live under the
+fields, and read back in the card's summary; a blank rate clears the
+anchor, returning Guardrails to its empty state, and a blank band
+falls back to the schema's ±20% default. The Guardrails empty state
+now links to the Assumptions card instead of describing a screen that
+couldn't set the rate. Frontend-only: `POST /api/spend-plan` accepted
+both columns all along.
 
 v1.10.0 — One-time fund top-ups and releases. Funds gain the one-off
 sibling of the automatic monthly contribution:

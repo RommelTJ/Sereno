@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import type { Account, Guardrails as GuardrailsData } from '../api.ts'
 import { fetchAccounts, fetchGuardrails } from '../api.ts'
 import {
@@ -83,8 +84,11 @@ function Guardrails() {
             <>
               Guardrails need a spend plan — an annual target and the
               at-retirement withdrawal rate — plus at least one month of
-              balances. Add the plan under Settings &amp; data, then enter
-              this month's balances in Ledger entries.
+              balances. Set both on the{' '}
+              <Link to="/settings" className="text-accent underline">
+                Assumptions card under Settings &amp; data
+              </Link>
+              , then enter this month's balances in Ledger entries.
             </>
           ) : (
             <>
