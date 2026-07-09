@@ -8,11 +8,18 @@ import {
   topUpFund,
   updateFund,
 } from '../api.ts'
+import EmojiSelect from '../components/EmojiSelect.tsx'
 import GhostButton from '../components/GhostButton.tsx'
 import NewFundForm from '../components/NewFundForm.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
 import type { NewFund } from '../funds.ts'
-import { fundPlanEdit, fundView, topUpAmount, totalParked } from '../funds.ts'
+import {
+  FUND_EMOJI_OPTIONS,
+  fundEdit,
+  fundView,
+  topUpAmount,
+  totalParked,
+} from '../funds.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
 
 // One inline form open per row at a time: the plan edit and the top-up
@@ -34,10 +41,14 @@ function FundRow({
   const view = fundView(fund)
   const [form, setForm] = useState<RowForm>(null)
   const [saving, setSaving] = useState(false)
+  const [name, setName] = useState('')
+  const [emoji, setEmoji] = useState('')
   const [monthly, setMonthly] = useState('')
   const [amount, setAmount] = useState('')
 
   const startEditing = () => {
+    setName(fund.name)
+    setEmoji(fund.emoji ?? '')
     setMonthly(fund.monthly_plan === null ? '' : String(fund.monthly_plan))
     setForm('plan')
   }
@@ -48,9 +59,10 @@ function FundRow({
   }
 
   const save = async () => {
+    if (!name.trim()) return
     setSaving(true)
     try {
-      await onSavePlan(fund.id, fundPlanEdit(monthly))
+      await onSavePlan(fund.id, fundEdit(name, emoji, monthly))
       setForm(null)
     } finally {
       setSaving(false)
@@ -103,7 +115,24 @@ function FundRow({
         {view.note}
       </p>
       {form === 'plan' && (
-        <div className="mt-2 flex items-end gap-2">
+        <div className="mt-2 flex flex-wrap items-end gap-2">
+          <label htmlFor={`fund-name-${fund.id}`} className="block">
+            <FieldLabel text="Name" />
+            <input
+              id={`fund-name-${fund.id}`}
+              className="mt-1 w-[180px] rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <div className="w-[150px]">
+            <EmojiSelect
+              id={`fund-emoji-${fund.id}`}
+              value={emoji}
+              options={FUND_EMOJI_OPTIONS}
+              onChange={setEmoji}
+            />
+          </div>
           <label htmlFor={`fund-plan-${fund.id}`} className="block">
             <FieldLabel text="$ / month" />
             <input

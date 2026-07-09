@@ -9,7 +9,14 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, NonNegativeFloat, PositiveFloat, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    NonNegativeFloat,
+    PositiveFloat,
+    StringConstraints,
+    field_validator,
+)
 
 from sereno.db.connection import get_db
 from sereno.engine.funds import derive_note, due_contribution_months
@@ -57,9 +64,14 @@ class FundCreate(BaseModel):
 
 
 class FundUpdate(BaseModel):
-    """A 0 or blank plan is stored as NULL — pausing and clearing are the
-    same state, and "$0 / mo" never renders anywhere."""
+    """A partial update: only the fields present in the body are written,
+    so a plan-only edit leaves the name and emoji alone and a rename leaves
+    the plan funding. An explicit null emoji clears it. A 0 or blank plan is
+    stored as NULL — pausing and clearing are the same state, and "$0 / mo"
+    never renders anywhere."""
 
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
+    emoji: str | None = None
     monthly_plan: NonNegativeFloat | None = None
 
 
@@ -191,17 +203,25 @@ def create_fund(fund: FundCreate, db: Db) -> Fund:
 
 @router.put("/funds/{fund_id}")
 def update_fund(fund_id: int, update: FundUpdate, db: Db) -> Fund:
-    """Revises the monthly plan in place — the fund row is a dimension,
-    like a category rename, so the append-only entry history is untouched.
-    A NULL plan pauses funding without archiving: the balance stays parked
-    and the fund drops out of the monthly catch-up."""
+    """Revises the fund row in place — it is a dimension, not a fact, like
+    a category rename, so its identity fields are mutable and the
+    append-only entry history is untouched. Only the fields the body
+    carries are written: a plan-only edit keeps the name and emoji, and a
+    rename keeps the fund funding. A NULL plan pauses funding without
+    archiving: the balance stays parked and the fund drops out of the
+    monthly catch-up."""
     if db.execute("SELECT 1 FROM fund WHERE id = ?", (fund_id,)).fetchone() is None:
         raise HTTPException(status_code=404, detail="fund not found")
-    db.execute(
-        "UPDATE fund SET monthly_plan = ? WHERE id = ?",
-        (update.monthly_plan or None, fund_id),
-    )
-    db.commit()
+    # exclude_unset, not exclude_none: an omitted emoji keeps the stored
+    # one, while an explicit null clears it — and an omitted plan cannot
+    # coalesce an active fund's funding into a pause.
+    fields = update.model_dump(exclude_unset=True)
+    if "monthly_plan" in fields:
+        fields["monthly_plan"] = fields["monthly_plan"] or None
+    if fields:
+        assignments = ", ".join(f"{column} = ?" for column in fields)
+        db.execute(f"UPDATE fund SET {assignments} WHERE id = ?", (*fields.values(), fund_id))
+        db.commit()
     row = db.execute(_FUND_QUERY + " WHERE id = ?", (fund_id,)).fetchone()
     return _fund(row)
 

@@ -325,9 +325,13 @@ export interface FundInput {
   monthly_plan?: number
 }
 
-// Revises the fund's monthly plan in place — the fund row is a dimension,
-// so its entry history is untouched. null pauses funding without archiving.
+// Revises the fund in place — the fund row is a dimension, so its identity
+// fields are mutable and its entry history is untouched. Every field is
+// optional server-side: an omitted one keeps its stored value. A null
+// monthly_plan pauses funding without archiving; a null emoji clears it.
 export interface FundUpdate {
+  name?: string
+  emoji?: string | null
   monthly_plan: number | null
 }
 

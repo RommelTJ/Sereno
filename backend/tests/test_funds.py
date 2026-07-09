@@ -476,6 +476,65 @@ class TestUpdateFund:
             (first_of_month(), 10000, 0, None),
         ]
 
+    def test_renames_the_fund_in_place(self, client):
+        # name and emoji are inert display fields on a dimension row: a
+        # rename never touches the entries that hang off the fund.
+        fund_id = insert_fund("Emergancy fund", target_amount=30000, emoji="🚨")
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.put(
+            f"/api/funds/{fund_id}", json={"name": "Emergency fund", "emoji": "🛟"}
+        )
+        assert response.status_code == 200
+        fund = response.json()
+        assert fund["name"] == "Emergency fund"
+        assert fund["emoji"] == "🛟"
+        (listed,) = client.get("/api/funds").json()
+        assert listed["name"] == "Emergency fund"
+        assert listed["emoji"] == "🛟"
+
+    def test_a_plan_only_update_leaves_the_name_and_emoji_untouched(self, client):
+        # Every field is optional, so the plan-only body the funds screen
+        # sent before this endpoint learned to rename stays valid.
+        fund_id = insert_fund("Travel fund", monthly_plan=300, emoji="✈️")
+        insert_fund_entry(fund_id, first_of_month(), 4200)
+        response = client.put(f"/api/funds/{fund_id}", json={"monthly_plan": 500})
+        assert response.status_code == 200
+        fund = response.json()
+        assert fund["name"] == "Travel fund"
+        assert fund["emoji"] == "✈️"
+        assert fund["monthly_plan"] == 500
+
+    def test_a_name_only_update_leaves_the_plan_untouched(self, client):
+        # The mirror of the above: an absent monthly_plan means "leave it",
+        # not "pause it" — a rename must not stop the fund's funding.
+        fund_id = insert_fund("Travel fund", monthly_plan=300)
+        insert_fund_entry(fund_id, first_of_month(), 4200)
+        response = client.put(f"/api/funds/{fund_id}", json={"name": "Japan fund"})
+        assert response.status_code == 200
+        assert response.json()["monthly_plan"] == 300
+
+    def test_a_null_emoji_clears_it(self, client):
+        # An explicit null clears the emoji; only omitting the field leaves
+        # it alone. The funds screen's blank emoji option sends the null.
+        fund_id = insert_fund("Travel fund", emoji="✈️")
+        insert_fund_entry(fund_id, first_of_month(), 4200)
+        response = client.put(f"/api/funds/{fund_id}", json={"emoji": None})
+        assert response.status_code == 200
+        assert response.json()["emoji"] is None
+
+    def test_rejects_a_blank_name(self, client):
+        fund_id = insert_fund("Emergency fund")
+        response = client.put(f"/api/funds/{fund_id}", json={"name": "   "})
+        assert response.status_code == 422
+
+    def test_a_rename_leaves_the_entry_history_untouched(self, client):
+        fund_id = insert_fund("Emergancy fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        client.put(f"/api/funds/{fund_id}", json={"name": "Emergency fund"})
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(), 10000, 0, None),
+        ]
+
     def test_rejects_a_negative_plan(self, client):
         fund_id = insert_fund("Emergency fund", monthly_plan=500)
         response = client.put(f"/api/funds/{fund_id}", json={"monthly_plan": -5})

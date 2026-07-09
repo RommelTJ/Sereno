@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.13.0**
+**v1.14.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -250,13 +250,17 @@ The funds slice:
   telling their kinds apart: `'spend'` for the drawdown behind a
   fund-funded expense, `'monthly_plan'` for an automatic contribution,
   null for the hand-entered rows this endpoint appends.
-- `PUT /api/funds/{id}` — revises the fund's monthly plan in place —
-  the fund row is a dimension, like a category rename, so the
-  append-only entry history is untouched. A null plan (0 is normalized
-  to NULL, so "$0 / mo" never renders) pauses funding without
-  archiving: the balance stays parked and the fund drops out of the
-  monthly catch-up until a new plan is set. A negative plan is a 422;
-  an unknown fund is a 404.
+- `PUT /api/funds/{id}` — revises the fund's `name`, `emoji` and
+  `monthly_plan` in place — the fund row is a dimension, like a category
+  rename, so its identity fields are mutable and the append-only entry
+  history is untouched. The update is partial: every field is optional
+  and only those the body carries are written, so a plan-only edit keeps
+  the name and a rename keeps the fund funding. An explicit null emoji
+  clears it; an omitted one keeps it. A null plan (0 is normalized to
+  NULL, so "$0 / mo" never renders) pauses funding without archiving:
+  the balance stays parked and the fund drops out of the monthly
+  catch-up until a new plan is set. A blank name or a negative plan is a
+  422; an unknown fund is a 404.
 - `POST /api/funds/{id}/top-up` — a one-time move between the month's
   safe-to-spend and the fund, the one-off sibling of the automatic
   monthly contribution: appends a `fund_entry` with the delta as its
@@ -445,10 +449,12 @@ The forecast slice (the third Plan engine):
   safe-to-spend and the fund (a negative amount releases part of the
   balance back to spendable), and refetches so the balance and note move
   immediately — an Edit
-  button that opens an inline $ / month input prefilled with the current
-  plan — Save revises it via `PUT /api/funds/{id}` (a blank input pauses
-  funding without archiving) and refetches so the note recalculates,
-  Cancel closes without a request — and an
+  button that opens an inline Name input, the same curated emoji select as
+  the new-fund form, and a $ / month input, each prefilled with the fund's
+  current values — Save revises all three via `PUT /api/funds/{id}` (a
+  blank $ / month pauses funding without archiving, a blank emoji clears
+  it, and a blank name saves nothing) and refetches so the name, emoji and
+  note update, Cancel closes without a request — and an
   Archive button that retires the fund via `POST /api/funds/{id}/archive`
   and refetches the list — a finished goal disappears from the card, the
   total parked, and the safe-to-spend "Funded from" options, and its
@@ -582,6 +588,23 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.14.0 — Funds finish their edit path. `PUT /api/funds/{id}` learns to
+revise a fund's `name` and `emoji` alongside its monthly plan: the fund
+row is a dimension, not a fact — the same reasoning that already makes a
+category renameable — so its identity fields are mutable while the
+append-only `fund_entry` history stays untouched. A typo in a fund's
+name no longer costs the fund. The update is partial rather than a
+replace: every field is optional and only those the body carries are
+written, so the plan-only body the screen sent before still pauses a
+fund, a rename can't coalesce an active plan into a pause, and an
+explicit null emoji clears one while an omitted emoji keeps it. The
+Funds & goals row Edit form grows a Name input and the same curated
+emoji select the new-fund form uses, each prefilled from the fund, and
+Save round-trips all three. `target_amount` and `target_date` stay
+fixed at creation: `target_date` derives `kind`, so editing it would let
+a fund change kind after the fact — a behavior change, not a display
+one, and its own issue.
 
 v1.13.0 — The activity feed goes full-history. Fund entries join
 expenses and income as the third source in `GET /api/budget-month`'s
