@@ -700,6 +700,34 @@ describe('Assumptions card', () => {
     expect(within(card).getByLabelText('Initial rate %')).toHaveValue('2.94')
     expect(within(card).getByLabelText('Guardrail band %')).toHaveValue('20')
   })
+
+  it('previews the derived guardrails under the rate and band fields', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    expect(within(card).getByTestId('band-preview')).toHaveTextContent(
+      'Guardrails: 2.35% – 3.53%',
+    )
+
+    fireEvent.change(within(card).getByLabelText('Guardrail band %'), {
+      target: { value: '10' },
+    })
+    expect(within(card).getByTestId('band-preview')).toHaveTextContent(
+      'Guardrails: 2.65% – 3.23%',
+    )
+  })
+
+  it('hides the preview while the rate is blank', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Initial rate %'), {
+      target: { value: '' },
+    })
+    expect(within(card).queryByTestId('band-preview')).not.toBeInTheDocument()
+  })
 })
 
 describe('Social Security card', () => {
