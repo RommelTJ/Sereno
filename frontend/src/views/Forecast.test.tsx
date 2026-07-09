@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   ACCOUNTS,
@@ -211,6 +211,70 @@ describe('planned purchases section', () => {
 
     expect(fetchMock.mock.calls.length).toBe(calls)
     expect(screen.getByTestId('forecast-purchase-name-0')).toHaveValue('House')
+  })
+})
+
+describe('max affordable button', () => {
+  const MAX_AFFORDABLE = {
+    year: NEXT_YEAR,
+    age: 39,
+    max_amount: 640_000,
+    binding_constraint: 'purchase_year_liquidity',
+    run_out_age: null,
+    balance_at_100: 1_200_000,
+  }
+
+  it('fills the amount from the solver and re-runs the forecast', async () => {
+    const fetchMock = stubApi({
+      '/api/forecast': FORECAST,
+      '/api/accounts': ACCOUNTS,
+      '/api/forecast/max-affordable': MAX_AFFORDABLE,
+    })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.click(screen.getByTestId('forecast-purchase-max-0'))
+
+    const solverCall = fetchMock.mock.calls.find((call) =>
+      String(call[0]).includes('/api/forecast/max-affordable'),
+    )
+    expect(String(solverCall?.[0])).toContain(`year=${NEXT_YEAR}`)
+
+    // The response fills the field, names the constraint, and re-runs
+    // the simulation at the ceiling.
+    expect(
+      await screen.findByTestId('forecast-purchase-constraint-0'),
+    ).toHaveTextContent('capped by the buckets reachable that year')
+    expect(screen.getByTestId('forecast-purchase-amount-0')).toHaveValue('640000')
+    await waitFor(() =>
+      expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+        `purchase=${NEXT_YEAR}%3A640000`,
+      ),
+    )
+  })
+
+  it('solves against the other purchases, not the row itself', async () => {
+    const fetchMock = stubApi({
+      '/api/forecast': FORECAST,
+      '/api/accounts': ACCOUNTS,
+      '/api/forecast/max-affordable': MAX_AFFORDABLE,
+    })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.click(screen.getByTestId('forecast-purchase-add'))
+    fireEvent.change(screen.getByTestId('forecast-purchase-year-1'), {
+      target: { value: '2040' },
+    })
+    fireEvent.click(screen.getByTestId('forecast-purchase-max-0'))
+
+    const solverUrl = String(
+      fetchMock.mock.calls
+        .find((call) => String(call[0]).includes('/api/forecast/max-affordable'))?.[0],
+    )
+    expect(solverUrl).toContain(`year=${NEXT_YEAR}`)
+    expect(solverUrl).toContain('purchase=2040%3A50000')
+    expect(solverUrl).not.toContain(`purchase=${NEXT_YEAR}`)
   })
 })
 
