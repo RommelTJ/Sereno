@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import NetWorthProvider from '../components/NetWorthProvider.tsx'
@@ -286,7 +286,7 @@ describe('Recent activity', () => {
     expect(link).toHaveAttribute('href', '/safe-to-spend')
   })
 
-  it('caps the list at the five newest items', async () => {
+  it('renders every item in the current month, uncapped', async () => {
     stubDashboard({
       '/api/budget-month': {
         ...BUDGET_MONTH,
@@ -303,7 +303,69 @@ describe('Recent activity', () => {
     })
     renderDashboard()
 
-    expect(await screen.findAllByTestId('activity-row')).toHaveLength(5)
+    expect(await screen.findAllByTestId('activity-row')).toHaveLength(7)
+  })
+
+  it('sections the feed under a dated month header', async () => {
+    stubDashboard()
+    renderDashboard()
+
+    expect(await screen.findByText('June 2026')).toBeInTheDocument()
+  })
+
+  it('pages the previous month onto the feed', async () => {
+    const routes: Record<string, unknown> = {
+      '/api/net-worth': NET_WORTH,
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/guardrails': GUARDRAILS,
+      '/api/forecast': FORECAST,
+    }
+    const fetchMock = stubApi(routes)
+    renderDashboard()
+    const button = await screen.findByRole('button', { name: '← May 2026' })
+
+    // The stub reads routes at call time, so the next budget-month fetch
+    // returns May — its own categories, so May emojis resolve from May.
+    routes['/api/budget-month'] = {
+      ...BUDGET_MONTH,
+      month: '2026-05',
+      categories: [
+        {
+          id: 9,
+          name: 'Utilities',
+          emoji: '🔌',
+          planned: 200,
+          spent: 118.21,
+          remaining: 81.79,
+        },
+      ],
+      activity: [
+        {
+          type: 'expense',
+          id: 77,
+          txn_date: '2026-05-12',
+          amount: 118.21,
+          category: 'Utilities',
+          source: null,
+          note: null,
+        },
+      ],
+    }
+    fireEvent.click(button)
+
+    expect(await screen.findByText('May 2026')).toBeInTheDocument()
+    expect(screen.getByText('🔌')).toBeInTheDocument()
+    expect(screen.getByText('Utilities · May 12')).toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => input === '/api/budget-month?month=2026-05',
+      ),
+    ).toBe(true)
+    // The button reappears at the new bottom, one month further back.
+    expect(
+      screen.getByRole('button', { name: '← April 2026' }),
+    ).toBeInTheDocument()
   })
 
   it('keeps the empty state when the month has no activity', async () => {
