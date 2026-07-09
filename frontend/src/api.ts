@@ -240,6 +240,7 @@ export interface Forecast {
   start_age: number
   return_pct: number
   inflation_pct: number
+  eth_growth_pct: number | null
   ss_you: number
   ss_spouse: number
   ss_start: number
@@ -256,6 +257,7 @@ export interface ForecastOverrides {
   spend?: number
   return_pct?: number
   inflation_pct?: number
+  eth_growth_pct?: number
   ss_you?: number
   ss_spouse?: number
   ss_start?: number

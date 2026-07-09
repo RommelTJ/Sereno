@@ -206,6 +206,38 @@ describe('assumption controls', () => {
     expect(fetchMock).toHaveBeenLastCalledWith('/api/forecast?return_pct=5.5')
   })
 
+  it('seeds the ETH growth slider from the response', async () => {
+    stubApi({
+      '/api/forecast': { ...FORECAST, eth_growth_pct: 15 },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Forecast />)
+
+    const slider = await screen.findByTestId('forecast-eth')
+    expect(slider).toHaveValue('15')
+    expect(slider).toHaveAttribute('min', '-85')
+    expect(slider).toHaveAttribute('max', '470')
+    expect(slider).toHaveAttribute('step', '1')
+  })
+
+  it('falls back to the return rate while ETH growth is unset', async () => {
+    // A null eth_growth_pct means the engine grows ETH at the blended
+    // rate — the slider shows exactly that.
+    render(<Forecast />)
+
+    expect(await screen.findByTestId('forecast-eth')).toHaveValue('7')
+  })
+
+  it('refetches at a what-if ETH growth rate', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+    const slider = await screen.findByTestId('forecast-eth')
+
+    fireEvent.change(slider, { target: { value: '28' } })
+
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/forecast?eth_growth_pct=28')
+  })
+
   it('refetches at a what-if inflation', async () => {
     const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
     render(<Forecast />)
