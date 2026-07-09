@@ -7,7 +7,7 @@ import {
   fetchFunds,
 } from '../api.ts'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
-import FundingForm from '../components/FundingForm.tsx'
+import IncomeForm from '../components/IncomeForm.tsx'
 import FundsCard from '../components/FundsCard.tsx'
 import SpendingForm from '../components/SpendingForm.tsx'
 import { formatUsd } from '../ledger.ts'
@@ -73,7 +73,7 @@ function SafeToSpend() {
               funds={funds}
               onAdd={addExpense}
             />
-            <FundingForm onAdd={addIncome} />
+            <IncomeForm onAdd={addIncome} />
           </div>
         </>
       )}
