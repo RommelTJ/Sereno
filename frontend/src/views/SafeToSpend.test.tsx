@@ -254,11 +254,18 @@ describe('Add a spending item', () => {
   })
 })
 
-describe('Add a funding item', () => {
+describe('Add an income item', () => {
+  it('titles the form as income, freeing funding for fund entries', async () => {
+    render(<SafeToSpend />)
+
+    const form = await screen.findByTestId('income-form')
+    expect(within(form).getByText('Add an income item')).toBeInTheDocument()
+  })
+
   it('offers the current and next two months as the funds month', async () => {
     render(<SafeToSpend />)
 
-    const form = await screen.findByTestId('funding-form')
+    const form = await screen.findByTestId('income-form')
     const select = within(form).getByLabelText('Funds month')
     const options = within(select).getAllByRole('option')
     expect(
@@ -277,7 +284,7 @@ describe('Add a funding item', () => {
     }
     const fetchMock = stubApi(routes)
     render(<SafeToSpend />)
-    const form = await screen.findByTestId('funding-form')
+    const form = await screen.findByTestId('income-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
       target: { value: '2,400' },
@@ -294,7 +301,7 @@ describe('Add a funding item', () => {
       safe_to_spend: 6_070,
     }
     fireEvent.click(
-      within(form).getByRole('button', { name: '+ Add funding row' }),
+      within(form).getByRole('button', { name: '+ Add income row' }),
     )
 
     expect(await screen.findByText('$6,070')).toBeInTheDocument()
@@ -311,7 +318,7 @@ describe('Add a funding item', () => {
   it('maps every source option onto the API source values', async () => {
     render(<SafeToSpend />)
 
-    const form = await screen.findByTestId('funding-form')
+    const form = await screen.findByTestId('income-form')
     const select = within(form).getByLabelText('Source')
     expect(
       within(select)
@@ -329,7 +336,7 @@ describe('Add a funding item', () => {
   it('explains the rollover behavior', async () => {
     render(<SafeToSpend />)
 
-    const form = await screen.findByTestId('funding-form')
+    const form = await screen.findByTestId('income-form')
     expect(within(form).getByText('Rollover')).toBeInTheDocument()
     expect(
       within(form).getByText(/rolls into the next month's funding/),
@@ -342,10 +349,10 @@ describe('Add a funding item', () => {
       '/api/funds': FUNDS,
     })
     render(<SafeToSpend />)
-    const form = await screen.findByTestId('funding-form')
+    const form = await screen.findByTestId('income-form')
 
     fireEvent.click(
-      within(form).getByRole('button', { name: '+ Add funding row' }),
+      within(form).getByRole('button', { name: '+ Add income row' }),
     )
 
     expect(postBody(fetchMock, '/api/income')).toBeUndefined()
@@ -370,9 +377,9 @@ describe('Responsive layout', () => {
     expect(
       within(spending).getByLabelText('Amount').closest('.grid'),
     ).toHaveClass('grid-cols-1', 'sm:grid-cols-2')
-    const funding = screen.getByTestId('funding-form')
+    const income = screen.getByTestId('income-form')
     expect(
-      within(funding).getByLabelText('Amount').closest('.grid'),
+      within(income).getByLabelText('Amount').closest('.grid'),
     ).toHaveClass('grid-cols-1', 'sm:grid-cols-2')
   })
 
