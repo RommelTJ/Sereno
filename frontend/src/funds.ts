@@ -107,10 +107,20 @@ export function newFund(
   }
 }
 
-// The row edit's raw "$ / month" field → what to PUT. A blank (or 0) plan
-// becomes null, pausing the fund's monthly funding without archiving it.
-export function fundPlanEdit(rawMonthly: string): FundUpdate {
-  return { monthly_plan: parseAmount(rawMonthly) || null }
+// The row edit's raw fields → what to PUT. A blank (or 0) plan becomes
+// null, pausing the fund's monthly funding without archiving it, and a
+// blank emoji becomes null, clearing it. The form seeds every field from
+// the fund, so an untouched one round-trips its current value.
+export function fundEdit(
+  name: string,
+  emoji: string,
+  rawMonthly: string,
+): FundUpdate {
+  return {
+    name: name.trim(),
+    emoji: emoji || null,
+    monthly_plan: parseAmount(rawMonthly) || null,
+  }
 }
 
 // The row Top up's raw "$ amount" field → the signed delta to post. A
