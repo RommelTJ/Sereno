@@ -87,6 +87,19 @@ describe('Assets card', () => {
     expect(screen.queryByText('Old boat')).not.toBeInTheDocument()
   })
 
+  it('offers the curated emoji options in a select', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('assets-card')
+    const select = within(card).getByLabelText('Emoji')
+    expect(
+      within(select).getByRole('option', { name: '⚡ Ethereum' }),
+    ).toBeInTheDocument()
+    expect(
+      within(select).getByRole('option', { name: '🏡 Mortgage' }),
+    ).toBeInTheDocument()
+  })
+
   it('adds an asset and refreshes the lists', async () => {
     const liveRoutes: Record<string, unknown> = routes()
     const fetchMock = stubApi(liveRoutes)

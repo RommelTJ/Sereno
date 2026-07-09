@@ -375,22 +375,12 @@ function AccountsCard({
           value={values.name}
           onChange={set('name')}
         />
-        <label htmlFor={`${idPrefix}-emoji`} className="block">
-          <FieldLabel text="Emoji" />
-          <select
-            id={`${idPrefix}-emoji`}
-            className="mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2 text-sm"
-            value={values.emoji}
-            onChange={(event) => set('emoji')(event.target.value)}
-          >
-            <option value="">—</option>
-            {ASSET_EMOJI_OPTIONS.map((option) => (
-              <option key={option.label} value={option.emoji}>
-                {option.emoji} {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <EmojiSelect
+          id={`${idPrefix}-emoji`}
+          value={values.emoji}
+          options={ASSET_EMOJI_OPTIONS}
+          onChange={set('emoji')}
+        />
         <EditField
           id={`${idPrefix}-value`}
           label="Initial value"
