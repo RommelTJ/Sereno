@@ -197,7 +197,14 @@ The budget slice:
   goes negative), the Safe-to-spend headline
   (`baseline − fund_contributions − total_spent`, where the baseline is the
   month's stored funding — never recomputed from live spend), and the
-  recent-activity list (spending and funding merged, newest first).
+  activity list — expense lines, income events, and fund entries merged
+  newest first. A fund entry carries its fund's name and its source, and
+  only `monthly_plan` and `top_up` rows are listed — exactly the set the
+  `fund_contributions` headline subtracts, so the feed reconciles with the
+  number above it: a `spend` drawdown would double-count its expense line,
+  and hand-entered rows are balance restatements that never touched the
+  headline. Having no `budget_month` column, fund entries scope by
+  calendar month, the way the headline already does.
   Fund-funded expenses stay out of `total_spent` and the envelope bars —
   they were paid from parked money, and the fund's drawdown already
   released the earmark — and `fund_contributions` is the month's automatic
@@ -371,9 +378,15 @@ The forecast slice (the third Plan engine):
   progress bar, and the Funds & goals card shows the total parked and a
   top-3 mini list (percent to target; an open-ended fund shows its
   balance) from `GET /api/funds` — both deep-link to their views. Recent
-  activity lists the month's five newest spending and funding items as
-  emoji-tile rows with signed amounts — credits in green, debits in ink,
-  and expenses whose envelope is over budget in red — and refreshes on
+  activity lists the full current month — spending, income, and fund
+  entries merged newest first — as emoji-tile rows with signed amounts
+  under a dated month header: credits in green, debits in ink, expenses
+  whose envelope is over budget in red, and fund entries on an amber tile
+  with the fund's own emoji (💰 once the fund is archived), signed by
+  their effect on the headline — a contribution parks money, a release
+  frees it. A "← May 2026"-style button at the bottom pages the previous
+  month in as its own dated section, one month per click, through the
+  same `?month=` param; the feed refreshes on
   every visit as items are added elsewhere. The Spend guardrail card
   shows the live withdrawal rate, mini band, and zone status from
   `GET /api/guardrails` (muted until a spend plan exists), and the
@@ -410,13 +423,16 @@ The forecast slice (the third Plan engine):
   and funded-from: the month's discretionary budget or any active fund via
   `GET /api/funds` — funds labeled `emoji + name` like the categories;
   choosing a fund reveals the matching
-  Cash-Plus-withdrawal reminder) posts to `POST /api/expenses`, and "Add a
-  funding item" (amount, funds month — the current or next two, so a
+  Cash-Plus-withdrawal reminder) posts to `POST /api/expenses`, and "Add an
+  income item" (amount, funds month — the current or next two, so a
   paycheck can prepay next month — and source) posts to `POST /api/income`.
   Every submit refetches the budget month, so the hero and envelopes always
   show the API's figures rather than client-side math — and adding a
   spending item refetches the funds list too, so a fund-funded spend's
-  drawdown lands on the "Money in funds" card immediately.
+  drawdown lands on the "Money in funds" card immediately. Below the
+  forms, the Activity card renders the same uncapped, month-paged feed as
+  the Dashboard's Recent activity: a new item lands in the newest section
+  the moment a form submits, and the loaded history stays put.
 - **Funds & goals** (<http://localhost:5173/funds>) — sinking funds and
   dated goals as one concept, in a single card: a header with the total
   parked and the "notes auto-calculate" hint, the dashed **+ New fund or
