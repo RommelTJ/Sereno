@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.10.0**
+**v1.11.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -557,6 +557,20 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.11.0 — The Guardrails anchor becomes editable. The Assumptions card
+gains "Initial rate %" and "Guardrail band %" fields beside the planned
+spend: saving appends a new effective-dated `spend_plan` row through
+the existing single write path, so a database populated entirely
+through the UI can finally light up the Guardrails screen. The fields
+take percentages for the stored fractions (2.94 ↔ 0.0294), preview the
+derived guardrails — initial rate × (1 ± band) — live under the
+fields, and read back in the card's summary; a blank rate clears the
+anchor, returning Guardrails to its empty state, and a blank band
+falls back to the schema's ±20% default. The Guardrails empty state
+now links to the Assumptions card instead of describing a screen that
+couldn't set the rate. Frontend-only: `POST /api/spend-plan` accepted
+both columns all along.
 
 v1.10.0 — One-time fund top-ups and releases. Funds gain the one-off
 sibling of the automatic monthly contribution:
