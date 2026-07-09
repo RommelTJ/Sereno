@@ -12,14 +12,9 @@ import EmojiSelect from '../components/EmojiSelect.tsx'
 import GhostButton from '../components/GhostButton.tsx'
 import NewFundForm from '../components/NewFundForm.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
+import { FUND_EMOJI_OPTIONS } from '../emoji.ts'
 import type { NewFund } from '../funds.ts'
-import {
-  FUND_EMOJI_OPTIONS,
-  fundEdit,
-  fundView,
-  topUpAmount,
-  totalParked,
-} from '../funds.ts'
+import { fundEdit, fundView, topUpAmount, totalParked } from '../funds.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
 
 // One inline form open per row at a time: the plan edit and the top-up

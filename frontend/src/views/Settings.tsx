@@ -38,6 +38,7 @@ import {
 import EmojiSelect from '../components/EmojiSelect.tsx'
 import GhostButton from '../components/GhostButton.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
+import { ASSET_EMOJI_OPTIONS, EMOJI_OPTIONS } from '../emoji.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
 import type {
@@ -49,13 +50,11 @@ import type {
 import {
   accountInput,
   accountRows,
-  ASSET_EMOJI_OPTIONS,
   assumptionsEdits,
   assumptionsFormValues,
   bracketLabel,
   classificationInput,
   classificationValues,
-  EMOJI_OPTIONS,
   envelopeEdits,
   envelopeInput,
   formatPct,
