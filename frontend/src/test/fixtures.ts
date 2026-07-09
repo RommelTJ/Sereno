@@ -328,7 +328,16 @@ export const TAX_PARAMS = [
 
 // GET /api/forecast with the seeded config: a flat 1.6M across the
 // buckets at $45,000/yr that never runs out, Social Security joining
-// at 67. Flat balances keep chart heights easy to reason about.
+// at 67. Flat balances keep chart heights easy to reason about. With
+// no purchases planned, the baseline mirrors the headline outcome.
+const FORECAST_SERIES = Array.from({ length: 100 - 38 + 1 }, (_, i) => ({
+  age: 38 + i,
+  eth: 200_000,
+  brokerage: 800_000,
+  retirement: 600_000,
+  ss_income: 38 + i >= 67 ? 34_800 : 0,
+}))
+
 export const FORECAST: Forecast = {
   spend: 45_000,
   annual_target: 45_000,
@@ -340,15 +349,17 @@ export const FORECAST: Forecast = {
   ss_spouse: 1_400,
   ss_start: 67,
   tax_year: 2026,
-  series: Array.from({ length: 100 - 38 + 1 }, (_, i) => ({
-    age: 38 + i,
-    eth: 200_000,
-    brokerage: 800_000,
-    retirement: 600_000,
-    ss_income: 38 + i >= 67 ? 34_800 : 0,
-  })),
+  purchases: [],
+  series: FORECAST_SERIES,
   run_out_age: null,
   balance_at_100: 5_512_345,
+  unaffordable: [],
+  baseline: {
+    run_out_age: null,
+    balance_at_100: 5_512_345,
+    series: FORECAST_SERIES,
+  },
+  purchase_costs: [],
   sensitivity: [
     { spend: 30_000, run_out_age: null, balance_at_100: 7_200_000 },
     { spend: 45_000, run_out_age: null, balance_at_100: 5_512_345 },

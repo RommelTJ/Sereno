@@ -3,7 +3,16 @@
 // these helpers only turn the simulation's series into verdict copy,
 // chart column heights, bridge copy, and sensitivity rows.
 
-import type { ForecastPoint, SensitivityRow } from './api.ts'
+import type {
+  BindingConstraint,
+  ForecastBaseline,
+  ForecastPoint,
+  PlannedPurchaseInput,
+  PurchaseCostRow,
+  PurchaseOut,
+  SensitivityRow,
+  UnaffordableYear,
+} from './api.ts'
 import type { SliderBounds } from './guardrails.ts'
 import { formatUsd } from './ledger.ts'
 
@@ -37,7 +46,10 @@ const SS_MIN_HEIGHT = 7
 const LABEL_STEP = 5
 
 // Pixel heights for the stacked bar plus the raw dollars behind them,
-// so the hover tooltip can show the exact per-bucket balances.
+// so the hover tooltip can show the exact per-bucket balances. A
+// purchase year carries a ◆ marker and its amount; an unaffordable
+// year carries how far the lump missed; cap is the hatched
+// forgone-growth band up to the baseline's total.
 export interface ChartColumn {
   age: number
   label: string
@@ -49,28 +61,94 @@ export interface ChartColumn {
   brokerageUsd: number
   retirementUsd: number
   ssUsd: number
+  cap: number
+  marker: '' | '◆'
+  purchaseUsd: number | null
+  shortUsd: number | null
 }
 
-export function chartColumns(series: ForecastPoint[]): ChartColumn[] {
-  let maxTotal = Math.max(
-    ...series.map((point) => point.eth + point.brokerage + point.retirement),
-  )
+export interface ChartExtras {
+  baseline?: ForecastPoint[]
+  purchases?: PurchaseOut[]
+  unaffordable?: UnaffordableYear[]
+}
+
+export function chartColumns(
+  series: ForecastPoint[],
+  extras: ChartExtras = {},
+): ChartColumn[] {
+  const total = (point: ForecastPoint) => point.eth + point.brokerage + point.retirement
+  const baseline = extras.baseline ?? []
+  // The baseline is never below the with-purchases path for long, so
+  // scaling to both keeps the hatched cap inside the chart.
+  let maxTotal = Math.max(...series.map(total), ...baseline.map(total))
   if (maxTotal <= 0) {
     maxTotal = 1
   }
   const height = (value: number) => (value / maxTotal) * CHART_HEIGHT
-  return series.map((point) => ({
-    age: point.age,
-    label: point.age % LABEL_STEP === 0 ? String(point.age) : '',
-    eth: height(point.eth),
-    brokerage: height(point.brokerage),
-    retirement: height(point.retirement),
-    ss: point.ss_income > 0 ? Math.max(SS_MIN_HEIGHT, height(point.ss_income)) : 0,
-    ethUsd: point.eth,
-    brokerageUsd: point.brokerage,
-    retirementUsd: point.retirement,
-    ssUsd: point.ss_income,
-  }))
+  const baseTotals = new Map(baseline.map((point) => [point.age, total(point)]))
+  const purchaseByAge = new Map<number, number>()
+  for (const purchase of extras.purchases ?? []) {
+    purchaseByAge.set(
+      purchase.age,
+      (purchaseByAge.get(purchase.age) ?? 0) + purchase.amount,
+    )
+  }
+  const shortByAge = new Map(
+    (extras.unaffordable ?? []).map((miss) => [miss.age, miss.short]),
+  )
+  return series.map((point) => {
+    const baseTotal = baseTotals.get(point.age)
+    const purchaseUsd = purchaseByAge.get(point.age) ?? null
+    return {
+      age: point.age,
+      label: point.age % LABEL_STEP === 0 ? String(point.age) : '',
+      eth: height(point.eth),
+      brokerage: height(point.brokerage),
+      retirement: height(point.retirement),
+      ss: point.ss_income > 0 ? Math.max(SS_MIN_HEIGHT, height(point.ss_income)) : 0,
+      ethUsd: point.eth,
+      brokerageUsd: point.brokerage,
+      retirementUsd: point.retirement,
+      ssUsd: point.ss_income,
+      cap:
+        baseTotal == null ? 0 : Math.max(0, height(baseTotal) - height(total(point))),
+      marker: purchaseUsd == null ? ('' as const) : ('◆' as const),
+      purchaseUsd,
+      shortUsd: shortByAge.get(point.age) ?? null,
+    }
+  })
+}
+
+// The verdict's marginal line: what the purchases change against the
+// baseline — years first (a shorter plan outranks a smaller balance),
+// dollars when the horizon holds either way. Null with nothing
+// planned or nothing moved.
+export function verdictDelta(forecast: {
+  purchases: PurchaseOut[]
+  run_out_age: number | null
+  balance_at_100: number
+  baseline: ForecastBaseline
+}): string | null {
+  if (forecast.purchases.length === 0) {
+    return null
+  }
+  // A null run-out reads as "past 100" so the two paths compare.
+  const HORIZON = 101
+  const withAge = forecast.run_out_age ?? HORIZON
+  const baseAge = forecast.baseline.run_out_age ?? HORIZON
+  if (withAge !== baseAge) {
+    const years = Math.abs(baseAge - withAge)
+    const direction = withAge < baseAge ? 'earlier' : 'later'
+    return `${years} yr${years === 1 ? '' : 's'} ${direction} than without the purchases`
+  }
+  const diff = forecast.baseline.balance_at_100 - forecast.balance_at_100
+  // Sub-$500 residue is noise, not a story.
+  if (Math.abs(diff) < 500) {
+    return null
+  }
+  const direction = diff > 0 ? 'lower' : 'higher'
+  return `${formatMillions(Math.abs(diff))} ${direction} at 100 than without the purchases`
 }
 
 export interface BridgeCopy {
@@ -120,7 +198,10 @@ export function sensitivityRows(
   }))
 }
 
-function outcomeCopy(row: SensitivityRow): Pick<SensitivityRowCopy, 'lasts' | 'outcome' | 'tone'> {
+function outcomeCopy(row: {
+  run_out_age: number | null
+  balance_at_100: number
+}): Pick<SensitivityRowCopy, 'lasts' | 'outcome' | 'tone'> {
   if (row.run_out_age == null) {
     return {
       lasts: 'never runs out',
@@ -133,6 +214,47 @@ function outcomeCopy(row: SensitivityRow): Pick<SensitivityRowCopy, 'lasts' | 'o
     return { lasts, outcome: 'tight', tone: 'tight' }
   }
   return { lasts, outcome: '⚠ runs out', tone: 'bad' }
+}
+
+// The "what do the purchases cost?" card: one row per purchase,
+// priced as the outcome if just that one were dropped. Names come
+// from the screen's own list (the API never sees them), matched by
+// position — the response echoes the request order.
+export interface PurchaseCostRowCopy {
+  name: string
+  year: number
+  amount: string
+  lasts: string
+  outcome: string
+  tone: 'ok' | 'tight' | 'bad'
+}
+
+export function purchaseCostRows(
+  costs: PurchaseCostRow[],
+  purchases: PlannedPurchaseInput[],
+): PurchaseCostRowCopy[] {
+  return costs.map((cost, index) => ({
+    name: purchases[index]?.name || `Purchase in ${cost.year}`,
+    year: cost.year,
+    amount: formatUsd(cost.amount),
+    ...outcomeCopy(cost),
+  }))
+}
+
+// The solver's answer, sentence-cased for the row under the amount.
+export function bindingConstraintCopy(constraint: BindingConstraint): string {
+  if (constraint === 'purchase_year_liquidity') {
+    return 'capped by the buckets reachable that year — a later year can raise the ceiling'
+  }
+  return 'capped by long-run longevity, not the year itself'
+}
+
+// A purchase amount doubles as a slider: zero to a million by
+// default, the ceiling widened outward to a step boundary so any
+// solver-filled or hand-typed amount stays reachable.
+export function purchaseAmountSliderBounds(amount: number): SliderBounds {
+  const step = 1_000
+  return { min: 0, max: Math.max(1_000_000, Math.ceil(amount / step) * step), step }
 }
 
 // The prototype's 55k–160k range, widened outward to a step boundary
