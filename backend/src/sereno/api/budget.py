@@ -140,7 +140,7 @@ class Envelope(BaseModel):
 
 
 class ActivityItem(BaseModel):
-    type: Literal["expense", "income"]
+    type: Literal["expense", "income", "fund"]
     id: int
     txn_date: date
     amount: float
@@ -395,9 +395,23 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         " FROM income_event WHERE budget_month = ?",
         (target,),
     )
+    # The feed lists exactly the sources the fund_contributions headline
+    # subtracts, so it reconciles with the number above it: a 'spend' row
+    # would double-count its expense line, and hand-entered (NULL-source)
+    # rows are balance restatements that never touched safe-to-spend.
+    # fund_entry has no budget_month, so it scopes by calendar month like
+    # the headline does.
+    fund_entries = db.execute(
+        "SELECT e.id, e.as_of_date AS txn_date, e.contribution AS amount,"
+        " f.name AS category, e.source, e.created_at"
+        " FROM fund_entry e JOIN fund f ON f.id = e.fund_id"
+        " WHERE e.source IN ('monthly_plan', 'top_up') AND substr(e.as_of_date, 1, 7) = ?",
+        (target,),
+    )
     merged = sorted(
         [dict(row) | {"type": "expense", "source": None} for row in expenses]
-        + [dict(row) | {"type": "income", "category": None} for row in incomes],
+        + [dict(row) | {"type": "income", "category": None} for row in incomes]
+        + [dict(row) | {"type": "fund", "note": None} for row in fund_entries],
         key=lambda row: (row["txn_date"], row["created_at"], row["id"]),
         reverse=True,
     )
