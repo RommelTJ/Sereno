@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.11.0**
+**v1.12.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -40,7 +40,8 @@ whole thing in plain SQL.
   from a sanitized birthdate constant) to 100, charted one bar per year by bucket
   (ETH, brokerage, 401(k), Social Security) with a hover breakdown per bar. Verdict
   up front: "You don't run out" or "Lasts to age N", plus a sensitivity table across
-  spend levels and live sliders for return, inflation, and Social Security assumptions.
+  spend levels and live sliders for return, ETH growth, inflation, and Social
+  Security assumptions.
 
 ## Design principles
 
@@ -334,7 +335,10 @@ The forecast slice (the third Plan engine):
 - `GET /api/forecast` — the year-by-year longevity simulation, from
   the birthdate-derived current age to 100 in today's dollars. Each
   year the buckets grow by the real
-  rate (return − inflation), Social Security (per person, from that
+  rate (return − inflation) — except the ETH bucket, which grows at
+  its own nominal rate minus inflation when the assumptions row's
+  `eth_growth_pct` is set (null keeps it on the blended rate) —
+  Social Security (per person, from that
   person's start age) and staking income (while the ETH stake stays
   above $50k) reduce the year's need, and the remainder is withdrawn
   through the sourcing waterfall — the 0% LTCG headroom, the
@@ -342,7 +346,8 @@ The forecast slice (the third Plan engine):
   all gain (basis stays put); sales reduce basis pro-rata. Spend
   defaults to the plan's annual target, the rates to the assumptions
   row, and Social Security to the stored rows; `?spend=`,
-  `?return_pct=`, `?inflation_pct=`, `?ss_you=`, `?ss_spouse=`, and
+  `?return_pct=`, `?inflation_pct=`, `?eth_growth_pct=`, `?ss_you=`,
+  `?ss_spouse=`, and
   `?ss_start=` override each transiently — the Forecast screen's
   sliders never persist. The response carries the resolved inputs
   (including the derived `start_age`),
@@ -485,10 +490,14 @@ The forecast slice (the third Plan engine):
   sensitivity table shows the server's 2–6%-of-net-worth spend levels
   with each outcome (never runs out / tight at 90+ / runs out early)
   and highlights the row nearest the current spend. The assumptions
-  card — spend, return, and inflation sliders plus the editable
+  card — spend, return, ETH growth, and inflation sliders plus the
+  editable
   Social Security panel (You $/mo, Spouse $/mo, from age) — re-runs
   the whole simulation server-side on every change; the spend
-  slider's floor widens so the resolved spend is always reachable.
+  slider's floor widens so the resolved spend is always reachable,
+  and the ETH slider spans ETH's actual nine-year yearly range
+  (−85% to +470%), seeded from the stored rate and tracking the
+  return slider while none is set.
   All of it is transient what-if: Settings owns config writes. Until
   a tax year, assumptions, a spend target, and balances exist, the
   view points at Settings & data — and when no account has a
@@ -557,6 +566,20 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.12.0 — The ETH bucket earns its own growth rate. The `assumption`
+table's dormant `eth_growth_pct` — editable in Settings but consumed
+by nothing — finally drives the simulation: `simulate_forecast` grows
+the ETH bucket at its own nominal rate minus inflation (null keeps
+the blended real rate, and a rate at or below −100% real empties the
+bucket rather than inverting it), `GET /api/forecast` resolves
+`?eth_growth_pct=` from the query, then the assumptions row, and
+echoes the resolved value, and the Forecast Assumptions card gains an
+ETH growth slider spanning ETH's actual nine-year yearly range (−85%
+to +470%, widened further so any stored rate stays reachable) —
+transient what-if like every other slider; Settings stays the only
+write path. The sensitivity table re-simulates at the resolved rate
+automatically.
 
 v1.11.0 — The Guardrails anchor becomes editable. The Assumptions card
 gains "Initial rate %" and "Guardrail band %" fields beside the planned

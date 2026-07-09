@@ -324,6 +324,7 @@ export const FORECAST: Forecast = {
   start_age: 38,
   return_pct: 7,
   inflation_pct: 3,
+  eth_growth_pct: null,
   ss_you: 1_500,
   ss_spouse: 1_400,
   ss_start: 67,

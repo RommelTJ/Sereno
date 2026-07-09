@@ -3,7 +3,9 @@ and the stored planning config. The start age derives from the
 sanitized BIRTHDATE constant (today's date against January 1, 1988)
 and is echoed in the response so the frontend never hardcodes it.
 Spend defaults to the plan's annual
-target, return and inflation to the assumptions row, and Social
+target, return, inflation, and ETH growth to the assumptions row (a
+null ETH growth keeps the ETH bucket on the blended rate — the column
+is optional, never a prerequisite), and Social
 Security to the per-person stored rows (each on its own start age);
 the query params override each transiently — the Forecast screen's
 sliders are what-ifs, only Settings persists config. The sensitivity
@@ -66,6 +68,7 @@ class Forecast(BaseModel):
     start_age: int
     return_pct: float
     inflation_pct: float
+    eth_growth_pct: float | None
     ss_you: float
     ss_spouse: float
     ss_start: float
@@ -107,6 +110,7 @@ def get_forecast(
     spend: Spend = None,
     return_pct: Rate = None,
     inflation_pct: Rate = None,
+    eth_growth_pct: Rate = None,
     ss_you: Monthly = None,
     ss_spouse: Monthly = None,
     ss_start: StartAge = None,
@@ -124,6 +128,11 @@ def get_forecast(
         inflation_pct
         if inflation_pct is not None
         else (assumptions.inflation_pct if assumptions else None)
+    )
+    resolved_eth_growth = (
+        eth_growth_pct
+        if eth_growth_pct is not None
+        else (assumptions.eth_growth_pct if assumptions else None)
     )
     if target is None or resolved_return is None or resolved_inflation is None:
         return None
@@ -178,6 +187,7 @@ def get_forecast(
             spend=spend_level,
             return_pct=resolved_return,
             inflation_pct=resolved_inflation,
+            eth_growth_pct=resolved_eth_growth,
             buckets=buckets,
             social_security=benefits,
             ltcg_0_ceiling=tax.ltcg_0_ceiling,
@@ -200,6 +210,7 @@ def get_forecast(
         start_age=start_age,
         return_pct=resolved_return,
         inflation_pct=resolved_inflation,
+        eth_growth_pct=resolved_eth_growth,
         ss_you=resolved_you,
         ss_spouse=resolved_spouse,
         ss_start=resolved_start,
