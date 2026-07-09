@@ -145,3 +145,16 @@ export function spendSliderBounds(spend: number): SliderBounds {
     step,
   }
 }
+
+// ETH's slider spans its actual nine-year history (−82% to +469%
+// yearly, rounded outward) — the volatility is the whole reason for a
+// separate slider — widened further so any stored rate stays
+// reachable.
+export function ethGrowthSliderBounds(pct: number): SliderBounds {
+  const step = 1
+  return {
+    min: Math.min(-85, Math.floor(pct / step) * step),
+    max: Math.max(470, Math.ceil(pct / step) * step),
+    step,
+  }
+}
