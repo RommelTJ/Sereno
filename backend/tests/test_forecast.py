@@ -411,3 +411,93 @@ class TestPlannedPurchases:
         # headroom, the rest grosses up at 1/(1 − 0.15).
         extra_tax = (288_000 - 96_700) / 0.85 * 0.15
         assert terminal_gap(basis=0.0) == pytest.approx(extra_tax)
+
+
+class TestUnaffordablePurchases:
+    def test_an_undeliverable_lump_is_unaffordable_not_a_run_out(self):
+        # 198,000 of brokerage can't deliver a 500,000 car at 40; the
+        # 1,000 base spend keeps clearing, so the money never runs out —
+        # that year simply couldn't hold the purchase.
+        result = run(
+            spend=1_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(200_000)],
+            purchases=[PlannedPurchase(age=40, amount=500_000)],
+        )
+        assert result.run_out_age is None
+        (miss,) = result.unaffordable
+        assert miss.age == 40
+        assert miss.short == pytest.approx(303_000)
+
+    def test_an_unaffordable_year_is_resourced_without_its_lump(self):
+        # You simply don't buy it: the whole path matches a plan that
+        # never held the car, so later years aren't corrupted by a draw
+        # that never happens.
+        base = run(spend=1_000, return_pct=5, inflation_pct=5, buckets=[brokerage(200_000)])
+        result = run(
+            spend=1_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(200_000)],
+            purchases=[PlannedPurchase(age=40, amount=500_000)],
+        )
+        assert result.series == base.series
+        assert result.balance_at_100 == pytest.approx(base.balance_at_100)
+
+    def test_a_pre_60_lump_is_capped_by_the_taxable_buckets(self):
+        # Lifetime money is ample — 5M sits in the 401(k) — but at 45
+        # the gate leaves only the brokerage, and the house doesn't
+        # fit. The same house past 59½ fits with room to spare.
+        early = run(
+            spend=10_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(300_000), four01k(5_000_000)],
+            purchases=[PlannedPurchase(age=45, amount=1_000_000)],
+        )
+        assert early.run_out_age is None
+        assert [(miss.age, miss.short) for miss in early.unaffordable] == [
+            (45, pytest.approx(780_000))
+        ]
+
+        late = run(
+            spend=10_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(300_000), four01k(5_000_000)],
+            purchases=[PlannedPurchase(age=62, amount=1_000_000)],
+        )
+        assert late.unaffordable == ()
+        assert late.run_out_age is None
+
+    def test_base_spend_shorting_still_sets_the_run_out_age(self):
+        # The base plan dies at 40 whether or not a purchase was
+        # planned that year: running out wins, and no unaffordable
+        # entry muddies it.
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(100_000)],
+            purchases=[PlannedPurchase(age=40, amount=10_000)],
+        )
+        assert result.run_out_age == 40
+        assert result.unaffordable == ()
+
+    def test_ongoing_deltas_survive_an_unaffordable_lump(self):
+        # The recurring commitment is its own fact: the car isn't
+        # bought at 40, but the 5,000/yr from that year stays in the
+        # base target — and counts inside the year's failed attempt.
+        base = run(spend=1_000, return_pct=5, inflation_pct=5, buckets=[brokerage(200_000)])
+        result = run(
+            spend=1_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(200_000)],
+            purchases=[PlannedPurchase(age=40, amount=500_000, ongoing_delta=5_000)],
+        )
+        (miss,) = result.unaffordable
+        assert miss.short == pytest.approx(308_000)
+        assert result.series[41 - 38].balances[0] == pytest.approx(
+            base.series[41 - 38].balances[0] - 5_000
+        )
