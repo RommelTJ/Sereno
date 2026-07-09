@@ -133,6 +133,17 @@ export const BUDGET_MONTH = {
       source: null,
       note: null,
     },
+    // A fund entry: the fund's name rides in the category slot, the entry
+    // source passes through, and the table has no note column.
+    {
+      type: 'fund',
+      id: 9,
+      txn_date: '2026-06-01',
+      amount: 500,
+      category: 'Emergency fund',
+      source: 'monthly_plan',
+      note: null,
+    },
     {
       type: 'income',
       id: 2,

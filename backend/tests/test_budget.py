@@ -57,13 +57,15 @@ def first_of_month(months_back=0):
     return date(year, month, 1).isoformat()
 
 
-def insert_fund_entry(fund_id, as_of_date, balance, contribution=0):
+def insert_fund_entry(fund_id, as_of_date, balance, contribution=0, source=None):
     return execute(
-        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution) VALUES (?, ?, ?, ?)",
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+        " VALUES (?, ?, ?, ?, ?)",
         fund_id,
         as_of_date,
         balance,
         contribution,
+        source,
     )
 
 
@@ -777,6 +779,65 @@ class TestGetBudgetMonth:
         assert body["activity"][1]["note"] == "Costco"
         assert body["activity"][2]["source"] == "paycheck"
         assert body["activity"][2]["category"] is None
+
+    def test_monthly_plan_and_top_up_entries_appear_as_fund_activity(self, client):
+        # The feed lists exactly the sources the fund_contributions headline
+        # subtracts: 'spend' rows would double-count their expense line, and
+        # hand-entered (NULL-source) rows are balance restatements that never
+        # touched safe-to-spend.
+        fund_id = insert_fund("Emergency fund")
+        insert_fund_entry(fund_id, "2026-06-01", 10500, contribution=500, source="monthly_plan")
+        insert_fund_entry(fund_id, "2026-06-15", 10700, contribution=200, source="top_up")
+        insert_fund_entry(fund_id, "2026-06-20", 10400, contribution=-300, source="spend")
+        insert_fund_entry(fund_id, "2026-06-25", 11000)
+        self.fund_month(client, 5200)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [(item["type"], item["txn_date"], item["amount"]) for item in body["activity"]] == [
+            ("fund", "2026-06-15", 200),
+            ("fund", "2026-06-01", 500),
+            ("income", "2026-05-24", 5200),
+        ]
+        top_up = body["activity"][0]
+        assert top_up["category"] == "Emergency fund"
+        assert top_up["source"] == "top_up"
+        assert top_up["note"] is None
+
+    def test_activity_interleaves_all_three_types_newest_first(self, client):
+        fund_id = insert_fund("Bike fund")
+        self.fund_month(client, 2800, txn_date="2026-06-05")
+        insert_fund_entry(fund_id, "2026-06-12", 500, contribution=500, source="monthly_plan")
+        self.spend(client, 96, txn_date="2026-06-20")
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [(item["type"], item["txn_date"]) for item in body["activity"]] == [
+            ("expense", "2026-06-20"),
+            ("fund", "2026-06-12"),
+            ("income", "2026-06-05"),
+        ]
+
+    def test_fund_activity_is_scoped_to_the_calendar_month(self, client):
+        # fund_entry has no budget_month column; the feed scopes it by
+        # calendar month, exactly like the fund_contributions headline.
+        fund_id = insert_fund("Emergency fund")
+        insert_fund_entry(fund_id, "2026-05-01", 500, contribution=500, source="monthly_plan")
+        insert_fund_entry(fund_id, "2026-06-01", 1000, contribution=500, source="monthly_plan")
+        june = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [(i["type"], i["txn_date"]) for i in june["activity"]] == [("fund", "2026-06-01")]
+        may = client.get("/api/budget-month", params={"month": "2026-05"}).json()
+        assert [(i["type"], i["txn_date"]) for i in may["activity"]] == [("fund", "2026-05-01")]
+
+    def test_a_fund_funded_expense_appears_exactly_once(self, client):
+        # The drawdown behind a fund-funded expense is a 'spend' fund_entry
+        # with a negative contribution; listing it beside its expense line
+        # would show every fund-funded purchase twice.
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        self.fund_month(client, 5200)
+        self.spend(client, 1200, txn_date="2026-06-15", funded_from="fund", fund_id=bike_id)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [(item["type"], item["amount"]) for item in body["activity"]] == [
+            ("expense", 1200),
+            ("income", 5200),
+        ]
 
     def test_everything_is_scoped_to_the_requested_month(self, client):
         self.fund_month(client, 5200)

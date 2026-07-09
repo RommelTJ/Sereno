@@ -49,6 +49,24 @@ export function monthLabel(month: string): string {
   })
 }
 
+// "2026-06" → "June 2026" — the activity feed's section headers span
+// years once the feed pages back far enough.
+export function monthYearLabel(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number)
+  return new Date(year, monthNumber - 1).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+// "2026-01" → "2025-12", pure string math.
+export function previousMonth(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number)
+  return monthNumber === 1
+    ? `${year - 1}-12`
+    : `${year}-${String(monthNumber - 1).padStart(2, '0')}`
+}
+
 // The funding sources the handoff's prototype offers, mapped onto the API's
 // source values; the label context that the enum can't carry (whose
 // paycheck, which transfer) goes in the note, matching the seed's style.

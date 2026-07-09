@@ -7,7 +7,7 @@ import { FieldLabel } from './SpendingForm.tsx'
 const inputClasses =
   'mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2.5 text-sm'
 
-function FundingForm({
+function IncomeForm({
   onAdd,
 }: {
   onAdd: (input: IncomeInput) => Promise<void>
@@ -32,28 +32,28 @@ function FundingForm({
 
   return (
     <section
-      data-testid="funding-form"
+      data-testid="income-form"
       className="rounded-card border border-card-border bg-card p-[22px]"
     >
-      <h2 className="text-sm font-bold">Add a funding item</h2>
+      <h2 className="text-sm font-bold">Add an income item</h2>
       <p className="mt-0.5 text-[11.5px] text-muted-2">
         A credit tagged to the month it funds.
       </p>
       <div className="mt-3.5 grid grid-cols-1 gap-[11px] sm:grid-cols-2">
-        <label htmlFor="fund-amount" className="block">
+        <label htmlFor="income-amount" className="block">
           <FieldLabel text="Amount" />
           <input
-            id="fund-amount"
+            id="income-amount"
             className={`num ${inputClasses}`}
             placeholder="$ 0.00"
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
           />
         </label>
-        <label htmlFor="fund-month" className="block">
+        <label htmlFor="income-month" className="block">
           <FieldLabel text="Funds month" />
           <select
-            id="fund-month"
+            id="income-month"
             className={inputClasses}
             value={month}
             onChange={(event) => setMonth(event.target.value)}
@@ -66,10 +66,10 @@ function FundingForm({
           </select>
         </label>
       </div>
-      <label htmlFor="fund-source" className="mt-[11px] block">
+      <label htmlFor="income-source" className="mt-[11px] block">
         <FieldLabel text="Source" />
         <select
-          id="fund-source"
+          id="income-source"
           className={inputClasses}
           value={sourceKey}
           onChange={(event) => setSourceKey(event.target.value)}
@@ -87,7 +87,7 @@ function FundingForm({
         onClick={() => void handleAdd()}
         className="mt-3.5 w-full cursor-pointer rounded-[11px] bg-accent py-3 text-[13.5px] font-bold text-white disabled:opacity-60"
       >
-        + Add funding row
+        + Add income row
       </button>
       <p className="mt-3.5 rounded-input bg-[#f3f6f3] px-3 py-3 text-xs text-[#3a473f]">
         <b>Rollover</b> — what a month leaves over rolls into the next month's
@@ -97,4 +97,4 @@ function FundingForm({
   )
 }
 
-export default FundingForm
+export default IncomeForm

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import type { ActivityTone } from '../dashboard.ts'
-import { fundsMini, recentActivity, stsBarPct } from '../dashboard.ts'
+import ActivityFeed from '../components/ActivityFeed.tsx'
+import { fundsMini, stsBarPct } from '../dashboard.ts'
 import { totalParked } from '../funds.ts'
 import { formatRate, markerLeftPct, zoneCopy } from '../guardrails.ts'
 import { formatUsd } from '../ledger.ts'
@@ -228,15 +228,13 @@ function FundsCard({ funds }: { funds: Fund[] | null }) {
   )
 }
 
-const ACTIVITY_TONES: Record<ActivityTone, { tile: string; amount: string }> =
-  {
-    credit: { tile: 'bg-green-soft', amount: 'text-accent' },
-    debit: { tile: 'bg-tile', amount: 'text-ink' },
-    treat: { tile: 'bg-red-soft-3', amount: 'text-red' },
-  }
-
-function RecentActivity({ budget }: { budget: BudgetMonth | null }) {
-  const rows = budget != null ? recentActivity(budget) : []
+function RecentActivity({
+  budget,
+  funds,
+}: {
+  budget: BudgetMonth | null
+  funds: Fund[] | null
+}) {
   return (
     <div className="mt-5 rounded-card border border-card-border bg-card px-6 py-2">
       <div className="flex items-center justify-between border-b border-hairline pt-4 pb-2.5">
@@ -248,33 +246,9 @@ function RecentActivity({ budget }: { budget: BudgetMonth | null }) {
           Add an item →
         </Link>
       </div>
-      {rows.length === 0 && (
-        <p className="py-4 text-[12.5px] text-muted">
-          No activity yet — spending and funding items land here.
-        </p>
+      {budget != null && (
+        <ActivityFeed current={budget} funds={funds ?? []} />
       )}
-      {rows.map((row) => (
-        <div
-          key={row.key}
-          data-testid="activity-row"
-          className="flex items-center justify-between border-b border-hairline-2 py-[13px]"
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className={`flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-[15px] ${ACTIVITY_TONES[row.tone].tile}`}
-            >
-              {row.icon}
-            </div>
-            <div>
-              <p className="text-[13.5px] font-semibold">{row.title}</p>
-              <p className="text-[11.5px] text-muted-2">{row.sub}</p>
-            </div>
-          </div>
-          <p className={`num text-sm font-bold ${ACTIVITY_TONES[row.tone].amount}`}>
-            {row.amount}
-          </p>
-        </div>
-      ))}
     </div>
   )
 }
@@ -303,7 +277,7 @@ function Dashboard() {
         <LongevityCard forecast={forecast} />
         <FundsCard funds={funds} />
       </div>
-      <RecentActivity budget={budget} />
+      <RecentActivity budget={budget} funds={funds} />
     </div>
   )
 }
