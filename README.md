@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.11.0**
+**v1.12.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -566,6 +566,20 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.12.0 — The ETH bucket earns its own growth rate. The `assumption`
+table's dormant `eth_growth_pct` — editable in Settings but consumed
+by nothing — finally drives the simulation: `simulate_forecast` grows
+the ETH bucket at its own nominal rate minus inflation (null keeps
+the blended real rate, and a rate at or below −100% real empties the
+bucket rather than inverting it), `GET /api/forecast` resolves
+`?eth_growth_pct=` from the query, then the assumptions row, and
+echoes the resolved value, and the Forecast Assumptions card gains an
+ETH growth slider spanning ETH's actual nine-year yearly range (−85%
+to +470%, widened further so any stored rate stays reachable) —
+transient what-if like every other slider; Settings stays the only
+write path. The sensitivity table re-simulates at the resolved rate
+automatically.
 
 v1.11.0 — The Guardrails anchor becomes editable. The Assumptions card
 gains "Initial rate %" and "Guardrail band %" fields beside the planned
