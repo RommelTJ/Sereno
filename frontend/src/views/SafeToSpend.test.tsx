@@ -359,6 +359,90 @@ describe('Add an income item', () => {
   })
 })
 
+describe('Activity feed', () => {
+  it('renders every item of the month below the income form', async () => {
+    render(<SafeToSpend />)
+
+    const form = await screen.findByTestId('income-form')
+    const feed = screen.getByTestId('sts-activity')
+    expect(form.nextElementSibling).toBe(feed)
+    expect(within(feed).getByText('Activity')).toBeInTheDocument()
+    // Uncapped: all four fixture items, the fund entry among them.
+    expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)
+    expect(within(feed).getByText('Funding · Jun 1')).toBeInTheDocument()
+    expect(within(feed).getByText('June 2026')).toBeInTheDocument()
+  })
+
+  it('refreshes the current month without dropping loaded history', async () => {
+    const routes: Record<string, unknown> = {
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/expenses': { id: 99 },
+    }
+    stubApi(routes)
+    render(<SafeToSpend />)
+    const feed = await screen.findByTestId('sts-activity')
+
+    routes['/api/budget-month'] = {
+      ...BUDGET_MONTH,
+      month: '2026-05',
+      categories: [
+        {
+          id: 9,
+          name: 'Utilities',
+          emoji: '🔌',
+          planned: 200,
+          spent: 118.21,
+          remaining: 81.79,
+        },
+      ],
+      activity: [
+        {
+          type: 'expense',
+          id: 77,
+          txn_date: '2026-05-12',
+          amount: 118.21,
+          category: 'Utilities',
+          source: null,
+          note: null,
+        },
+      ],
+    }
+    fireEvent.click(within(feed).getByRole('button', { name: '← May 2026' }))
+    expect(
+      await within(feed).findByText('Utilities · May 12'),
+    ).toBeInTheDocument()
+
+    // A form submit refetches the current month; its section must pick up
+    // the new item while the paged May section stays put.
+    routes['/api/budget-month'] = {
+      ...BUDGET_MONTH,
+      activity: [
+        {
+          type: 'expense',
+          id: 99,
+          txn_date: '2026-06-28',
+          amount: 12,
+          category: 'Groceries',
+          source: null,
+          note: 'Late poke',
+        },
+        ...BUDGET_MONTH.activity,
+      ],
+    }
+    const form = screen.getByTestId('spending-form')
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '12' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add spending row' }),
+    )
+
+    expect(await within(feed).findByText('Late poke')).toBeInTheDocument()
+    expect(within(feed).getByText('Utilities · May 12')).toBeInTheDocument()
+  })
+})
+
 describe('Responsive layout', () => {
   it('stacks the hero column and forms into one column on narrow screens', async () => {
     render(<SafeToSpend />)
