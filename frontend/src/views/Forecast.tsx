@@ -9,6 +9,7 @@ import type { ChartColumn, SensitivityRowCopy } from '../forecast.ts'
 import {
   bridgeCopy,
   chartColumns,
+  ethGrowthSliderBounds,
   formatMillions,
   sensitivityRows,
   spendSliderBounds,
@@ -203,6 +204,11 @@ function Forecast() {
   const spend = overrides.spend ?? forecast.spend
   const returnPct = overrides.return_pct ?? forecast.return_pct
   const inflationPct = overrides.inflation_pct ?? forecast.inflation_pct
+  // A null echo means ETH grows at the blended rate — the slider
+  // tracks the return until a what-if or stored rate takes over.
+  const ethGrowthPct =
+    overrides.eth_growth_pct ?? forecast.eth_growth_pct ?? returnPct
+  const ethBounds = ethGrowthSliderBounds(ethGrowthPct)
   const ssYou = overrides.ss_you ?? forecast.ss_you
   const ssSpouse = overrides.ss_spouse ?? forecast.ss_spouse
   const ssStart = overrides.ss_start ?? forecast.ss_start
@@ -320,6 +326,16 @@ function Forecast() {
             step={0.5}
             testId="forecast-return"
             onChange={(value) => applyOverride({ return_pct: value })}
+          />
+          <SliderRow
+            label="ETH growth"
+            value={ethGrowthPct}
+            display={`${ethGrowthPct.toFixed(1)}%`}
+            min={ethBounds.min}
+            max={ethBounds.max}
+            step={ethBounds.step}
+            testId="forecast-eth"
+            onChange={(value) => applyOverride({ eth_growth_pct: value })}
           />
           <SliderRow
             label="Inflation"
