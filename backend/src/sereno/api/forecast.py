@@ -88,6 +88,25 @@ class SensitivityRow(BaseModel):
     balance_at_100: float
 
 
+class BaselineOut(BaseModel):
+    """The purchase-free outcome, series included, so one call carries
+    both where the plan lands and what the purchases cost it."""
+
+    run_out_age: int | None
+    balance_at_100: float
+    series: list[ForecastPointOut]
+
+
+class PurchaseCostRow(BaseModel):
+    """The outcome with this one purchase dropped — its marginal cost
+    given the others stay, the shape of a sensitivity row."""
+
+    year: int
+    amount: float
+    run_out_age: int | None
+    balance_at_100: float
+
+
 class Forecast(BaseModel):
     spend: float
     annual_target: float | None
@@ -104,6 +123,8 @@ class Forecast(BaseModel):
     run_out_age: int | None
     balance_at_100: float
     unaffordable: list[UnaffordableOut]
+    baseline: BaselineOut
+    purchase_costs: list[PurchaseCostRow]
     sensitivity: list[SensitivityRow]
 
 
@@ -249,7 +270,9 @@ def get_forecast(
         for p in purchases
     ]
 
-    def simulate(spend_level: float) -> ForecastResult:
+    def simulate(
+        spend_level: float, sim_purchases: list[PlannedPurchase] | None = None
+    ) -> ForecastResult:
         return simulate_forecast(
             start_age=start_age,
             spend=spend_level,
@@ -258,7 +281,7 @@ def get_forecast(
             eth_growth_pct=resolved_eth_growth,
             buckets=buckets,
             social_security=benefits,
-            purchases=engine_purchases,
+            purchases=engine_purchases if sim_purchases is None else sim_purchases,
             ltcg_0_ceiling=tax.ltcg_0_ceiling,
             std_deduction=tax.std_deduction or 0.0,
             ordinary_brackets=brackets,
@@ -272,7 +295,20 @@ def get_forecast(
             balance_at_100=outcome.balance_at_100,
         )
 
+    def cost_row(index: int) -> PurchaseCostRow:
+        others = engine_purchases[:index] + engine_purchases[index + 1 :]
+        outcome = simulate(target, others)
+        return PurchaseCostRow(
+            year=purchases[index].year,
+            amount=purchases[index].amount,
+            run_out_age=outcome.run_out_age,
+            balance_at_100=outcome.balance_at_100,
+        )
+
     result = simulate(target)
+    # With no purchases the headline already is the baseline — no
+    # second simulation needed.
+    baseline_result = simulate(target, []) if engine_purchases else result
     return Forecast(
         spend=target,
         annual_target=plan.annual_target if plan else None,
@@ -294,5 +330,11 @@ def get_forecast(
             )
             for miss in result.unaffordable
         ],
+        baseline=BaselineOut(
+            run_out_age=baseline_result.run_out_age,
+            balance_at_100=baseline_result.balance_at_100,
+            series=_series(baseline_result, buckets),
+        ),
+        purchase_costs=[cost_row(index) for index in range(len(purchases))],
         sensitivity=[sensitivity_row(level) for level in _sensitivity_levels(db)],
     )
