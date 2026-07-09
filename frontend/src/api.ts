@@ -93,7 +93,7 @@ export interface Envelope {
 }
 
 export interface ActivityItem {
-  type: 'expense' | 'income'
+  type: 'expense' | 'income' | 'fund'
   id: number
   txn_date: string
   amount: number

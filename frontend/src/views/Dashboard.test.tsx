@@ -238,6 +238,46 @@ describe('Recent activity', () => {
     expect(screen.getByText('+$2,400').className).toContain('text-accent')
   })
 
+  it('renders a fund row with its fund emoji and parked tone', async () => {
+    stubDashboard()
+    renderDashboard()
+
+    const rows = await screen.findAllByTestId('activity-row')
+    const fundRow = rows[2]
+    expect(within(fundRow).getByText('Emergency fund')).toBeInTheDocument()
+    expect(within(fundRow).getByText('Funding · Jun 1')).toBeInTheDocument()
+    // The emoji resolves from the funds list, like an expense's resolves
+    // from its envelope; parked money is neither income nor spending.
+    expect(within(fundRow).getByText('🚨')).toHaveClass('bg-amber-soft')
+    expect(within(fundRow).getByText('−$500').className).toContain('text-muted')
+  })
+
+  it('renders a release with a plus and a fallback icon for an archived fund', async () => {
+    stubDashboard({
+      '/api/budget-month': {
+        ...BUDGET_MONTH,
+        activity: [
+          {
+            type: 'fund',
+            id: 11,
+            txn_date: '2026-06-18',
+            amount: -200,
+            category: 'Piano fund',
+            source: 'top_up',
+            note: null,
+          },
+        ],
+      },
+    })
+    renderDashboard()
+
+    // 'Piano fund' is archived, so GET /api/funds no longer lists it —
+    // the row keeps its name but falls back to the generic icon.
+    const rows = await screen.findAllByTestId('activity-row')
+    expect(within(rows[0]).getByText('💰')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('+$200').className).toContain('text-muted')
+  })
+
   it('deep-links the header to add an item on the safe-to-spend view', async () => {
     stubDashboard()
     renderDashboard()
