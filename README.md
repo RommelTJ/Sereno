@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.12.0**
+**v1.13.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -582,6 +582,22 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v1.13.0 — The activity feed goes full-history. Fund entries join
+expenses and income as the third source in `GET /api/budget-month`'s
+activity list — only `monthly_plan` and `top_up` rows, the exact set
+the `fund_contributions` headline subtracts, so a fund-funded expense
+never lists twice and the feed reconciles with the number above it.
+The Dashboard's Recent activity drops its five-item cap: the shared
+ActivityFeed renders the full current month under a dated section
+header — fund rows on an amber tile with the fund's own emoji, their
+amounts signed by the effect on the headline (a contribution parks
+money, a release frees it) — and a "← May 2026"-style button pages
+earlier months in as their own dated sections through the existing
+`?month=` param. Safe-to-spend gains the same feed in an Activity
+card below the income form, which sheds its old name: "Add a funding
+item" becomes "Add an income item", freeing "Funding" to mean money
+parked into funds.
 
 v1.12.0 — The ETH bucket earns its own growth rate. The `assumption`
 table's dormant `eth_growth_pct` — editable in Settings but consumed
