@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.14.1**
+**v2.0.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -641,6 +641,31 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.0.0 — Planned purchases and the max-affordable solver. The
+forecast learns lumpy years: repeated `purchase=year:amount[:delta]`
+params drop dated one-off outflows (a house, a car, a gift) onto the
+simulation's yearly targets, where the 0% LTCG headroom, the 15%
+gross-up, and the 59½ gate price them properly — before this, the
+only lever was amortizing a lump into `?spend=`, which never leaves
+the 0% bracket and answers a different question. A lump the year
+can't deliver is an *unaffordable purchase*, not a run-out: the year
+re-sources without it, the verdict stays green, and the response
+says how far it missed. One call now also carries the no-purchase
+`baseline` (run-out age, age-100 balance, and series) and a
+per-purchase `purchase_costs` table (the outcome with just that one
+dropped), and the new `GET /api/forecast/max-affordable`
+binary-searches the largest lump a year can hold under a chosen
+criterion — never runs out by default, `last_to_age=` and
+`min_balance_at_100=` as variants — naming whether the year's own
+liquidity or long-run longevity binds. The Forecast screen gains the
+Planned purchases rows (name / year / amount slider, transient
+what-if like every slider), the per-row Max affordable button, the
+verdict's baseline delta line, ◆ chart ticks with hatched
+forgone-growth caps and "$X short" tooltips, and the "What do the
+purchases cost?" card. Everything stays a read-only GET — POST still
+means appending config — and persistence (a `planned_purchase` table
+plus Settings CRUD) is a deliberate follow-up.
 
 v1.14.1 — Emoji options find a home. The three curated picker lists —
 assets, envelopes, funds — move out of `settings.ts` and `funds.ts`
