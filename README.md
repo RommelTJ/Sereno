@@ -250,13 +250,17 @@ The funds slice:
   telling their kinds apart: `'spend'` for the drawdown behind a
   fund-funded expense, `'monthly_plan'` for an automatic contribution,
   null for the hand-entered rows this endpoint appends.
-- `PUT /api/funds/{id}` — revises the fund's monthly plan in place —
-  the fund row is a dimension, like a category rename, so the
-  append-only entry history is untouched. A null plan (0 is normalized
-  to NULL, so "$0 / mo" never renders) pauses funding without
-  archiving: the balance stays parked and the fund drops out of the
-  monthly catch-up until a new plan is set. A negative plan is a 422;
-  an unknown fund is a 404.
+- `PUT /api/funds/{id}` — revises the fund's `name`, `emoji` and
+  `monthly_plan` in place — the fund row is a dimension, like a category
+  rename, so its identity fields are mutable and the append-only entry
+  history is untouched. The update is partial: every field is optional
+  and only those the body carries are written, so a plan-only edit keeps
+  the name and a rename keeps the fund funding. An explicit null emoji
+  clears it; an omitted one keeps it. A null plan (0 is normalized to
+  NULL, so "$0 / mo" never renders) pauses funding without archiving:
+  the balance stays parked and the fund drops out of the monthly
+  catch-up until a new plan is set. A blank name or a negative plan is a
+  422; an unknown fund is a 404.
 - `POST /api/funds/{id}/top-up` — a one-time move between the month's
   safe-to-spend and the fund, the one-off sibling of the automatic
   monthly contribution: appends a `fund_entry` with the delta as its
@@ -445,10 +449,12 @@ The forecast slice (the third Plan engine):
   safe-to-spend and the fund (a negative amount releases part of the
   balance back to spendable), and refetches so the balance and note move
   immediately — an Edit
-  button that opens an inline $ / month input prefilled with the current
-  plan — Save revises it via `PUT /api/funds/{id}` (a blank input pauses
-  funding without archiving) and refetches so the note recalculates,
-  Cancel closes without a request — and an
+  button that opens an inline Name input, the same curated emoji select as
+  the new-fund form, and a $ / month input, each prefilled with the fund's
+  current values — Save revises all three via `PUT /api/funds/{id}` (a
+  blank $ / month pauses funding without archiving, a blank emoji clears
+  it, and a blank name saves nothing) and refetches so the name, emoji and
+  note update, Cancel closes without a request — and an
   Archive button that retires the fund via `POST /api/funds/{id}/archive`
   and refetches the list — a finished goal disappears from the card, the
   total parked, and the safe-to-spend "Funded from" options, and its
