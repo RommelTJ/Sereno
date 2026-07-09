@@ -386,6 +386,19 @@ export function assumptionsEdits(
   return edit
 }
 
+// The guardrails a save would derive — initial_rate × (1 ± band) — so
+// setup gets immediate feedback without a second write path. Null while
+// the rate is blank/invalid; a blank band previews at the schema's ±20%
+// default, matching what the save would store.
+export function guardrailPreview(values: AssumptionsFormValues): string | null {
+  const rate = toFraction(values.initialRatePct)
+  if (rate == null) {
+    return null
+  }
+  const band = toFraction(values.bandPct) ?? 0.2
+  return `Guardrails: ${formatRate(rate * (1 - band))} – ${formatRate(rate * (1 + band))}`
+}
+
 export interface SocialSecurityFormValues {
   you: string
   spouse: string

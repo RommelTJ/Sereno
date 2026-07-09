@@ -60,6 +60,7 @@ import {
   envelopeInput,
   formatPct,
   formatRate,
+  guardrailPreview,
   KIND_OPTIONS,
   PRIORITY_OPTIONS,
   socialSecurityEdits,
@@ -630,6 +631,8 @@ function AssumptionsCard({
   const set = (key: keyof typeof values) => (value: string) =>
     setValues((current) => ({ ...current, [key]: value }))
 
+  const preview = guardrailPreview(values)
+
   return (
     <Card
       title="Assumptions"
@@ -680,6 +683,14 @@ function AssumptionsCard({
             value={values.bandPct}
             onChange={set('bandPct')}
           />
+          {preview && (
+            <p
+              data-testid="band-preview"
+              className="text-[11.5px] text-muted-2 sm:col-span-2"
+            >
+              {preview}
+            </p>
+          )}
         </div>
       ) : (
         <div className="mt-3">
