@@ -233,10 +233,17 @@ const ACTIVITY_TONES: Record<ActivityTone, { tile: string; amount: string }> =
     credit: { tile: 'bg-green-soft', amount: 'text-accent' },
     debit: { tile: 'bg-tile', amount: 'text-ink' },
     treat: { tile: 'bg-red-soft-3', amount: 'text-red' },
+    fund: { tile: 'bg-amber-soft', amount: 'text-muted' },
   }
 
-function RecentActivity({ budget }: { budget: BudgetMonth | null }) {
-  const rows = budget != null ? recentActivity(budget) : []
+function RecentActivity({
+  budget,
+  funds,
+}: {
+  budget: BudgetMonth | null
+  funds: Fund[] | null
+}) {
+  const rows = budget != null ? recentActivity(budget, funds ?? []) : []
   return (
     <div className="mt-5 rounded-card border border-card-border bg-card px-6 py-2">
       <div className="flex items-center justify-between border-b border-hairline pt-4 pb-2.5">
@@ -303,7 +310,7 @@ function Dashboard() {
         <LongevityCard forecast={forecast} />
         <FundsCard funds={funds} />
       </div>
-      <RecentActivity budget={budget} />
+      <RecentActivity budget={budget} funds={funds} />
     </div>
   )
 }

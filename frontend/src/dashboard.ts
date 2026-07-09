@@ -53,7 +53,7 @@ function usd(value: number): string {
   })}`
 }
 
-export type ActivityTone = 'credit' | 'debit' | 'treat'
+export type ActivityTone = 'credit' | 'debit' | 'treat' | 'fund'
 
 export interface ActivityRow {
   key: string
@@ -68,11 +68,20 @@ export interface ActivityRow {
 // comes from its category's envelope; every activity item funds the
 // fetched month, so a credit's sub names it; a "treat" — an expense in an
 // over-budget envelope — shows in red.
-export function recentActivity(budget: BudgetMonth): ActivityRow[] {
-  return budget.activity.slice(0, 5).map((item) => activityRow(item, budget))
+export function recentActivity(
+  budget: BudgetMonth,
+  funds: Fund[],
+): ActivityRow[] {
+  return budget.activity
+    .slice(0, 5)
+    .map((item) => activityRow(item, budget, funds))
 }
 
-function activityRow(item: ActivityItem, budget: BudgetMonth): ActivityRow {
+export function activityRow(
+  item: ActivityItem,
+  budget: BudgetMonth,
+  funds: Fund[],
+): ActivityRow {
   const key = `${item.type}-${item.id}`
   const date = shortDate(item.txn_date)
   if (item.type === 'income') {
@@ -83,6 +92,23 @@ function activityRow(item: ActivityItem, budget: BudgetMonth): ActivityRow {
       sub: `Funds ${monthLabel(budget.month)} · ${date}`,
       amount: `+${usd(item.amount)}`,
       tone: 'credit',
+    }
+  }
+  if (item.type === 'fund') {
+    // The fund's name rides in the category slot; its emoji resolves from
+    // the funds list, so an archived fund falls back to the generic icon.
+    // The sign follows the headline: a contribution parks money (safe-to-
+    // spend falls), a release makes it spendable again — but the tone stays
+    // its own, because parked money was never spent.
+    const fund = funds.find((candidate) => candidate.name === item.category)
+    return {
+      key,
+      icon: fund?.emoji ?? '💰',
+      title: item.category ?? 'Fund',
+      sub: `Funding · ${date}`,
+      amount:
+        item.amount >= 0 ? `−${usd(item.amount)}` : `+${usd(-item.amount)}`,
+      tone: 'fund',
     }
   }
   const envelope = budget.categories.find(
