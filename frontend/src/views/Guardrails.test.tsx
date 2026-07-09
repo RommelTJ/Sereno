@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { markerLeftPct } from '../guardrails.ts'
 import {
@@ -129,12 +130,18 @@ describe('spend slider', () => {
 })
 
 describe('empty state', () => {
-  it('points at Settings until a plan and balances exist', async () => {
+  it('points at the Assumptions card until a plan and balances exist', async () => {
     stubApi({ '/api/guardrails': null, '/api/accounts': ACCOUNTS })
-    render(<Guardrails />)
+    render(
+      <MemoryRouter>
+        <Guardrails />
+      </MemoryRouter>,
+    )
 
     const empty = await screen.findByTestId('guardrails-empty')
     expect(empty).toHaveTextContent(/spend plan/i)
+    const link = within(empty).getByRole('link', { name: /assumptions card/i })
+    expect(link).toHaveAttribute('href', '/settings')
     expect(screen.queryByTestId('guardrails-rate')).not.toBeInTheDocument()
   })
 
