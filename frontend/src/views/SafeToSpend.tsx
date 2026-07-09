@@ -6,6 +6,7 @@ import {
   fetchBudgetMonth,
   fetchFunds,
 } from '../api.ts'
+import ActivityFeed from '../components/ActivityFeed.tsx'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
 import IncomeForm from '../components/IncomeForm.tsx'
 import FundsCard from '../components/FundsCard.tsx'
@@ -74,6 +75,15 @@ function SafeToSpend() {
               onAdd={addExpense}
             />
             <IncomeForm onAdd={addIncome} />
+            <section
+              data-testid="sts-activity"
+              className="rounded-card border border-card-border bg-card px-6 py-2"
+            >
+              <div className="border-b border-hairline pt-4 pb-2.5">
+                <p className="text-sm font-bold">Activity</p>
+              </div>
+              <ActivityFeed current={budget} funds={funds} />
+            </section>
           </div>
         </>
       )}
