@@ -17,7 +17,12 @@ from collections.abc import Sequence
 
 import pytest
 
-from sereno.engine.forecast import ForecastResult, SocialSecurityBenefit, simulate_forecast
+from sereno.engine.forecast import (
+    ForecastResult,
+    PlannedPurchase,
+    SocialSecurityBenefit,
+    simulate_forecast,
+)
 from sereno.engine.sourcing import Bracket, Bucket
 
 
@@ -55,6 +60,7 @@ def run(
     eth_growth_pct: float | None = None,
     buckets: list[Bucket] | None = None,
     social_security: Sequence[SocialSecurityBenefit] = (),
+    purchases: Sequence[PlannedPurchase] = (),
     ltcg_0_ceiling: float = 96_700.0,
     std_deduction: float = 30_000.0,
     ordinary_brackets: list[Bracket] | None = None,
@@ -67,6 +73,7 @@ def run(
         eth_growth_pct=eth_growth_pct,
         buckets=buckets if buckets is not None else [brokerage(2_000_000)],
         social_security=social_security,
+        purchases=purchases,
         ltcg_0_ceiling=ltcg_0_ceiling,
         std_deduction=std_deduction,
         ordinary_brackets=ordinary_brackets,
@@ -287,3 +294,120 @@ class TestStaking:
         # No staking at exactly 50,000: the first draw is the full
         # 40,000, not 37,000.
         assert result.series[39 - 38].balances[0] == pytest.approx(10_000)
+
+
+class TestPlannedPurchases:
+    def test_a_lump_raises_only_its_years_draw(self):
+        # Zero real rate keeps the arithmetic flat: the 100,000 car at
+        # 40 comes out on top of that year's 40,000 spend, and every
+        # other year draws exactly the base spend.
+        base = run(return_pct=5, inflation_pct=5, buckets=[brokerage(5_000_000)])
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[PlannedPurchase(age=40, amount=100_000)],
+        )
+        # Balances record before the withdrawal, so the series is
+        # untouched through the purchase year itself...
+        assert result.series[: 40 - 38 + 1] == base.series[: 40 - 38 + 1]
+        # ...and every later year carries the same one-time dent.
+        assert result.series[41 - 38].balances[0] == pytest.approx(
+            base.series[41 - 38].balances[0] - 100_000
+        )
+        assert result.balance_at_100 == pytest.approx(base.balance_at_100 - 100_000)
+
+    def test_an_ongoing_delta_raises_every_year_from_its_age(self):
+        # A 5,000/yr cost from age 40 onward. The age-100 point records
+        # before its own draw, so 60 raised draws (40 through 99) have
+        # landed in balance_at_100, compounding by count at the zero
+        # real rate.
+        base = run(return_pct=5, inflation_pct=5, buckets=[brokerage(5_000_000)])
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[PlannedPurchase(age=40, amount=0.0, ongoing_delta=5_000)],
+        )
+        assert result.series[41 - 38].balances[0] == pytest.approx(
+            base.series[41 - 38].balances[0] - 5_000
+        )
+        assert result.series[42 - 38].balances[0] == pytest.approx(
+            base.series[42 - 38].balances[0] - 10_000
+        )
+        assert result.balance_at_100 == pytest.approx(base.balance_at_100 - 60 * 5_000)
+
+    def test_purchases_due_the_same_year_sum(self):
+        joint = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[
+                PlannedPurchase(age=40, amount=60_000),
+                PlannedPurchase(age=40, amount=40_000),
+            ],
+        )
+        single = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[PlannedPurchase(age=40, amount=100_000)],
+        )
+        assert joint.series == single.series
+
+    def test_a_negative_amount_is_a_windfall_reducing_the_years_need(self):
+        base = run(return_pct=5, inflation_pct=5, buckets=[brokerage(5_000_000)])
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[PlannedPurchase(age=40, amount=-15_000)],
+        )
+        assert result.series[41 - 38].balances[0] == pytest.approx(
+            base.series[41 - 38].balances[0] + 15_000
+        )
+
+    def test_a_windfall_beyond_the_years_need_is_not_reinvested(self):
+        # −100,000 against a 40,000 spend floors the year's draw at
+        # zero; the 60,000 surplus is not added to any bucket — a
+        # deliberate v1 simplification.
+        base = run(return_pct=5, inflation_pct=5, buckets=[brokerage(5_000_000)])
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[PlannedPurchase(age=40, amount=-100_000)],
+        )
+        assert result.series[41 - 38].balances[0] == pytest.approx(
+            base.series[41 - 38].balances[0] + 40_000
+        )
+
+    def test_a_lump_pays_tax_an_amortized_spread_never_would(self):
+        # The same 248,000 of lifetime dollars, two ways: +4,000/yr
+        # over the 62 draws recorded in balance_at_100 (38 through 99)
+        # stays inside the 0% LTCG headroom every year, while the
+        # one-year lump blows past it and pays the 15% gross-up on the
+        # excess. At a zero real rate with full-basis buckets the two
+        # paths end identical — so the difference that appears on
+        # all-gain buckets is pure tax drag, the exact reason a lump
+        # can't be approximated by amortizing it.
+        def terminal_gap(basis: float) -> float:
+            amortized = run(
+                return_pct=5,
+                inflation_pct=5,
+                buckets=[brokerage(5_000_000, basis=basis)],
+                purchases=[PlannedPurchase(age=38, amount=0.0, ongoing_delta=4_000)],
+            )
+            lump = run(
+                return_pct=5,
+                inflation_pct=5,
+                buckets=[brokerage(5_000_000, basis=basis)],
+                purchases=[PlannedPurchase(age=38, amount=248_000)],
+            )
+            return amortized.balance_at_100 - lump.balance_at_100
+
+        assert terminal_gap(basis=5_000_000) == pytest.approx(0)
+        # The lump year targets 288,000: 96,700 sells inside the
+        # headroom, the rest grosses up at 1/(1 − 0.15).
+        extra_tax = (288_000 - 96_700) / 0.85 * 0.15
+        assert terminal_gap(basis=0.0) == pytest.approx(extra_tax)
