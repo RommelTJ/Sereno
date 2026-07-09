@@ -1,8 +1,9 @@
 """GET /api/forecast: the longevity simulation fed by live buckets and
 the stored planning config. Spend defaults to the plan's annual
-target, return and inflation to the assumptions row, and Social
-Security to the per-person stored rows; ?spend=, ?return_pct=,
-?inflation_pct=, ?ss_you=, ?ss_spouse=, and ?ss_start= override
+target, return, inflation, and ETH growth to the assumptions row, and
+Social Security to the per-person stored rows; ?spend=, ?return_pct=,
+?inflation_pct=, ?eth_growth_pct=, ?ss_you=, ?ss_spouse=, and
+?ss_start= override
 transiently (the Forecast screen's sliders never persist). The
 response carries the full series, the run-out age, the age-100
 balance, and the sensitivity table — whole percentages of the latest
@@ -62,10 +63,11 @@ def insert_spend_plan(annual_target=45_000):
     )
 
 
-def insert_assumption(return_pct=7, inflation_pct=3):
+def insert_assumption(return_pct=7, inflation_pct=3, eth_growth_pct=None):
     return execute(
-        "INSERT INTO assumption (effective_date, return_pct, inflation_pct) VALUES (?, ?, ?)",
-        (TODAY.isoformat(), return_pct, inflation_pct),
+        "INSERT INTO assumption (effective_date, return_pct, inflation_pct, eth_growth_pct)"
+        " VALUES (?, ?, ?, ?)",
+        (TODAY.isoformat(), return_pct, inflation_pct, eth_growth_pct),
     )
 
 
@@ -113,9 +115,9 @@ def seed_portfolio(eth_balance=400_000):
     insert_balance(retirement, 500_000)
 
 
-def seed_config():
+def seed_config(eth_growth_pct=None):
     insert_spend_plan(annual_target=45_000)
-    insert_assumption(return_pct=7, inflation_pct=3)
+    insert_assumption(return_pct=7, inflation_pct=3, eth_growth_pct=eth_growth_pct)
     insert_tax_param()
 
 
@@ -243,6 +245,31 @@ class TestForecast:
         assert body["ss_start"] == 62.0
         assert body["series"][61 - START_AGE]["ss_income"] == 0.0
         assert body["series"][62 - START_AGE]["ss_income"] == pytest.approx(34_800)
+
+    def test_eth_growth_echoes_null_without_a_stored_value(self, client):
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast").json()
+        assert body["eth_growth_pct"] is None
+
+    def test_the_stored_eth_growth_rate_drives_the_eth_bucket(self, client):
+        # 15% nominal − 3% inflation = 12% real for ETH; the brokerage
+        # keeps the blended 4%.
+        seed_portfolio()
+        seed_config(eth_growth_pct=15)
+        body = client.get("/api/forecast").json()
+        assert body["eth_growth_pct"] == 15.0
+        assert body["series"][0]["eth"] == pytest.approx(400_000 * 1.12)
+        assert body["series"][0]["brokerage"] == pytest.approx(600_000 * 1.04)
+
+    def test_an_eth_growth_query_overrides_the_stored_rate(self, client):
+        # 3% nominal against 3% inflation: ETH holds flat this year.
+        seed_portfolio()
+        seed_config(eth_growth_pct=15)
+        params = {"eth_growth_pct": 3}
+        body = client.get("/api/forecast", params=params).json()
+        assert body["eth_growth_pct"] == 3.0
+        assert body["series"][0]["eth"] == pytest.approx(400_000)
 
     def test_without_ss_rows_the_benefits_default_to_zero(self, client):
         seed_portfolio()
