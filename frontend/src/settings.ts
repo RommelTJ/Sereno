@@ -11,6 +11,7 @@ import type {
   CategoryPlanInput,
   CategoryUpdate,
   LedgerMonth,
+  QuickLinkInput,
   SocialSecurityEntry,
   SocialSecurityInput,
   SpendPlan,
@@ -206,6 +207,21 @@ export function envelopeInput(values: {
     input.emoji = values.emoji
   }
   return input
+}
+
+// Build the POST/PUT quick-link body, or null while the form is invalid
+// (blank label or URL). A missing scheme is the backend's to fill in —
+// the URL is sent verbatim.
+export function quickLinkInput(values: {
+  label: string
+  url: string
+}): QuickLinkInput | null {
+  const label = values.label.trim()
+  const url = values.url.trim()
+  if (label === '' || url === '') {
+    return null
+  }
+  return { label, url }
 }
 
 export interface EnvelopeEdit {

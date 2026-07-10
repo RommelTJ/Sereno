@@ -25,6 +25,8 @@ import type {
   Category,
   CategoryInput,
   LedgerMonth,
+  QuickLink,
+  QuickLinkInput,
   SocialSecurityEntry,
   SocialSecurityInput,
   SpendPlan,
@@ -38,13 +40,16 @@ import {
   createAssumption,
   createCategory,
   createSocialSecurity,
+  createQuickLink,
   createSpendPlan,
   createTaxParam,
   deactivateAccount,
+  deleteQuickLink,
   fetchAccounts,
   fetchAssumptions,
   fetchCategories,
   fetchLedger,
+  fetchQuickLinks,
   fetchSocialSecurity,
   fetchSpendPlan,
   fetchTaxParams,
@@ -53,6 +58,7 @@ import {
   updateCategory,
   updateCategoryOrder,
   updateCategoryPlan,
+  updateQuickLink,
   updateTaxParam,
 } from '../api.ts'
 import EmojiSelect from '../components/EmojiSelect.tsx'
@@ -83,6 +89,7 @@ import {
   guardrailPreview,
   KIND_OPTIONS,
   PRIORITY_OPTIONS,
+  quickLinkInput,
   socialSecurityEdits,
   socialSecurityFormValues,
   TAX_TREATMENT_OPTIONS,
@@ -94,6 +101,7 @@ interface SettingsData {
   accounts: Account[]
   ledger: LedgerMonth[]
   categories: Category[]
+  quickLinks: QuickLink[]
   assumption: Assumption | null
   spendPlan: SpendPlan | null
   socialSecurity: SocialSecurityEntry[]
@@ -487,6 +495,155 @@ function AccountsCard({
           label="Initial value"
           value={values.initialValue}
           onChange={set('initialValue')}
+        />
+        <button
+          type="button"
+          disabled={adding}
+          onClick={() => void add()}
+          className="cursor-pointer rounded-[8px] bg-accent px-3 py-2 text-[11.5px] font-bold text-white disabled:opacity-60"
+        >
+          + Add
+        </button>
+      </div>
+    </Card>
+  )
+}
+
+function QuickLinkRow({
+  link,
+  onSave,
+  onDelete,
+}: {
+  link: QuickLink
+  onSave: (quickLinkId: number, input: QuickLinkInput) => Promise<void>
+  onDelete: (quickLinkId: number) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [values, setValues] = useState({ label: '', url: '' })
+
+  const set = (key: keyof typeof values) => (value: string) =>
+    setValues((current) => ({ ...current, [key]: value }))
+
+  const startEditing = () => {
+    setValues({ label: link.label, url: link.url })
+    setEditing(true)
+  }
+
+  const save = async () => {
+    const input = quickLinkInput(values)
+    if (!input) {
+      return
+    }
+    setSaving(true)
+    try {
+      await onSave(link.id, input)
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      data-testid="settings-quick-link-row"
+      className="flex items-center justify-between gap-3 border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
+    >
+      {editing ? (
+        <div className="flex flex-1 flex-wrap items-end justify-end gap-2">
+          <EditField
+            id={`quick-link-label-${link.id}`}
+            label="Label"
+            value={values.label}
+            onChange={set('label')}
+          />
+          <EditField
+            id={`quick-link-url-${link.id}`}
+            label="URL"
+            value={values.url}
+            onChange={set('url')}
+          />
+          <SaveButton disabled={saving} onClick={() => void save()} />
+        </div>
+      ) : (
+        <>
+          <p className="shrink-0 font-semibold">{link.label}</p>
+          <div className="flex min-w-0 items-center gap-3">
+            <p className="truncate text-muted-2">{link.url}</p>
+            <EditButton onClick={startEditing} />
+            <GhostButton
+              label="Delete"
+              onClick={() => void onDelete(link.id)}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function QuickLinksCard({
+  links,
+  onAdd,
+  onSave,
+  onDelete,
+}: {
+  links: QuickLink[]
+  onAdd: (input: QuickLinkInput) => Promise<void>
+  onSave: (quickLinkId: number, input: QuickLinkInput) => Promise<void>
+  onDelete: (quickLinkId: number) => Promise<void>
+}) {
+  const [values, setValues] = useState({ label: '', url: '' })
+  const [adding, setAdding] = useState(false)
+
+  const set = (key: keyof typeof values) => (value: string) =>
+    setValues((current) => ({ ...current, [key]: value }))
+
+  const add = async () => {
+    const input = quickLinkInput(values)
+    if (!input) {
+      return
+    }
+    setAdding(true)
+    try {
+      await onAdd(input)
+      setValues({ label: '', url: '' })
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <Card
+      title="Quick links"
+      hint="· shown beside the Ledger's balance form"
+      testId="quick-links-card"
+    >
+      <div className="mt-2">
+        {links.length === 0 && (
+          <p className="text-[12.5px] leading-8 text-muted-2">no links yet</p>
+        )}
+        {links.map((link) => (
+          <QuickLinkRow
+            key={link.id}
+            link={link}
+            onSave={onSave}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
+      <div className="mt-4 grid grid-cols-1 items-end gap-[11px] border-t border-hairline-2 pt-4 sm:grid-cols-[1fr_2fr_auto]">
+        <EditField
+          id="quick-link-label"
+          label="Label"
+          value={values.label}
+          onChange={set('label')}
+        />
+        <EditField
+          id="quick-link-url"
+          label="URL"
+          value={values.url}
+          onChange={set('url')}
         />
         <button
           type="button"
@@ -1150,6 +1307,7 @@ function Settings() {
       fetchAccounts(),
       fetchLedger(),
       fetchCategories(),
+      fetchQuickLinks(),
       fetchAssumptions(),
       fetchSpendPlan(),
       fetchSocialSecurity(),
@@ -1159,6 +1317,7 @@ function Settings() {
         accounts,
         ledger,
         categories,
+        quickLinks,
         assumption,
         spendPlan,
         socialSecurity,
@@ -1168,6 +1327,7 @@ function Settings() {
           accounts,
           ledger,
           categories,
+          quickLinks,
           assumption,
           spendPlan,
           socialSecurity,
@@ -1268,6 +1428,26 @@ function Settings() {
     await refetchCategories()
   }
 
+  const refetchQuickLinks = async () => {
+    const quickLinks = await fetchQuickLinks()
+    setData((current) => (current ? { ...current, quickLinks } : current))
+  }
+
+  const addQuickLink = async (input: QuickLinkInput) => {
+    await createQuickLink(input)
+    await refetchQuickLinks()
+  }
+
+  const saveQuickLink = async (quickLinkId: number, input: QuickLinkInput) => {
+    await updateQuickLink(quickLinkId, input)
+    await refetchQuickLinks()
+  }
+
+  const removeQuickLink = async (quickLinkId: number) => {
+    await deleteQuickLink(quickLinkId)
+    await refetchQuickLinks()
+  }
+
   const saveAssumptions = async (edit: AssumptionsEdit) => {
     if (edit.assumption) {
       await createAssumption(edit.assumption)
@@ -1342,6 +1522,12 @@ function Settings() {
         onSave={saveEnvelope}
         onArchive={archiveEnvelope}
         onReorder={reorderEnvelopes}
+      />
+      <QuickLinksCard
+        links={data.quickLinks}
+        onAdd={addQuickLink}
+        onSave={saveQuickLink}
+        onDelete={removeQuickLink}
       />
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <AssumptionsCard

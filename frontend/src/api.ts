@@ -467,6 +467,17 @@ export interface FundEntryInput {
   balance: number
 }
 
+export interface QuickLink {
+  id: number
+  label: string
+  url: string
+}
+
+export interface QuickLinkInput {
+  label: string
+  url: string
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path)
   if (!res.ok) {
@@ -499,6 +510,13 @@ async function putJson(path: string, body: unknown): Promise<void> {
   })
   if (!res.ok) {
     throw new Error(`PUT ${path} failed: ${res.status}`)
+  }
+}
+
+async function deleteJson(path: string): Promise<void> {
+  const res = await fetch(path, { method: 'DELETE' })
+  if (!res.ok) {
+    throw new Error(`DELETE ${path} failed: ${res.status}`)
   }
 }
 
@@ -593,6 +611,13 @@ export const updateCategoryOrder = (ids: number[]) =>
   putJson('/api/categories/order', { ids })
 export const archiveCategory = (categoryId: number) =>
   postJson(`/api/categories/${categoryId}/archive`, {})
+export const fetchQuickLinks = () => getJson<QuickLink[]>('/api/quick-links')
+export const createQuickLink = (input: QuickLinkInput) =>
+  postJson('/api/quick-links', input)
+export const updateQuickLink = (quickLinkId: number, input: QuickLinkInput) =>
+  putJson(`/api/quick-links/${quickLinkId}`, input)
+export const deleteQuickLink = (quickLinkId: number) =>
+  deleteJson(`/api/quick-links/${quickLinkId}`)
 export const createExpense = (input: ExpenseInput) =>
   postJson('/api/expenses', input)
 export const createIncome = (input: IncomeInput) =>

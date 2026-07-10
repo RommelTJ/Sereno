@@ -786,9 +786,11 @@ describe('Quick links card', () => {
   })
 
   it('deletes a link and refreshes the list', async () => {
+    // The stub's method-key lookup falls through on null (`?? routes[path]`),
+    // so the DELETE's empty body is stubbed as {}.
     const liveRoutes: Record<string, unknown> = {
       ...routes(),
-      'DELETE /api/quick-links/1': null,
+      'DELETE /api/quick-links/1': {},
     }
     const fetchMock = stubApi(liveRoutes)
     render(<Settings />)
