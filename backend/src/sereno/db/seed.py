@@ -100,8 +100,8 @@ EXPENSES = [
     ("2026-06-26", "2026-06", "Entertainment", 28.40, 0, "discretionary", None, "Poke — treat"),
 ]
 
-# (txn_date, budget_month, source, amount, note) — prepay: May paychecks
-# fund June's budget, the Jun 27 paycheck funds July.
+# (txn_date, budget_month, source, amount, source_label) — prepay: May
+# paychecks fund June's budget, the Jun 27 paycheck funds July.
 INCOME_EVENTS = [
     ("2026-05-24", "2026-06", "paycheck", 2800, "You paycheck"),
     ("2026-05-27", "2026-06", "paycheck", 2400, "Spouse paycheck"),
@@ -216,7 +216,7 @@ def seed(conn: sqlite3.Connection) -> bool:
 
     conn.executemany(
         "INSERT INTO income_event (txn_date, budget_month, source, amount,"
-        " tax_treatment, note) VALUES (?, ?, ?, ?, 'ORDINARY', ?)",
+        " tax_treatment, source_label) VALUES (?, ?, ?, ?, 'ORDINARY', ?)",
         INCOME_EVENTS,
     )
 
