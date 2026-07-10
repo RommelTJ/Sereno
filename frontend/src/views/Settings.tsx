@@ -1,3 +1,21 @@
+import type { DragEndEvent } from '@dnd-kit/core'
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { GripVertical } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type {
   Account,
@@ -31,6 +49,7 @@ import {
   fetchSpendPlan,
   fetchTaxParams,
   updateAccount,
+  updateAccountOrder,
   updateCategory,
   updateCategoryPlan,
   updateTaxParam,
@@ -50,6 +69,7 @@ import type {
 import {
   accountInput,
   accountRows,
+  applyOrder,
   assumptionsEdits,
   assumptionsFormValues,
   bracketLabel,
@@ -193,6 +213,71 @@ function SelectField({
   )
 }
 
+// One drag-and-drop scope: the rows of a single card. The pointer sensor
+// covers mouse and touch (the handle is touch-action: none so iOS drags
+// instead of scrolling); the keyboard sensor makes the handles operable
+// by keyboard. Dropping reports the card's full new id order.
+function SortableRows({
+  ids,
+  onReorder,
+  children,
+}: {
+  ids: number[]
+  onReorder: (ids: number[]) => Promise<void>
+  children: React.ReactNode
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) {
+      return
+    }
+    const from = ids.indexOf(Number(active.id))
+    const to = ids.indexOf(Number(over.id))
+    void onReorder(arrayMove(ids, from, to))
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        {children}
+      </SortableContext>
+    </DndContext>
+  )
+}
+
+function DragHandle({
+  name,
+  attributes,
+  listeners,
+}: {
+  name: string
+  attributes: ReturnType<typeof useSortable>['attributes']
+  listeners: ReturnType<typeof useSortable>['listeners']
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={`Reorder ${name}`}
+      {...attributes}
+      {...listeners}
+      className="cursor-grab touch-none text-muted-2"
+    >
+      <GripVertical size={14} />
+    </button>
+  )
+}
+
 function AccountRowItem({
   row,
   testId,
@@ -210,6 +295,8 @@ function AccountRowItem({
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [values, setValues] = useState(() => classificationValues(row.account))
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: row.id })
 
   const set = (key: 'kind' | 'taxTreatment' | 'priority' | 'accessAge') =>
     (value: string) => setValues((current) => ({ ...current, [key]: value }))
@@ -235,6 +322,8 @@ function AccountRowItem({
 
   return (
     <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       data-testid={testId}
       className="flex items-center justify-between gap-3 border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
     >
@@ -286,10 +375,17 @@ function AccountRowItem({
         </div>
       ) : (
         <>
-          <p className="font-semibold">
-            <span className="mr-2">{row.emoji}</span>
-            <span>{row.name}</span>
-          </p>
+          <div className="flex items-center gap-2">
+            <DragHandle
+              name={row.name}
+              attributes={attributes}
+              listeners={listeners}
+            />
+            <p className="font-semibold">
+              <span className="mr-2">{row.emoji}</span>
+              <span>{row.name}</span>
+            </p>
+          </div>
           <div className="flex items-center gap-3">
             <p className={`num font-bold ${row.negative ? 'text-red' : ''}`}>
               {row.value}
@@ -317,6 +413,7 @@ function AccountsCard({
   onAdd,
   onClassify,
   onDeactivate,
+  onReorder,
 }: {
   title: string
   hint: string
@@ -331,6 +428,7 @@ function AccountsCard({
     input: AccountClassificationInput,
   ) => Promise<void>
   onDeactivate: (accountId: number) => Promise<void>
+  onReorder: (ids: number[]) => Promise<void>
 }) {
   const [values, setValues] = useState({ name: '', emoji: '', initialValue: '' })
   const [adding, setAdding] = useState(false)
@@ -358,15 +456,17 @@ function AccountsCard({
         {rows.length === 0 && (
           <p className="text-[12.5px] leading-8 text-muted-2">none yet</p>
         )}
-        {rows.map((row) => (
-          <AccountRowItem
-            key={row.id}
-            row={row}
-            testId={rowTestId}
-            onClassify={onClassify}
-            onDeactivate={onDeactivate}
-          />
-        ))}
+        <SortableRows ids={rows.map((row) => row.id)} onReorder={onReorder}>
+          {rows.map((row) => (
+            <AccountRowItem
+              key={row.id}
+              row={row}
+              testId={rowTestId}
+              onClassify={onClassify}
+              onDeactivate={onDeactivate}
+            />
+          ))}
+        </SortableRows>
       </div>
       <div className="mt-4 grid grid-cols-1 items-end gap-[11px] border-t border-hairline-2 pt-4 sm:grid-cols-[1fr_1fr_1fr_auto]">
         <EditField
@@ -1085,6 +1185,33 @@ function Settings() {
     await refetchAccounts()
   }
 
+  // A drop hands back one card's new order; the PUT wants every active
+  // account, so merge in the other card's side unchanged — assets first,
+  // the way the ledger and the balance form list them. The local reorder
+  // keeps the row where it was dropped while the requests run.
+  const reorderAccounts = async (liability: boolean, orderedIds: number[]) => {
+    const accounts = data?.accounts ?? []
+    const others = accounts
+      .filter(
+        (account) => account.active && account.is_liability !== liability,
+      )
+      .map((account) => account.id)
+    const ids = liability
+      ? [...others, ...orderedIds]
+      : [...orderedIds, ...others]
+    setData((current) =>
+      current
+        ? { ...current, accounts: applyOrder(current.accounts, ids) }
+        : current,
+    )
+    await updateAccountOrder(ids)
+    await refetchAccounts()
+  }
+
+  const reorderAssets = (ids: number[]) => reorderAccounts(false, ids)
+
+  const reorderLiabilities = (ids: number[]) => reorderAccounts(true, ids)
+
   const refetchCategories = async () => {
     const categories = await fetchCategories()
     setData((current) => (current ? { ...current, categories } : current))
@@ -1164,6 +1291,7 @@ function Settings() {
         onAdd={addAccount}
         onClassify={classifyAccount}
         onDeactivate={removeAccount}
+        onReorder={reorderAssets}
       />
       <AccountsCard
         title="Liabilities"
@@ -1175,6 +1303,7 @@ function Settings() {
         rows={accountRows(data.accounts, data.ledger, true)}
         onAdd={addAccount}
         onDeactivate={removeAccount}
+        onReorder={reorderLiabilities}
       />
       <EnvelopesCard
         categories={data.categories}

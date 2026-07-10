@@ -64,6 +64,23 @@ export function accountRows(
     })
 }
 
+// Apply a persisted drag-reorder locally so the rows don't snap back
+// while the PUT and refetch are in flight. Items missing from ids
+// (inactive accounts, the other card's side) keep their relative order
+// after the listed ones — they never render in an ordered surface.
+export function applyOrder<T extends { id: number }>(
+  items: T[],
+  ids: number[],
+): T[] {
+  const position = new Map(ids.map((id, index) => [id, index]))
+  const listed = items
+    .filter((item) => position.has(item.id))
+    .sort(
+      (a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0),
+    )
+  return [...listed, ...items.filter((item) => !position.has(item.id))]
+}
+
 // The classification selects mirror the backend's account enums —
 // schema.sql's kind and tax_treatment comments and the sourcing engine's
 // withdrawal buckets. Mortgage is absent: liabilities are never classified.

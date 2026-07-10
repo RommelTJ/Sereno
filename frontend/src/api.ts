@@ -577,6 +577,8 @@ export const updateAccount = (
   accountId: number,
   input: AccountClassificationInput,
 ) => putJson(`/api/accounts/${accountId}`, input)
+export const updateAccountOrder = (ids: number[]) =>
+  putJson('/api/accounts/order', { ids })
 export const deactivateAccount = (accountId: number) =>
   postJson(`/api/accounts/${accountId}/deactivate`, {})
 export const createBalanceEntry = (input: BalanceEntryInput) =>
