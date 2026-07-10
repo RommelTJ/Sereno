@@ -171,6 +171,14 @@ export const CATEGORIES = [
   { id: 4, name: 'Travel', emoji: '✈️', is_fixed: false, planned: 0 },
 ]
 
+// Quick links exactly as GET /api/quick-links returns them, in the user's
+// order. Fake URLs only — the real institution links live in the local
+// database, never in the public repo.
+export const QUICK_LINKS = [
+  { id: 1, label: 'Chase', url: 'https://bank.example.com/accounts' },
+  { id: 2, label: 'Vanguard', url: 'https://broker.example.com/login' },
+]
+
 // Active funds, exactly as GET /api/funds returns them: dimension rows plus
 // the latest fund_entry balance and the server-derived note. The Bike fund
 // is fully funded; the Travel fund is open-ended (no target) and has no

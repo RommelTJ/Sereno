@@ -8,6 +8,7 @@ import {
   balance,
   CATEGORIES,
   LEDGER,
+  QUICK_LINKS,
   SOCIAL_SECURITY,
   SPEND_PLAN,
   TAX_PARAMS,
@@ -19,6 +20,7 @@ const routes = () => ({
   '/api/accounts': ACCOUNTS,
   '/api/ledger': LEDGER,
   '/api/categories': CATEGORIES,
+  '/api/quick-links': QUICK_LINKS,
   '/api/assumptions': ASSUMPTION,
   '/api/spend-plan': SPEND_PLAN,
   '/api/social-security': SOCIAL_SECURITY,
@@ -667,6 +669,142 @@ describe('Envelopes card', () => {
           input === '/api/categories/1/archive' && init?.method === 'POST',
       ),
     ).toBe(true)
+  })
+})
+
+describe('Quick links card', () => {
+  it('lists each link with its label and URL', async () => {
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-quick-link-row')
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByText('Chase')).toBeInTheDocument()
+    expect(
+      within(rows[0]).getByText('https://bank.example.com/accounts'),
+    ).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Vanguard')).toBeInTheDocument()
+  })
+
+  it('says so when no links exist yet', async () => {
+    stubApi({ ...routes(), '/api/quick-links': [] })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('quick-links-card')
+    expect(within(card).getByText('no links yet')).toBeInTheDocument()
+  })
+
+  it('posts a new link and refreshes the list', async () => {
+    const CREATED = {
+      id: 3,
+      label: 'Fidelity',
+      url: 'https://401k.example.com/summary',
+    }
+    const liveRoutes = {
+      ...routes(),
+      'POST /api/quick-links': CREATED,
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const card = await screen.findByTestId('quick-links-card')
+    fireEvent.change(within(card).getByLabelText('Label'), {
+      target: { value: 'Fidelity' },
+    })
+    fireEvent.change(within(card).getByLabelText('URL'), {
+      target: { value: 'https://401k.example.com/summary' },
+    })
+    liveRoutes['/api/quick-links'] = [...QUICK_LINKS, CREATED]
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('settings-quick-link-row')).toHaveLength(3),
+    )
+    expect(postBody(fetchMock, '/api/quick-links')).toEqual({
+      label: 'Fidelity',
+      url: 'https://401k.example.com/summary',
+    })
+    expect(within(card).getByLabelText('Label')).toHaveValue('')
+    expect(within(card).getByLabelText('URL')).toHaveValue('')
+  })
+
+  it('does not post a blank label or URL', async () => {
+    const fetchMock = stubApi(routes())
+    render(<Settings />)
+
+    const card = await screen.findByTestId('quick-links-card')
+    fireEvent.change(within(card).getByLabelText('URL'), {
+      target: { value: 'https://bank.example.com' },
+    })
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    fireEvent.change(within(card).getByLabelText('Label'), {
+      target: { value: 'Chase' },
+    })
+    fireEvent.change(within(card).getByLabelText('URL'), {
+      target: { value: '  ' },
+    })
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    expect(postBody(fetchMock, '/api/quick-links')).toBeUndefined()
+  })
+
+  it('revises a link from the per-row edit and refreshes', async () => {
+    const REVISED = {
+      id: 1,
+      label: 'Chase checking',
+      url: 'https://bank.example.com/login',
+    }
+    const liveRoutes = {
+      ...routes(),
+      'PUT /api/quick-links/1': REVISED,
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-quick-link-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(rows[0]).getByLabelText('Label'), {
+      target: { value: 'Chase checking' },
+    })
+    fireEvent.change(within(rows[0]).getByLabelText('URL'), {
+      target: { value: 'https://bank.example.com/login' },
+    })
+    liveRoutes['/api/quick-links'] = [REVISED, QUICK_LINKS[1]]
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        within(screen.getAllByTestId('settings-quick-link-row')[0]).getByText(
+          'Chase checking',
+        ),
+      ).toBeInTheDocument(),
+    )
+    expect(putBody(fetchMock, '/api/quick-links/1')).toEqual({
+      label: 'Chase checking',
+      url: 'https://bank.example.com/login',
+    })
+  })
+
+  it('deletes a link and refreshes the list', async () => {
+    const liveRoutes: Record<string, unknown> = {
+      ...routes(),
+      'DELETE /api/quick-links/1': null,
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-quick-link-row')
+    liveRoutes['/api/quick-links'] = [QUICK_LINKS[1]]
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('settings-quick-link-row')).toHaveLength(1),
+    )
+    const deleted = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        input === '/api/quick-links/1' && init?.method === 'DELETE',
+    )
+    expect(deleted).toBeDefined()
   })
 })
 
