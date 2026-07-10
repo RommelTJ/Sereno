@@ -1224,6 +1224,40 @@ describe('Account reordering', () => {
   })
 })
 
+describe('Envelope reordering', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('persists a dragged envelope row and re-renders the new order', async () => {
+    const liveRoutes: Record<string, unknown> = routes()
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    await screen.findAllByTestId('settings-envelope-row')
+    stubRects()
+
+    liveRoutes['PUT /api/categories/order'] = []
+    liveRoutes['/api/categories'] = [
+      CATEGORIES[1],
+      CATEGORIES[0],
+      ...CATEGORIES.slice(2),
+    ]
+    const card = screen.getByTestId('envelopes-card')
+    await dragByOne(within(card).getByLabelText('Reorder Groceries'), 'ArrowDown')
+
+    await waitFor(() =>
+      expect(putBody(fetchMock, '/api/categories/order')).toEqual({
+        ids: [2, 1, 3, 4],
+      }),
+    )
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('settings-envelope-row')
+      expect(within(rows[0]).getByText('Gas')).toBeInTheDocument()
+      expect(within(rows[1]).getByText('Groceries')).toBeInTheDocument()
+    })
+  })
+})
+
 describe('Responsive layout', () => {
   it('stacks the assumptions row into one column on narrow screens', async () => {
     render(<Settings />)
