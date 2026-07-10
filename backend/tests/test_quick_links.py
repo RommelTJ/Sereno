@@ -64,3 +64,58 @@ class TestPostQuickLinks:
     def test_blank_label_or_url_is_rejected(self, client):
         assert create(client, "  ", "https://chase.com").status_code == 422
         assert create(client, "Chase", "  ").status_code == 422
+
+
+class TestPutQuickLink:
+    def test_revises_label_and_url_in_place(self, client):
+        link_id = create(client).json()["id"]
+        response = client.put(
+            f"/api/quick-links/{link_id}",
+            json={"label": "Chase checking", "url": "https://chase.com/login"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {
+            "id": link_id,
+            "label": "Chase checking",
+            "url": "https://chase.com/login",
+        }
+        assert client.get("/api/quick-links").json() == [response.json()]
+
+    def test_a_schemeless_url_gets_https_prefixed(self, client):
+        link_id = create(client).json()["id"]
+        response = client.put(
+            f"/api/quick-links/{link_id}",
+            json={"label": "Chase", "url": "chase.com/login"},
+        )
+        assert response.json()["url"] == "https://chase.com/login"
+
+    def test_blank_label_or_url_is_rejected(self, client):
+        link_id = create(client).json()["id"]
+        for body in (
+            {"label": "  ", "url": "https://chase.com"},
+            {"label": "Chase", "url": "  "},
+        ):
+            assert client.put(f"/api/quick-links/{link_id}", json=body).status_code == 422
+
+    def test_unknown_link_returns_404(self, client):
+        response = client.put(
+            "/api/quick-links/999", json={"label": "Chase", "url": "https://chase.com"}
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "quick link not found"
+
+
+class TestDeleteQuickLink:
+    def test_deletes_the_row_and_keeps_the_rest_in_order(self, client):
+        create(client, "Chase", "https://chase.com")
+        vanguard = create(client, "Vanguard", "https://vanguard.com").json()["id"]
+        create(client, "Fidelity", "https://fidelity.com")
+        response = client.delete(f"/api/quick-links/{vanguard}")
+        assert response.status_code == 204
+        labels = [link["label"] for link in client.get("/api/quick-links").json()]
+        assert labels == ["Chase", "Fidelity"]
+
+    def test_unknown_link_returns_404(self, client):
+        response = client.delete("/api/quick-links/999")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "quick link not found"
