@@ -137,7 +137,7 @@ class BalanceEntry(BaseModel):
 
 @router.get("/accounts")
 def list_accounts(db: Db) -> list[Account]:
-    rows = db.execute(f"SELECT {_ACCOUNT_COLUMNS} FROM account ORDER BY id")
+    rows = db.execute(f"SELECT {_ACCOUNT_COLUMNS} FROM account ORDER BY sort_order, id")
     return [Account(**dict(row)) for row in rows]
 
 
@@ -155,8 +155,10 @@ def create_account(account: AccountCreate, db: Db) -> Account:
     if duplicate:
         raise HTTPException(status_code=409, detail=f"account {account.name!r} exists")
     cursor = db.execute(
-        "INSERT INTO account (name, emoji, kind, tax_treatment, is_liability, is_investable)"
-        " VALUES (?, ?, 'other', 'NONE', ?, 0)",
+        "INSERT INTO account (name, emoji, kind, tax_treatment, is_liability, is_investable,"
+        " sort_order)"
+        " VALUES (?, ?, 'other', 'NONE', ?, 0,"
+        " (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM account))",
         (account.name, account.emoji, account.is_liability),
     )
     account_id = cursor.lastrowid
@@ -167,6 +169,33 @@ def create_account(account: AccountCreate, db: Db) -> Account:
     )
     db.commit()
     return _account(db, account_id)
+
+
+class AccountOrder(BaseModel):
+    """The complete ordered list of active account ids — total, so a partial
+    update can never interleave two reorders."""
+
+    ids: list[int]
+
+
+@router.put("/accounts/order")
+def reorder_accounts(order: AccountOrder, db: Db) -> list[Account]:
+    """Persists a user-defined display order: position in the list becomes
+    sort_order (1-based). Declared before /accounts/{account_id} so "order"
+    is never parsed as an account id. Inactive accounts keep their stale
+    sort_order — they never render in an ordered surface."""
+    active_ids = {row["id"] for row in db.execute("SELECT id FROM account WHERE active = 1")}
+    if len(order.ids) != len(active_ids) or set(order.ids) != active_ids:
+        raise HTTPException(status_code=422, detail="ids must be exactly the active account ids")
+    db.executemany(
+        "UPDATE account SET sort_order = ? WHERE id = ?",
+        list(enumerate(order.ids, start=1)),
+    )
+    db.commit()
+    rows = db.execute(
+        f"SELECT {_ACCOUNT_COLUMNS} FROM account WHERE active = 1 ORDER BY sort_order, id"
+    )
+    return [Account(**dict(row)) for row in rows]
 
 
 @router.put("/accounts/{account_id}")

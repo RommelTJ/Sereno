@@ -190,7 +190,7 @@ def list_categories(db: Db, month: Month = None) -> list[Category]:
         " COALESCE((SELECT p.planned FROM category_plan p"
         "           WHERE p.category_id = c.id AND p.effective_month <= ?"
         "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned"
-        " FROM category c WHERE c.active = 1 ORDER BY c.id",
+        " FROM category c WHERE c.active = 1 ORDER BY c.sort_order, c.id",
         (month or _current_month(),),
     )
     return [Category(**dict(row)) for row in rows]
@@ -205,7 +205,8 @@ def create_category(category: CategoryCreate, db: Db) -> Category:
     if duplicate:
         raise HTTPException(status_code=409, detail=f"category {category.name!r} exists")
     cursor = db.execute(
-        "INSERT INTO category (name, emoji) VALUES (?, ?)",
+        "INSERT INTO category (name, emoji, sort_order)"
+        " VALUES (?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM category))",
         (category.name, category.emoji),
     )
     category_id = cursor.lastrowid
@@ -218,6 +219,30 @@ def create_category(category: CategoryCreate, db: Db) -> Category:
         "SELECT id, name, emoji, is_fixed FROM category WHERE id = ?", (category_id,)
     ).fetchone()
     return Category(**dict(row), planned=category.planned)
+
+
+class CategoryOrder(BaseModel):
+    """The complete ordered list of active category ids — total, so a partial
+    update can never interleave two reorders."""
+
+    ids: list[int]
+
+
+@router.put("/categories/order")
+def reorder_categories(order: CategoryOrder, db: Db) -> list[Category]:
+    """Persists a user-defined envelope order: position in the list becomes
+    sort_order (1-based). Declared before /categories/{category_id} so
+    "order" is never parsed as a category id. Archived categories keep their
+    stale sort_order — they never render in an ordered surface."""
+    active_ids = {row["id"] for row in db.execute("SELECT id FROM category WHERE active = 1")}
+    if len(order.ids) != len(active_ids) or set(order.ids) != active_ids:
+        raise HTTPException(status_code=422, detail="ids must be exactly the active category ids")
+    db.executemany(
+        "UPDATE category SET sort_order = ? WHERE id = ?",
+        list(enumerate(order.ids, start=1)),
+    )
+    db.commit()
+    return list_categories(db, None)
 
 
 @router.put("/categories/{category_id}")
@@ -385,7 +410,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
             " COALESCE((SELECT SUM(e.amount) FROM expense_line e"
             "           WHERE e.category_id = c.id AND e.budget_month = ?"
             "           AND e.funded_from = 'discretionary'), 0) AS spent"
-            " FROM category c WHERE c.active = 1 ORDER BY c.id",
+            " FROM category c WHERE c.active = 1 ORDER BY c.sort_order, c.id",
             (target, target),
         )
     ]

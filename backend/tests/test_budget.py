@@ -153,6 +153,72 @@ class TestGetCategories:
         response = client.get("/api/categories", params={"month": "June 2026"})
         assert response.status_code == 422
 
+    def test_lists_categories_by_sort_order_before_id(self, client):
+        insert_category("Groceries")
+        insert_category("Gas")
+        insert_category("Travel")
+        execute("UPDATE category SET sort_order = 4 - id")
+        response = client.get("/api/categories")
+        assert [category["name"] for category in response.json()] == [
+            "Travel",
+            "Gas",
+            "Groceries",
+        ]
+
+
+class TestReorderCategories:
+    def create(self, client, name):
+        return client.post("/api/categories", json={"name": name, "planned": 100}).json()["id"]
+
+    def assert_rejected(self, response):
+        assert response.status_code == 422
+        assert response.json()["detail"] == "ids must be exactly the active category ids"
+
+    def test_persists_and_echoes_the_new_order(self, client):
+        groceries = self.create(client, "Groceries")
+        gas = self.create(client, "Gas")
+        travel = self.create(client, "Travel")
+        response = client.put("/api/categories/order", json={"ids": [travel, groceries, gas]})
+        assert response.status_code == 200
+        assert [category["name"] for category in response.json()] == [
+            "Travel",
+            "Groceries",
+            "Gas",
+        ]
+        categories = client.get("/api/categories").json()
+        assert [category["name"] for category in categories] == ["Travel", "Groceries", "Gas"]
+
+    def test_ids_must_cover_exactly_the_active_categories(self, client):
+        groceries = self.create(client, "Groceries")
+        gas = self.create(client, "Gas")
+        self.assert_rejected(client.put("/api/categories/order", json={"ids": [groceries]}))
+        self.assert_rejected(
+            client.put("/api/categories/order", json={"ids": [groceries, gas, 999]})
+        )
+        self.assert_rejected(
+            client.put("/api/categories/order", json={"ids": [groceries, groceries, gas]})
+        )
+
+    def test_archived_categories_stay_out_of_the_order(self, client):
+        groceries = self.create(client, "Groceries")
+        gas = self.create(client, "Gas")
+        retired = self.create(client, "Old envelope")
+        client.post(f"/api/categories/{retired}/archive")
+        self.assert_rejected(
+            client.put("/api/categories/order", json={"ids": [gas, groceries, retired]})
+        )
+        response = client.put("/api/categories/order", json={"ids": [gas, groceries]})
+        assert response.status_code == 200
+        assert [category["name"] for category in response.json()] == ["Gas", "Groceries"]
+
+    def test_new_category_lists_last_after_a_reorder(self, client):
+        groceries = self.create(client, "Groceries")
+        gas = self.create(client, "Gas")
+        client.put("/api/categories/order", json={"ids": [gas, groceries]})
+        self.create(client, "Travel")
+        categories = client.get("/api/categories").json()
+        assert [category["name"] for category in categories] == ["Gas", "Groceries", "Travel"]
+
 
 class TestPostCategories:
     def test_creates_a_category_with_its_initial_plan(self, client):
@@ -722,6 +788,14 @@ class TestGetBudgetMonth:
         assert body["baseline"] == 5200
         assert body["total_spent"] == 387
         assert body["safe_to_spend"] == 4813
+
+    def test_envelopes_follow_the_category_sort_order(self, client):
+        insert_category("Groceries")
+        insert_category("Travel")
+        execute("UPDATE category SET sort_order = 3 - id")
+        response = client.get("/api/budget-month", params={"month": "2026-06"})
+        names = [envelope["name"] for envelope in response.json()["categories"]]
+        assert names == ["Travel", "Groceries"]
 
     def test_over_budget_is_allowed_and_goes_negative(self, client):
         gas_id = insert_category("Gas")

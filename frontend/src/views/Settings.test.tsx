@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { todayIso } from '../ledger.ts'
 import { NetWorthContext } from '../netWorth.ts'
 import {
@@ -1115,6 +1115,145 @@ describe('Tax parameter editing', () => {
       ltcg_0_ceiling: 96_700,
       niit_rate: 0.038,
       state_treatment: 'CA_ordinary',
+    })
+  })
+})
+
+// jsdom reports zero-size rects for everything, so the keyboard drag
+// sensor can't tell rows apart. Stack every element 40px below its
+// previous sibling instead — enough geometry for "down means the next row".
+const stubRects = () => {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
+    function (this: Element) {
+      const siblings = this.parentElement
+        ? Array.from(this.parentElement.children)
+        : [this]
+      const top = siblings.indexOf(this) * 40
+      return {
+        x: 0,
+        y: top,
+        top,
+        bottom: top + 40,
+        left: 0,
+        right: 300,
+        width: 300,
+        height: 40,
+        toJSON: () => ({}),
+      } as DOMRect
+    },
+  )
+}
+
+// Lift a row by its drag handle, move it one step, and drop it. The drag
+// sensor attaches its document listener on a timeout, so flush it between
+// the lift and the move.
+const dragByOne = async (handle: HTMLElement, code: 'ArrowDown' | 'ArrowUp') => {
+  fireEvent.keyDown(handle, { code: 'Enter' })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  fireEvent.keyDown(handle, { code })
+  fireEvent.keyDown(handle, { code: 'Enter' })
+}
+
+describe('Account reordering', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('persists a dragged asset row and re-renders the new order', async () => {
+    const liveRoutes: Record<string, unknown> = routes()
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    await screen.findAllByTestId('settings-asset-row')
+    stubRects()
+
+    const reordered = [ACCOUNTS[1], ACCOUNTS[0], ...ACCOUNTS.slice(2)]
+    liveRoutes['PUT /api/accounts/order'] = reordered.filter(
+      (account) => !account.is_liability,
+    )
+    liveRoutes['/api/accounts'] = reordered
+    const card = screen.getByTestId('assets-card')
+    await dragByOne(within(card).getByLabelText('Reorder Ethereum'), 'ArrowDown')
+
+    await waitFor(() =>
+      expect(putBody(fetchMock, '/api/accounts/order')).toEqual({
+        ids: [2, 1, 3, 4, 5, 6, 7, 8, 9, 10],
+      }),
+    )
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('settings-asset-row')
+      expect(within(rows[0]).getByText('VFIAX')).toBeInTheDocument()
+      expect(within(rows[1]).getByText('Ethereum')).toBeInTheDocument()
+    })
+  })
+
+  it('reorders liabilities within their own card, after the assets', async () => {
+    const carLoan = {
+      ...ACCOUNTS[9],
+      id: 11,
+      name: 'Car loan',
+      emoji: '🚗',
+    }
+    const liveRoutes: Record<string, unknown> = {
+      ...routes(),
+      '/api/accounts': [...ACCOUNTS, carLoan],
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    await screen.findAllByTestId('settings-liability-row')
+    stubRects()
+
+    liveRoutes['PUT /api/accounts/order'] = []
+    liveRoutes['/api/accounts'] = [
+      ...ACCOUNTS.slice(0, 9),
+      carLoan,
+      ACCOUNTS[9],
+    ]
+    const card = screen.getByTestId('liabilities-card')
+    await dragByOne(within(card).getByLabelText('Reorder Mortgage'), 'ArrowDown')
+
+    await waitFor(() =>
+      expect(putBody(fetchMock, '/api/accounts/order')).toEqual({
+        ids: [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 10],
+      }),
+    )
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('settings-liability-row')
+      expect(within(rows[0]).getByText('Car loan')).toBeInTheDocument()
+      expect(within(rows[1]).getByText('Mortgage')).toBeInTheDocument()
+    })
+  })
+})
+
+describe('Envelope reordering', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('persists a dragged envelope row and re-renders the new order', async () => {
+    const liveRoutes: Record<string, unknown> = routes()
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    await screen.findAllByTestId('settings-envelope-row')
+    stubRects()
+
+    liveRoutes['PUT /api/categories/order'] = []
+    liveRoutes['/api/categories'] = [
+      CATEGORIES[1],
+      CATEGORIES[0],
+      ...CATEGORIES.slice(2),
+    ]
+    const card = screen.getByTestId('envelopes-card')
+    await dragByOne(within(card).getByLabelText('Reorder Groceries'), 'ArrowDown')
+
+    await waitFor(() =>
+      expect(putBody(fetchMock, '/api/categories/order')).toEqual({
+        ids: [2, 1, 3, 4],
+      }),
+    )
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('settings-envelope-row')
+      expect(within(rows[0]).getByText('Gas')).toBeInTheDocument()
+      expect(within(rows[1]).getByText('Groceries')).toBeInTheDocument()
     })
   })
 })

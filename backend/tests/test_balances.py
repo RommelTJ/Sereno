@@ -120,6 +120,69 @@ class TestGetAccounts:
         (account,) = client.get("/api/accounts").json()
         assert account["emoji"] == "⚡"
 
+    def test_lists_accounts_by_sort_order_before_id(self, client):
+        insert_account("Ethereum", "eth")
+        insert_account("Brokerage", "brokerage_fund")
+        insert_account("Cash", "cash")
+        conn = connect()
+        try:
+            conn.execute("UPDATE account SET sort_order = 4 - id")
+            conn.commit()
+        finally:
+            conn.close()
+        accounts = client.get("/api/accounts").json()
+        assert [account["name"] for account in accounts] == ["Cash", "Brokerage", "Ethereum"]
+
+
+class TestReorderAccounts:
+    def create(self, client, name):
+        return client.post("/api/accounts", json={"name": name, "initial_value": 100}).json()["id"]
+
+    def test_persists_and_echoes_the_new_order(self, client):
+        eth = self.create(client, "Ethereum")
+        brokerage = self.create(client, "Brokerage")
+        cash = self.create(client, "Cash")
+        response = client.put("/api/accounts/order", json={"ids": [cash, eth, brokerage]})
+        assert response.status_code == 200
+        assert [account["name"] for account in response.json()] == [
+            "Cash",
+            "Ethereum",
+            "Brokerage",
+        ]
+        accounts = client.get("/api/accounts").json()
+        assert [account["name"] for account in accounts] == ["Cash", "Ethereum", "Brokerage"]
+
+    def assert_rejected(self, response):
+        assert response.status_code == 422
+        assert response.json()["detail"] == "ids must be exactly the active account ids"
+
+    def test_ids_must_cover_exactly_the_active_accounts(self, client):
+        eth = self.create(client, "Ethereum")
+        brokerage = self.create(client, "Brokerage")
+        self.assert_rejected(client.put("/api/accounts/order", json={"ids": [eth]}))
+        self.assert_rejected(client.put("/api/accounts/order", json={"ids": [eth, brokerage, 999]}))
+        self.assert_rejected(client.put("/api/accounts/order", json={"ids": [eth, eth, brokerage]}))
+
+    def test_inactive_accounts_stay_out_of_the_order(self, client):
+        eth = self.create(client, "Ethereum")
+        brokerage = self.create(client, "Brokerage")
+        retired = self.create(client, "Old checking")
+        client.post(f"/api/accounts/{retired}/deactivate")
+        self.assert_rejected(
+            client.put("/api/accounts/order", json={"ids": [brokerage, eth, retired]})
+        )
+        response = client.put("/api/accounts/order", json={"ids": [brokerage, eth]})
+        assert response.status_code == 200
+        assert [account["name"] for account in response.json()] == ["Brokerage", "Ethereum"]
+
+    def test_new_account_lists_last_after_a_reorder(self, client):
+        eth = self.create(client, "Ethereum")
+        brokerage = self.create(client, "Brokerage")
+        client.put("/api/accounts/order", json={"ids": [brokerage, eth]})
+        self.create(client, "Cash")
+        accounts = client.get("/api/accounts").json()
+        assert [account["name"] for account in accounts] == ["Brokerage", "Ethereum", "Cash"]
+
 
 class TestPostAccounts:
     def test_creates_an_asset_with_defaults_and_its_initial_balance(self, client):

@@ -577,6 +577,8 @@ export const updateAccount = (
   accountId: number,
   input: AccountClassificationInput,
 ) => putJson(`/api/accounts/${accountId}`, input)
+export const updateAccountOrder = (ids: number[]) =>
+  putJson('/api/accounts/order', { ids })
 export const deactivateAccount = (accountId: number) =>
   postJson(`/api/accounts/${accountId}/deactivate`, {})
 export const createBalanceEntry = (input: BalanceEntryInput) =>
@@ -587,6 +589,8 @@ export const updateCategoryPlan = (categoryId: number, input: CategoryPlanInput)
   postJson(`/api/categories/${categoryId}/plan`, input)
 export const updateCategory = (categoryId: number, input: CategoryUpdate) =>
   putJson(`/api/categories/${categoryId}`, input)
+export const updateCategoryOrder = (ids: number[]) =>
+  putJson('/api/categories/order', { ids })
 export const archiveCategory = (categoryId: number) =>
   postJson(`/api/categories/${categoryId}/archive`, {})
 export const createExpense = (input: ExpenseInput) =>
