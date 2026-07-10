@@ -1,19 +1,32 @@
 import { useEffect, useState } from 'react'
-import type { Account, BalanceEntryInput, LedgerMonth } from '../api.ts'
-import { createBalanceEntry, fetchAccounts, fetchLedger } from '../api.ts'
+import type {
+  Account,
+  BalanceEntryInput,
+  LedgerMonth,
+  QuickLink,
+} from '../api.ts'
+import {
+  createBalanceEntry,
+  fetchAccounts,
+  fetchLedger,
+  fetchQuickLinks,
+} from '../api.ts'
 import BalanceForm from '../components/BalanceForm.tsx'
 import LedgerTable from '../components/LedgerTable.tsx'
+import QuickLinks from '../components/QuickLinks.tsx'
 import { ledgerColumns, ledgerRows } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
 
 function Ledger() {
   const [accounts, setAccounts] = useState<Account[] | null>(null)
   const [months, setMonths] = useState<LedgerMonth[] | null>(null)
+  const [quickLinks, setQuickLinks] = useState<QuickLink[]>([])
   const { refresh } = useNetWorth()
 
   useEffect(() => {
     void fetchAccounts().then(setAccounts)
     void fetchLedger().then(setMonths)
+    void fetchQuickLinks().then(setQuickLinks)
   }, [])
 
   const saveBalance = async (input: BalanceEntryInput) => {
@@ -32,11 +45,14 @@ function Ledger() {
       {accounts && months && (
         <>
           <LedgerTable columns={columns} rows={ledgerRows(months, columns)} />
-          <BalanceForm
-            accounts={columns}
-            months={months}
-            onSave={saveBalance}
-          />
+          <div className="flex flex-col gap-5">
+            <BalanceForm
+              accounts={columns}
+              months={months}
+              onSave={saveBalance}
+            />
+            <QuickLinks links={quickLinks} />
+          </div>
         </>
       )}
     </div>

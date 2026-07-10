@@ -179,6 +179,7 @@ describe('Header net worth', () => {
       '/api/health': { status: 'ok', version: '1.2.3' },
       '/api/accounts': ACCOUNTS,
       '/api/ledger': LEDGER,
+      '/api/quick-links': [],
       '/api/net-worth': { current: 1_744_000, yoy: 0.017, series: [] },
       '/api/budget-month': EMPTY_BUDGET_MONTH,
       '/api/funds': [],
