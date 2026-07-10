@@ -342,11 +342,13 @@ export type IncomeSource =
   | 'soc_sec'
 
 // budget_month is omitted so it defaults to the transaction's month
-// server-side; fund_id goes with funded_from='fund', never alone.
+// server-side; fund_id goes with funded_from='fund', never alone. A blank
+// note is omitted, not sent empty.
 export type ExpenseInput = {
   txn_date: string
   category_id: number
   amount: number
+  note?: string
 } & (
   | { funded_from: 'discretionary' }
   | { funded_from: 'fund'; fund_id: number }

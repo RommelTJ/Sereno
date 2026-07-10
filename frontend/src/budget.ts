@@ -152,15 +152,23 @@ export function incomeInput(
 // The funded-from select encodes its choice as 'discretionary' or
 // 'fund:<id>'. budget_month is left to the server default (the txn's month).
 // Returns null when the amount doesn't parse — nothing should be posted.
+// A whitespace-only note is omitted from the payload, never sent empty.
 export function expenseInput(
   rawAmount: string,
   categoryId: number,
   fundedFrom: string,
   txnDate: string,
+  rawNote: string,
 ): ExpenseInput | null {
   const amount = parseAmount(rawAmount)
   if (!amount) return null
-  const base = { txn_date: txnDate, category_id: categoryId, amount }
+  const note = rawNote.trim()
+  const base = {
+    txn_date: txnDate,
+    category_id: categoryId,
+    amount,
+    ...(note ? { note } : {}),
+  }
   return fundedFrom === 'discretionary'
     ? { ...base, funded_from: 'discretionary' }
     : {

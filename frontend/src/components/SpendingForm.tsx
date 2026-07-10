@@ -25,15 +25,23 @@ function SpendingForm({ month, categories, funds, onAdd }: SpendingFormProps) {
   const [amount, setAmount] = useState('')
   const [categoryId, setCategoryId] = useState(String(categories[0]?.id ?? ''))
   const [fundedFrom, setFundedFrom] = useState('discretionary')
+  const [note, setNote] = useState('')
   const [adding, setAdding] = useState(false)
 
   const handleAdd = async () => {
-    const input = expenseInput(amount, Number(categoryId), fundedFrom, todayIso())
+    const input = expenseInput(
+      amount,
+      Number(categoryId),
+      fundedFrom,
+      todayIso(),
+      note,
+    )
     if (!input) return
     setAdding(true)
     try {
       await onAdd(input)
       setAmount('')
+      setNote('')
     } finally {
       setAdding(false)
     }
@@ -98,6 +106,16 @@ function SpendingForm({ month, categories, funds, onAdd }: SpendingFormProps) {
           cash draw down together.
         </p>
       )}
+      <label htmlFor="spend-note" className="mt-[11px] block">
+        <FieldLabel text="Note" />
+        <input
+          id="spend-note"
+          className={inputClasses}
+          placeholder="optional"
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+        />
+      </label>
       <button
         type="button"
         disabled={adding}
