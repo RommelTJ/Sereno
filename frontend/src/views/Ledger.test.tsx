@@ -1,12 +1,16 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { ACCOUNTS, LEDGER, balance } from '../test/fixtures.ts'
+import { ACCOUNTS, LEDGER, QUICK_LINKS, balance } from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import Ledger from './Ledger.tsx'
 
 describe('Ledger monthly balance table', () => {
   beforeEach(() => {
-    stubApi({ '/api/accounts': ACCOUNTS, '/api/ledger': LEDGER })
+    stubApi({
+      '/api/accounts': ACCOUNTS,
+      '/api/ledger': LEDGER,
+      '/api/quick-links': [],
+    })
   })
 
   it('renders one column per active account, assets then liabilities', async () => {
@@ -39,6 +43,7 @@ describe('Ledger monthly balance table', () => {
         { ...ACCOUNTS[8], id: 11, name: 'Old boat', active: false },
       ],
       '/api/ledger': LEDGER,
+      '/api/quick-links': [],
     })
     render(<Ledger />)
 
@@ -97,7 +102,11 @@ describe('Ledger monthly balance table', () => {
 
 describe("Update this month's balances form", () => {
   beforeEach(() => {
-    stubApi({ '/api/accounts': ACCOUNTS, '/api/ledger': LEDGER })
+    stubApi({
+      '/api/accounts': ACCOUNTS,
+      '/api/ledger': LEDGER,
+      '/api/quick-links': [],
+    })
   })
 
   it('offers the active accounts in a picker, assets then liabilities', async () => {
@@ -128,6 +137,7 @@ describe("Update this month's balances form", () => {
         { ...ACCOUNTS[8], id: 11, name: 'Old boat', active: false },
       ],
       '/api/ledger': LEDGER,
+      '/api/quick-links': [],
     })
     render(<Ledger />)
 
@@ -227,7 +237,11 @@ describe("Update this month's balances form", () => {
 
 describe('Responsive layout', () => {
   beforeEach(() => {
-    stubApi({ '/api/accounts': ACCOUNTS, '/api/ledger': LEDGER })
+    stubApi({
+      '/api/accounts': ACCOUNTS,
+      '/api/ledger': LEDGER,
+      '/api/quick-links': [],
+    })
   })
 
   it('stacks the table and form into one column on narrow screens', async () => {
@@ -256,6 +270,7 @@ describe('Saving balances', () => {
     routes = {
       '/api/accounts': ACCOUNTS,
       '/api/ledger': LEDGER,
+      '/api/quick-links': [],
       '/api/balance-entries': { id: 999 },
     }
     fetchMock = stubApi(routes)
@@ -353,5 +368,38 @@ describe('Saving balances', () => {
     expect(screen.getAllByTestId('ledger-row')[0]).toHaveTextContent(
       'Jul 4, 2026',
     )
+  })
+})
+
+describe('Quick links card', () => {
+  it('renders each link below the balance form, opening in a new tab', async () => {
+    stubApi({
+      '/api/accounts': ACCOUNTS,
+      '/api/ledger': LEDGER,
+      '/api/quick-links': QUICK_LINKS,
+    })
+    render(<Ledger />)
+
+    const card = await screen.findByTestId('quick-links')
+    const links = within(card).getAllByRole('link')
+    expect(links.map((link) => link.textContent)).toEqual(['Chase', 'Vanguard'])
+    expect(links[0]).toHaveAttribute(
+      'href',
+      'https://bank.example.com/accounts',
+    )
+    expect(links[0]).toHaveAttribute('target', '_blank')
+    expect(links[0]).toHaveAttribute('rel', 'noopener noreferrer')
+  })
+
+  it('is hidden while no links exist', async () => {
+    stubApi({
+      '/api/accounts': ACCOUNTS,
+      '/api/ledger': LEDGER,
+      '/api/quick-links': [],
+    })
+    render(<Ledger />)
+
+    await screen.findByRole('table')
+    expect(screen.queryByTestId('quick-links')).not.toBeInTheDocument()
   })
 })
