@@ -185,7 +185,9 @@ The budget slice:
   expense lines keep counting in history and its name frees up for
   reuse. No hard delete.
 - `POST /api/expenses` — appends a spending line. `budget_month` defaults to
-  the transaction's month; pass a later month to prepay. `funded_from` is
+  the transaction's month; pass a later month to prepay. An optional `note`
+  ("Anniversary dinner") titles the row in the activity feeds, with the
+  category moving to the subtitle. `funded_from` is
   `discretionary` or `fund` (then `fund_id` is required). Fund spending
   draws the fund down in the same transaction: a `fund_entry` with
   `source = 'spend'`, the balance minus the amount, and a negative
@@ -194,7 +196,10 @@ The budget slice:
   real cash.
 - `POST /api/income` — appends an income/funding event (paycheck, transfer,
   staking, …). `budget_month` is the month the inflow funds — the seed's
-  Jun 27 paycheck funds July.
+  Jun 27 paycheck funds July. An optional `source_label` ("Spouse paycheck")
+  is the row's display title — the context the `source` enum can't carry —
+  and `note` is a true note beside it; migration 0008 moved the old
+  title-style notes into `source_label`, so existing rows kept their titles.
 - `GET /api/budget-month` — the computed month (`?month=`, default current):
   per-category planned/spent/remaining envelopes (overspend is allowed and
   goes negative), the Safe-to-spend headline
@@ -420,7 +425,10 @@ The forecast slice (the third Plan engine):
   balance) from `GET /api/funds` — both deep-link to their views. Recent
   activity lists the full current month — spending, income, and fund
   entries merged newest first — as emoji-tile rows with signed amounts
-  under a dated month header: credits in green, debits in ink, expenses
+  under a dated month header: income rows titled by their source label
+  ("Spouse paycheck") with any note joining the subtitle, expense rows
+  titled by their note when one exists (the category moves to the
+  subtitle), credits in green, debits in ink, expenses
   whose envelope is over budget in red, and fund entries on an amber tile
   with the fund's own emoji (💰 once the fund is archived), signed by
   their effect on the headline — a contribution parks money, a release
@@ -460,12 +468,17 @@ The forecast slice (the third Plan engine):
   its emoji-led name, available balance, and "$X / mo" plan — blank for a
   fund saving at no set pace — straight from the same `GET /api/funds`
   list the forms already load. Beside them, "Add a spending item" (amount, category,
-  and funded-from: the month's discretionary budget or any active fund via
+  funded-from: the month's discretionary budget or any active fund via
   `GET /api/funds` — funds labeled `emoji + name` like the categories;
   choosing a fund reveals the matching
-  Cash-Plus-withdrawal reminder) posts to `POST /api/expenses`, and "Add an
+  Cash-Plus-withdrawal reminder — and an optional note that titles the
+  row in the activity feeds) posts to `POST /api/expenses`, and "Add an
   income item" (amount, funds month — the current or next two, so a
-  paycheck can prepay next month — and source) posts to `POST /api/income`.
+  paycheck can prepay next month — source, an editable Source title
+  prefilled from the selected source — the row's bold title, posted as
+  `source_label`; switching the source re-prefills it — and an optional
+  note) posts to `POST /api/income`. A blank title or note is omitted
+  from the payload, never sent empty.
   Every submit refetches the budget month, so the hero and envelopes always
   show the API's figures rather than client-side math — and adding a
   spending item refetches the funds list too, so a fund-funded spend's
