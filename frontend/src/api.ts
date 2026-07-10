@@ -99,6 +99,7 @@ export interface ActivityItem {
   amount: number
   category: string | null
   source: string | null
+  source_label: string | null
   note: string | null
 }
 
