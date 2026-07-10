@@ -1,19 +1,25 @@
 import { useEffect, useState } from 'react'
 import type {
   Account,
+  BindingConstraint,
   Forecast as ForecastData,
   ForecastOverrides,
+  PlannedPurchaseInput,
 } from '../api.ts'
-import { fetchAccounts, fetchForecast } from '../api.ts'
+import { fetchAccounts, fetchForecast, fetchMaxAffordable } from '../api.ts'
 import type { ChartColumn, SensitivityRowCopy } from '../forecast.ts'
 import {
+  bindingConstraintCopy,
   bridgeCopy,
   chartColumns,
   ethGrowthSliderBounds,
   formatMillions,
+  purchaseAmountSliderBounds,
+  purchaseCostRows,
   sensitivityRows,
   spendSliderBounds,
   verdict,
+  verdictDelta,
 } from '../forecast.ts'
 import { formatUsd } from '../ledger.ts'
 import { hasWithdrawalBuckets } from '../sourcing.ts'
@@ -31,11 +37,30 @@ function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
         <p className="font-bold">
           Age {column.age} · {year}
         </p>
+        {column.purchaseUsd != null && (
+          <p className="num">Purchase {formatUsd(column.purchaseUsd)}</p>
+        )}
+        {column.shortUsd != null && (
+          <p className="num text-[#ffb3a7]">
+            Unaffordable — {formatUsd(column.shortUsd)} short
+          </p>
+        )}
         <p className="num">ETH {formatUsd(column.ethUsd)}</p>
         <p className="num">Brokerage {formatUsd(column.brokerageUsd)}</p>
         <p className="num">401(k) {formatUsd(column.retirementUsd)}</p>
         <p className="num">Soc. Sec. {formatUsd(column.ssUsd)}/yr</p>
       </div>
+      {column.cap > 0 && (
+        <div
+          data-testid={`forecast-cap-${column.age}`}
+          className="w-full"
+          style={{
+            height: `${column.cap}px`,
+            backgroundImage:
+              'repeating-linear-gradient(45deg, rgba(28,27,26,0.12) 0 3px, transparent 3px 6px)',
+          }}
+        />
+      )}
       <div className="w-full bg-accent" style={{ height: `${column.eth}px` }} />
       <div className="w-full bg-sidebar" style={{ height: `${column.brokerage}px` }} />
       <div className="w-full bg-amber" style={{ height: `${column.retirement}px` }} />
@@ -148,10 +173,110 @@ function SsField({
   )
 }
 
+function PurchaseRow({
+  index,
+  purchase,
+  minYear,
+  maxYear,
+  constraint,
+  onUpdate,
+  onRename,
+  onRemove,
+  onMax,
+}: {
+  index: number
+  purchase: PlannedPurchaseInput
+  minYear: number
+  maxYear: number
+  constraint: BindingConstraint | undefined
+  onUpdate: (patch: Partial<PlannedPurchaseInput>) => void
+  onRename: (name: string) => void
+  onRemove: () => void
+  onMax: () => void
+}) {
+  const bounds = purchaseAmountSliderBounds(purchase.amount)
+  return (
+    <div className="mt-3 rounded-[8px] border border-hairline p-2.5">
+      <div className="flex items-center gap-2">
+        <input
+          data-testid={`forecast-purchase-name-${index}`}
+          type="text"
+          value={purchase.name}
+          onChange={(event) => onRename(event.target.value)}
+          className="min-w-0 flex-1 rounded-[8px] border border-input-border px-[9px] py-1.5 text-[13px]"
+        />
+        <input
+          data-testid={`forecast-purchase-year-${index}`}
+          type="number"
+          min={minYear}
+          max={maxYear}
+          value={purchase.year}
+          onChange={(event) => {
+            const next = Number(event.target.value)
+            if (
+              event.target.value !== '' &&
+              Number.isInteger(next) &&
+              next >= minYear &&
+              next <= maxYear
+            ) {
+              onUpdate({ year: next })
+            }
+          }}
+          className="num w-[78px] rounded-[8px] border border-input-border px-[9px] py-1.5 text-[13px]"
+        />
+        <button
+          data-testid={`forecast-purchase-remove-${index}`}
+          type="button"
+          aria-label="Remove purchase"
+          onClick={onRemove}
+          className="px-1 text-[13px] text-muted-2"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="mt-2 flex justify-between text-xs text-muted">
+        <span>Amount</span>
+        <span className="num font-bold text-ink">{formatUsd(purchase.amount)}</span>
+      </div>
+      <input
+        data-testid={`forecast-purchase-amount-${index}`}
+        type="range"
+        min={bounds.min}
+        max={bounds.max}
+        step={bounds.step}
+        value={purchase.amount}
+        onChange={(event) => onUpdate({ amount: Number(event.target.value) })}
+        className="mt-1 w-full accent-accent"
+      />
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <button
+          data-testid={`forecast-purchase-max-${index}`}
+          type="button"
+          onClick={onMax}
+          className="rounded-[8px] border border-input-border px-2 py-1 text-[11.5px] font-semibold"
+        >
+          Max affordable
+        </button>
+        {constraint != null && (
+          <p
+            data-testid={`forecast-purchase-constraint-${index}`}
+            className="flex-1 text-right text-[10.5px] leading-[1.4] text-muted-2"
+          >
+            {bindingConstraintCopy(constraint)}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function Forecast() {
   const [forecast, setForecast] = useState<ForecastData | null>()
   const [accounts, setAccounts] = useState<Account[]>()
   const [overrides, setOverrides] = useState<ForecastOverrides>({})
+  // The solver's answer per row index — cleared the moment the row
+  // moves, since the ceiling was solved for the old inputs.
+  const [constraints, setConstraints] = useState<Record<number, BindingConstraint>>({})
 
   useEffect(() => {
     void fetchAccounts().then(setAccounts)
@@ -162,6 +287,60 @@ function Forecast() {
     const next = { ...overrides, ...patch }
     setOverrides(next)
     void fetchForecast(next).then(setForecast)
+  }
+
+  const purchases = overrides.purchases ?? []
+
+  const addPurchase = () => {
+    applyOverride({
+      purchases: [
+        ...purchases,
+        { name: 'New purchase', year: new Date().getFullYear() + 1, amount: 50_000 },
+      ],
+    })
+  }
+
+  const updatePurchase = (index: number, patch: Partial<PlannedPurchaseInput>) => {
+    setConstraints(({ [index]: _stale, ...rest }) => rest)
+    applyOverride({
+      purchases: purchases.map((purchase, i) =>
+        i === index ? { ...purchase, ...patch } : purchase,
+      ),
+    })
+  }
+
+  const removePurchase = (index: number) => {
+    // Indices shift under the remaining rows, so no solved ceiling
+    // survives a removal.
+    setConstraints({})
+    applyOverride({ purchases: purchases.filter((_, i) => i !== index) })
+  }
+
+  const fillMaxAffordable = (index: number) => {
+    const others = purchases.filter((_, i) => i !== index)
+    void fetchMaxAffordable(purchases[index].year, {
+      ...overrides,
+      purchases: others,
+    }).then((result) => {
+      if (result == null) {
+        return
+      }
+      updatePurchase(index, { amount: result.max_amount })
+      setConstraints((current) => ({
+        ...current,
+        [index]: result.binding_constraint,
+      }))
+    })
+  }
+
+  const renamePurchase = (index: number, name: string) => {
+    // The name never travels: update the row without a refetch.
+    setOverrides({
+      ...overrides,
+      purchases: purchases.map((purchase, i) =>
+        i === index ? { ...purchase, name } : purchase,
+      ),
+    })
   }
 
   if (forecast === undefined || accounts === undefined) {
@@ -196,7 +375,13 @@ function Forecast() {
   }
 
   const outcome = verdict(forecast.run_out_age)
+  const delta = verdictDelta(forecast)
   const bridge = bridgeCopy(forecast.series, forecast.start_age)
+  const columns = chartColumns(forecast.series, {
+    baseline: forecast.baseline.series,
+    purchases: forecast.purchases,
+    unaffordable: forecast.unaffordable,
+  })
   const bounds = spendSliderBounds(forecast.spend)
   // With a Jan-1 birthdate, age start_age is reached in the current
   // calendar year, so each later age lands (age − start_age) years out.
@@ -237,6 +422,14 @@ function Forecast() {
             Projected <b>{formatMillions(forecast.balance_at_100)}</b> at age 100{' '}
             <span className="text-muted-2">(today's dollars)</span>
           </p>
+          {delta != null && (
+            <p
+              data-testid="forecast-verdict-delta"
+              className="num mt-1 text-[12.5px] text-[#5b6058]"
+            >
+              {delta}
+            </p>
+          )}
         </div>
         <div
           data-testid="forecast-bridge"
@@ -260,7 +453,7 @@ function Forecast() {
           Balance by bucket · age {forecast.start_age} → 100
         </p>
         <div className="relative flex h-[200px] items-end gap-[2px] border-b border-[#d9d4c9]">
-          {chartColumns(forecast.series).map((column) => (
+          {columns.map((column) => (
             <BarColumn
               key={column.age}
               column={column}
@@ -269,12 +462,21 @@ function Forecast() {
           ))}
         </div>
         <div className="mt-1.5 flex gap-[2px]">
-          {chartColumns(forecast.series).map((column) => (
+          {columns.map((column) => (
             <div
               key={column.age}
               className="flex-1 overflow-visible text-center text-[10px] text-muted-2"
             >
-              {column.label}
+              {column.marker ? (
+                <span
+                  data-testid={`forecast-mark-${column.age}`}
+                  className={column.shortUsd != null ? 'text-red-text' : 'text-ink'}
+                >
+                  {column.marker}
+                </span>
+              ) : (
+                column.label
+              )}
             </div>
           ))}
         </div>
@@ -304,6 +506,33 @@ function Forecast() {
           {sensitivityRows(forecast.sensitivity, forecast.spend).map((row) => (
             <SensitivityRow key={row.spend} row={row} />
           ))}
+          {forecast.purchase_costs.length > 0 && (
+            <div data-testid="forecast-purchase-costs">
+              <p className="border-y border-hairline bg-[#faf9f6] px-5 py-4 text-sm font-bold">
+                What do the purchases cost?
+              </p>
+              {purchaseCostRows(forecast.purchase_costs, purchases).map((row) => (
+                <div
+                  data-testid="forecast-cost-row"
+                  key={`${row.year}-${row.name}`}
+                  className="flex items-center gap-3.5 border-b border-hairline-2 px-5 py-[13px]"
+                >
+                  <div className="w-[150px]">
+                    <p className="text-[12.5px] font-bold">{row.name}</p>
+                    <p className="num text-[11px] text-muted-2">
+                      {row.year} · {row.amount}
+                    </p>
+                  </div>
+                  <div className="num flex-1 text-[12.5px] text-[#5b6058]">
+                    without it: {row.lasts}
+                  </div>
+                  <p className={`text-[12.5px] font-semibold ${ROW_TONE[row.tone]}`}>
+                    {row.outcome}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="rounded-card border border-card-border bg-card p-[22px]">
           <p className="text-[13px] font-bold">Assumptions</p>
@@ -374,6 +603,38 @@ function Forecast() {
                 onChange={(value) => applyOverride({ ss_start: value })}
               />
             </div>
+          </div>
+          <div data-testid="forecast-purchases" className="mt-4 border-t border-hairline pt-3.5">
+            <div className="flex items-center justify-between text-xs text-muted">
+              <span>
+                Planned purchases <span className="text-faint">· what-if only</span>
+              </span>
+              <button
+                data-testid="forecast-purchase-add"
+                type="button"
+                onClick={addPurchase}
+                className="rounded-[8px] border border-input-border px-2 py-1 text-[12px] font-semibold"
+              >
+                + Add
+              </button>
+            </div>
+            {purchases.map((purchase, index) => (
+              <PurchaseRow
+                // Rows have no identity beyond their position in the
+                // transient what-if list.
+                // eslint-disable-next-line react/no-array-index-key
+                key={index}
+                index={index}
+                purchase={purchase}
+                minYear={new Date().getFullYear()}
+                maxYear={new Date().getFullYear() + 100 - forecast.start_age}
+                constraint={constraints[index]}
+                onUpdate={(patch) => updatePurchase(index, patch)}
+                onRename={(name) => renamePurchase(index, name)}
+                onRemove={() => removePurchase(index)}
+                onMax={() => fillMaxAffordable(index)}
+              />
+            ))}
           </div>
           <p className="mt-3.5 text-[11px] text-muted-2">
             Real return {(returnPct - inflationPct).toFixed(1)}% · ETH spent first · SS{' '}

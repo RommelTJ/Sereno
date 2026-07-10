@@ -1,6 +1,6 @@
 # Sereno
 
-**v1.14.1**
+**v2.0.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -41,7 +41,10 @@ whole thing in plain SQL.
   (ETH, brokerage, 401(k), Social Security) with a hover breakdown per bar. Verdict
   up front: "You don't run out" or "Lasts to age N", plus a sensitivity table across
   spend levels and live sliders for return, ETH growth, inflation, and Social
-  Security assumptions.
+  Security assumptions. Planned one-off purchases (a house in 2036, a car in 2041)
+  drop dated lumps into the simulation as transient what-ifs, and a max-affordable
+  solver answers "how much can I afford in year N?" — naming whether the year's own
+  liquidity or long-run longevity is the ceiling.
 
 ## Design principles
 
@@ -370,6 +373,39 @@ The forecast slice (the third Plan engine):
   same assumptions. The current tax year's parameters apply to every
   simulated year; null until a tax year, balances, a spend target,
   and return/inflation figures exist.
+  Planned one-off purchases ride along as repeated
+  `purchase=year:amount[:ongoing_delta]` params
+  (`?purchase=2036:800000&purchase=2041:70000:9000`): each lump lands
+  on its year's target inside the same waterfall — so the 0%
+  headroom, the gross-up, and the 59½ gate meet the lumpy year
+  instead of an amortized smear — and the optional third field raises
+  annual spend from that year on (both amounts may be negative: a
+  sale, a cost that ends). Years map through the birthdate-derived
+  age; malformed, past, or beyond-100 purchases are 422s. The
+  response echoes the resolved `purchases`, reports `unaffordable`
+  years — a lump the year couldn't deliver is *an unaffordable
+  purchase*, not a run-out: the year re-sources without it, the
+  verdict stays green, and `(year, age, short)` says how far it
+  missed — and carries `baseline` (the no-purchase run-out age,
+  age-100 balance, and series, so one call prices the purchases) plus
+  `purchase_costs`, one row per purchase simulated with just that one
+  dropped. The sensitivity rows simulate with the purchases, like
+  every other resolved override. Purchases are transient what-ifs —
+  nothing persists.
+- `GET /api/forecast/max-affordable` — the solver behind "how much
+  can I afford in year N?": a binary search to $1,000 over the same
+  simulation, under the same transient overrides and fixed
+  `purchase=` params (`?year=2036&last_to_age=95&purchase=2041:70000`
+  answers "given the car in 2041, how much house in 2036?"). The
+  default criterion is never running out; `last_to_age=` relaxes it
+  to a target age and `min_balance_at_100=` adds a terminal floor.
+  The response carries `max_amount`, the outcome at that ceiling, and
+  `binding_constraint` — `purchase_year_liquidity` when the buckets
+  reachable that year are the cap (pre-59½, the taxable bridge; a
+  later year can raise the ceiling) versus `longevity` when the plan
+  fails downstream. Read-only like every planner endpoint: a solve is
+  a pure computation, so it stays a GET. Null until the forecast's
+  prerequisites exist.
 
 ### Screens
 
@@ -519,7 +555,24 @@ The forecast slice (the third Plan engine):
   slider's floor widens so the resolved spend is always reachable,
   and the ETH slider spans ETH's actual nine-year yearly range
   (−85% to +470%), seeded from the stored rate and tracking the
-  return slider while none is set.
+  return slider while none is set. Below the Social Security panel,
+  the Planned purchases section models dated one-off outflows: + Add
+  appends a row — name (display-only, never sent), year, and an
+  amount that doubles as a slider — flowing into the simulation as
+  `purchase=` params on every change, and a per-row **Max
+  affordable** button asks the solver for the year's ceiling, fills
+  the amount in, and names the binding constraint under the row.
+  With purchases planned, the verdict carries the delta against the
+  no-purchase baseline ("$1.40M lower at 100 than without the
+  purchases" / "4 yrs earlier"), the chart marks purchase years with
+  a ◆ tick in the label row, lists the purchase in the hover
+  tooltip, and wears a faint hatched cap per column up to the
+  baseline total — the compounding forgone growth, the story the
+  few-pixel dip can't tell — and a "What do the purchases cost?"
+  section joins the sensitivity card with one drop-that-one row per
+  purchase. An unaffordable year turns its tick red and reports
+  "$X short" in the tooltip while the verdict stays green: the
+  screen says *you can't buy that in that year*, not *you go broke*.
   All of it is transient what-if: Settings owns config writes. Until
   a tax year, assumptions, a spend target, and balances exist, the
   view points at Settings & data — and when no account has a
@@ -588,6 +641,31 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.0.0 — Planned purchases and the max-affordable solver. The
+forecast learns lumpy years: repeated `purchase=year:amount[:delta]`
+params drop dated one-off outflows (a house, a car, a gift) onto the
+simulation's yearly targets, where the 0% LTCG headroom, the 15%
+gross-up, and the 59½ gate price them properly — before this, the
+only lever was amortizing a lump into `?spend=`, which never leaves
+the 0% bracket and answers a different question. A lump the year
+can't deliver is an *unaffordable purchase*, not a run-out: the year
+re-sources without it, the verdict stays green, and the response
+says how far it missed. One call now also carries the no-purchase
+`baseline` (run-out age, age-100 balance, and series) and a
+per-purchase `purchase_costs` table (the outcome with just that one
+dropped), and the new `GET /api/forecast/max-affordable`
+binary-searches the largest lump a year can hold under a chosen
+criterion — never runs out by default, `last_to_age=` and
+`min_balance_at_100=` as variants — naming whether the year's own
+liquidity or long-run longevity binds. The Forecast screen gains the
+Planned purchases rows (name / year / amount slider, transient
+what-if like every slider), the per-row Max affordable button, the
+verdict's baseline delta line, ◆ chart ticks with hatched
+forgone-growth caps and "$X short" tooltips, and the "What do the
+purchases cost?" card. Everything stays a read-only GET — POST still
+means appending config — and persistence (a `planned_purchase` table
+plus Settings CRUD) is a deliberate follow-up.
 
 v1.14.1 — Emoji options find a home. The three curated picker lists —
 assets, envelopes, funds — move out of `settings.ts` and `funds.ts`

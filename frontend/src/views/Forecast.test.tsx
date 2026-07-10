@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   ACCOUNTS,
@@ -14,6 +14,52 @@ const FORECAST_RUNS_OUT = {
   spend: 200_000,
   run_out_age: 72,
   balance_at_100: 0,
+}
+
+// New purchases land in next year's simulation by default.
+const NEXT_YEAR = new Date().getFullYear() + 1
+
+// The server's echo of a house purchase ten years out, its cost
+// visible in the terminal balance and the drop-it row.
+const HOUSE = { year: 2046, age: 48, amount: 800_000, ongoing_delta: 0 }
+
+const FORECAST_WITH_PURCHASE = {
+  ...FORECAST,
+  purchases: [HOUSE],
+  balance_at_100: 4_112_345,
+  purchase_costs: [
+    { year: 2046, amount: 800_000, run_out_age: null, balance_at_100: 5_512_345 },
+  ],
+}
+
+// The same purchase the year couldn't hold: the verdict stays green
+// while the year itself reports the miss.
+const FORECAST_UNAFFORDABLE = {
+  ...FORECAST_WITH_PURCHASE,
+  balance_at_100: 5_512_345,
+  unaffordable: [{ year: 2046, age: 48, short: 278_149 }],
+}
+
+// A baseline visibly above the with-purchases path: 150k columns
+// against a 200k baseline leave a hatched forgone-growth cap.
+const FORECAST_WITH_CAP = {
+  ...FORECAST_WITH_PURCHASE,
+  series: FORECAST.series.map((point) => ({
+    ...point,
+    eth: 150_000,
+    brokerage: 0,
+    retirement: 0,
+  })),
+  baseline: {
+    run_out_age: null,
+    balance_at_100: 5_512_345,
+    series: FORECAST.series.map((point) => ({
+      ...point,
+      eth: 200_000,
+      brokerage: 0,
+      retirement: 0,
+    })),
+  },
 }
 
 // Taxable buckets emptied at 52 — six years short of the 59½ bridge.
@@ -79,6 +125,237 @@ describe('bridge card', () => {
     const bridge = await screen.findByTestId('forecast-bridge')
     expect(bridge).toHaveTextContent('Need to cover 19.5 yrs')
     expect(screen.getByTestId('forecast-chart')).toHaveTextContent('age 40 → 100')
+  })
+})
+
+describe('planned purchases section', () => {
+  it('starts empty with only the add control', async () => {
+    render(<Forecast />)
+
+    const section = await screen.findByTestId('forecast-purchases')
+    expect(section).toHaveTextContent('Planned purchases')
+    expect(screen.getByTestId('forecast-purchase-add')).toBeInTheDocument()
+    expect(screen.queryByTestId('forecast-purchase-name-0')).not.toBeInTheDocument()
+  })
+
+  it('adds a purchase and refetches with its param', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `purchase=${NEXT_YEAR}%3A50000`,
+    )
+    expect(screen.getByTestId('forecast-purchase-name-0')).toHaveValue('New purchase')
+  })
+
+  it('re-runs the simulation as the amount slider moves', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.change(screen.getByTestId('forecast-purchase-amount-0'), {
+      target: { value: '250000' },
+    })
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `purchase=${NEXT_YEAR}%3A250000`,
+    )
+  })
+
+  it('moves the purchase year through its input', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.change(screen.getByTestId('forecast-purchase-year-0'), {
+      target: { value: '2040' },
+    })
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain('purchase=2040%3A50000')
+  })
+
+  it('stacks purchases as repeated params', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.click(screen.getByTestId('forecast-purchase-add'))
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `purchase=${NEXT_YEAR}%3A50000&purchase=${NEXT_YEAR}%3A50000`,
+    )
+  })
+
+  it('removes a purchase and refetches without it', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.click(screen.getByTestId('forecast-purchase-remove-0'))
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).not.toContain('purchase=')
+    expect(screen.queryByTestId('forecast-purchase-name-0')).not.toBeInTheDocument()
+  })
+
+  it('keeps names client-side without refetching', async () => {
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    const calls = fetchMock.mock.calls.length
+    fireEvent.change(screen.getByTestId('forecast-purchase-name-0'), {
+      target: { value: 'House' },
+    })
+
+    expect(fetchMock.mock.calls.length).toBe(calls)
+    expect(screen.getByTestId('forecast-purchase-name-0')).toHaveValue('House')
+  })
+})
+
+describe('max affordable button', () => {
+  const MAX_AFFORDABLE = {
+    year: NEXT_YEAR,
+    age: 39,
+    max_amount: 640_000,
+    binding_constraint: 'purchase_year_liquidity',
+    run_out_age: null,
+    balance_at_100: 1_200_000,
+  }
+
+  it('fills the amount from the solver and re-runs the forecast', async () => {
+    const fetchMock = stubApi({
+      '/api/forecast': FORECAST,
+      '/api/accounts': ACCOUNTS,
+      '/api/forecast/max-affordable': MAX_AFFORDABLE,
+    })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.click(screen.getByTestId('forecast-purchase-max-0'))
+
+    const solverCall = fetchMock.mock.calls.find((call) =>
+      String(call[0]).includes('/api/forecast/max-affordable'),
+    )
+    expect(String(solverCall?.[0])).toContain(`year=${NEXT_YEAR}`)
+
+    // The response fills the field, names the constraint, and re-runs
+    // the simulation at the ceiling.
+    expect(
+      await screen.findByTestId('forecast-purchase-constraint-0'),
+    ).toHaveTextContent('capped by the buckets reachable that year')
+    expect(screen.getByTestId('forecast-purchase-amount-0')).toHaveValue('640000')
+    await waitFor(() =>
+      expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+        `purchase=${NEXT_YEAR}%3A640000`,
+      ),
+    )
+  })
+
+  it('solves against the other purchases, not the row itself', async () => {
+    const fetchMock = stubApi({
+      '/api/forecast': FORECAST,
+      '/api/accounts': ACCOUNTS,
+      '/api/forecast/max-affordable': MAX_AFFORDABLE,
+    })
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
+    fireEvent.click(screen.getByTestId('forecast-purchase-add'))
+    fireEvent.change(screen.getByTestId('forecast-purchase-year-1'), {
+      target: { value: '2040' },
+    })
+    fireEvent.click(screen.getByTestId('forecast-purchase-max-0'))
+
+    const solverUrl = String(
+      fetchMock.mock.calls
+        .find((call) => String(call[0]).includes('/api/forecast/max-affordable'))?.[0],
+    )
+    expect(solverUrl).toContain(`year=${NEXT_YEAR}`)
+    expect(solverUrl).toContain('purchase=2040%3A50000')
+    expect(solverUrl).not.toContain(`purchase=${NEXT_YEAR}`)
+  })
+})
+
+describe('purchase-aware verdict', () => {
+  it('carries the delta against the baseline', async () => {
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    const hero = await screen.findByTestId('forecast-verdict')
+    expect(hero).toHaveTextContent('$1.40M lower at 100 than without the purchases')
+  })
+
+  it('shows no delta line without purchases', async () => {
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-verdict')
+    expect(screen.queryByTestId('forecast-verdict-delta')).not.toBeInTheDocument()
+  })
+})
+
+describe('purchases on the chart', () => {
+  it('marks the purchase year with a diamond in the label row', async () => {
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    expect(screen.getByTestId('forecast-mark-48')).toHaveTextContent('◆')
+    expect(screen.queryByTestId('forecast-mark-47')).not.toBeInTheDocument()
+  })
+
+  it('lists the purchase in the hover tooltip', async () => {
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    expect(screen.getByTestId('forecast-tip-48')).toHaveTextContent(
+      'Purchase $800,000',
+    )
+  })
+
+  it('turns the tick red and reports the short on an unaffordable year', async () => {
+    stubApi({ '/api/forecast': FORECAST_UNAFFORDABLE, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    const hero = await screen.findByTestId('forecast-verdict')
+    // You can't buy that in that year — but you don't go broke.
+    expect(hero).toHaveTextContent("You don't run out.")
+    expect(screen.getByTestId('forecast-mark-48')).toHaveClass('text-red-text')
+    expect(screen.getByTestId('forecast-tip-48')).toHaveTextContent('$278,149 short')
+  })
+
+  it('caps each column with the forgone growth against the baseline', async () => {
+    stubApi({ '/api/forecast': FORECAST_WITH_CAP, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    expect(screen.getByTestId('forecast-cap-38')).toHaveStyle({ height: '47.5px' })
+  })
+})
+
+describe('purchase cost card', () => {
+  it('prices each purchase as the outcome without it', async () => {
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    const card = await screen.findByTestId('forecast-purchase-costs')
+    expect(card).toHaveTextContent('What do the purchases cost?')
+    const [row] = screen.getAllByTestId('forecast-cost-row')
+    // No client-side name exists for a purchase the screen didn't
+    // add, so the year stands in.
+    expect(row).toHaveTextContent('Purchase in 2046')
+    expect(row).toHaveTextContent('$800,000')
+    expect(row).toHaveTextContent('never runs out')
+    expect(row).toHaveTextContent('✓ $5.51M @ 100')
+  })
+
+  it('is absent without purchases', async () => {
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-verdict')
+    expect(screen.queryByTestId('forecast-purchase-costs')).not.toBeInTheDocument()
   })
 })
 

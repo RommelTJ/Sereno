@@ -234,6 +234,50 @@ export interface SensitivityRow {
   balance_at_100: number
 }
 
+// A planned purchase as the screen holds it: the name is display-only
+// and never travels — the wire format is repeated
+// purchase=year:amount[:ongoing_delta] params.
+export interface PlannedPurchaseInput {
+  name: string
+  year: number
+  amount: number
+  ongoing_delta?: number
+}
+
+// The purchase echoed back resolved, its year mapped onto the
+// simulation's age axis server-side.
+export interface PurchaseOut {
+  year: number
+  age: number
+  amount: number
+  ongoing_delta: number
+}
+
+// A year whose lump didn't fit while the base spend still cleared —
+// an unaffordable purchase, not a run-out.
+export interface UnaffordableYear {
+  year: number
+  age: number
+  short: number
+}
+
+// The no-purchase outcome, series included so the chart can draw the
+// divergence.
+export interface ForecastBaseline {
+  run_out_age: number | null
+  balance_at_100: number
+  series: ForecastPoint[]
+}
+
+// The outcome with this one purchase dropped — its marginal cost
+// given the others stay.
+export interface PurchaseCostRow {
+  year: number
+  amount: number
+  run_out_age: number | null
+  balance_at_100: number
+}
+
 export interface Forecast {
   spend: number
   annual_target: number | null
@@ -245,14 +289,18 @@ export interface Forecast {
   ss_spouse: number
   ss_start: number
   tax_year: number
+  purchases: PurchaseOut[]
   series: ForecastPoint[]
   run_out_age: number | null
   balance_at_100: number
+  unaffordable: UnaffordableYear[]
+  baseline: ForecastBaseline
+  purchase_costs: PurchaseCostRow[]
   sensitivity: SensitivityRow[]
 }
 
 // The Forecast screen's transient what-ifs — never persisted; Settings
-// owns config writes.
+// owns config writes. Purchases ride along the same way.
 export interface ForecastOverrides {
   spend?: number
   return_pct?: number
@@ -261,6 +309,28 @@ export interface ForecastOverrides {
   ss_you?: number
   ss_spouse?: number
   ss_start?: number
+  purchases?: PlannedPurchaseInput[]
+}
+
+export type BindingConstraint = 'purchase_year_liquidity' | 'longevity'
+
+// GET /api/forecast/max-affordable: the largest lump at the solve
+// year satisfying the criterion, with the constraint that stopped
+// anything bigger.
+export interface MaxAffordable {
+  year: number
+  age: number
+  max_amount: number
+  binding_constraint: BindingConstraint
+  run_out_age: number | null
+  balance_at_100: number
+}
+
+// The solver's criterion: never running out by default, a target age
+// or a terminal floor as variants.
+export interface MaxAffordableCriteria {
+  last_to_age?: number
+  min_balance_at_100?: number
 }
 
 export type IncomeSource =
@@ -452,15 +522,43 @@ export const fetchSourcing = (age?: number, spend?: number) => {
   const query = params.toString()
   return getJson<Sourcing | null>(query ? `/api/sourcing?${query}` : '/api/sourcing')
 }
-export const fetchForecast = (overrides: ForecastOverrides = {}) => {
+const purchaseParam = (purchase: PlannedPurchaseInput) => {
+  const base = `${purchase.year}:${purchase.amount}`
+  return purchase.ongoing_delta ? `${base}:${purchase.ongoing_delta}` : base
+}
+
+const forecastParams = (overrides: ForecastOverrides) => {
+  const { purchases, ...scalars } = overrides
   const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(overrides)) {
+  for (const [key, value] of Object.entries(scalars)) {
     if (value != null) {
       params.set(key, String(value))
     }
   }
-  const query = params.toString()
+  for (const purchase of purchases ?? []) {
+    params.append('purchase', purchaseParam(purchase))
+  }
+  return params
+}
+
+export const fetchForecast = (overrides: ForecastOverrides = {}) => {
+  const query = forecastParams(overrides).toString()
   return getJson<Forecast | null>(query ? `/api/forecast?${query}` : '/api/forecast')
+}
+
+export const fetchMaxAffordable = (
+  year: number,
+  overrides: ForecastOverrides = {},
+  criteria: MaxAffordableCriteria = {},
+) => {
+  const params = forecastParams(overrides)
+  params.set('year', String(year))
+  for (const [key, value] of Object.entries(criteria)) {
+    if (value != null) {
+      params.set(key, String(value))
+    }
+  }
+  return getJson<MaxAffordable | null>(`/api/forecast/max-affordable?${params.toString()}`)
 }
 export const fetchSocialSecurity = () =>
   getJson<SocialSecurityEntry[]>('/api/social-security')

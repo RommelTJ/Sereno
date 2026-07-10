@@ -121,6 +121,12 @@ def seed_config(eth_growth_pct=None):
     insert_tax_param()
 
 
+def year_at(age):
+    """The calendar year a given age is reached, mirroring the API's
+    year ↔ age mapping off the Jan-1 birthdate."""
+    return TODAY.year + (age - START_AGE)
+
+
 class TestPrerequisites:
     def test_returns_null_without_tax_params(self, client):
         seed_portfolio()
@@ -279,6 +285,137 @@ class TestForecast:
         assert body["ss_spouse"] == 0.0
         assert body["ss_start"] == 67.0
         assert all(point["ss_income"] == 0 for point in body["series"])
+
+
+class TestPurchases:
+    def test_a_purchase_dents_the_series_from_its_year(self, client):
+        seed_portfolio()
+        seed_config()
+        base = client.get("/api/forecast").json()
+        body = client.get("/api/forecast", params={"purchase": f"{year_at(45)}:100000"}).json()
+        assert body["purchases"] == [
+            {"year": year_at(45), "age": 45, "amount": 100_000.0, "ongoing_delta": 0.0}
+        ]
+
+        def total(point):
+            return point["eth"] + point["brokerage"] + point["retirement"]
+
+        # Balances record before the draw: identical through age 45...
+        for index in range(45 - START_AGE + 1):
+            assert body["series"][index] == base["series"][index]
+        # ...then the lump (plus its tax and forgone growth) shows up.
+        index_46 = 46 - START_AGE
+        dent = total(base["series"][index_46]) - total(body["series"][index_46])
+        assert dent >= 100_000
+
+    def test_purchases_compose_as_repeated_params(self, client):
+        seed_portfolio()
+        seed_config()
+        params = [
+            ("purchase", f"{year_at(45)}:100000"),
+            ("purchase", f"{year_at(50)}:70000:9000"),
+        ]
+        body = client.get("/api/forecast", params=params).json()
+        assert [p["age"] for p in body["purchases"]] == [45, 50]
+        assert body["purchases"][1]["ongoing_delta"] == 9_000.0
+
+    def test_no_purchases_echo_as_empty_lists(self, client):
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast").json()
+        assert body["purchases"] == []
+        assert body["unaffordable"] == []
+
+    def test_an_unaffordable_purchase_reports_year_age_and_short(self, client):
+        # A 5,000,000 house at 45 can never leave the taxable buckets
+        # pre-59½, but the base plan keeps clearing: the verdict stays
+        # green while the year reports how far the lump missed.
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast", params={"purchase": f"{year_at(45)}:5000000"}).json()
+        assert body["run_out_age"] is None
+        (miss,) = body["unaffordable"]
+        assert miss["year"] == year_at(45)
+        assert miss["age"] == 45
+        assert 3_000_000 < miss["short"] < 5_045_000
+
+    def test_rejects_a_malformed_purchase(self, client):
+        for bad in ("2036", "2036:", "2036:abc", "x:100000", "2036:1:2:3", ""):
+            response = client.get("/api/forecast", params={"purchase": bad})
+            assert response.status_code == 422, bad
+
+    def test_rejects_a_purchase_in_the_past(self, client):
+        params = {"purchase": f"{TODAY.year - 1}:100000"}
+        assert client.get("/api/forecast", params=params).status_code == 422
+
+    def test_rejects_a_purchase_beyond_age_100(self, client):
+        params = {"purchase": f"{year_at(101)}:100000"}
+        assert client.get("/api/forecast", params=params).status_code == 422
+
+    def test_sensitivity_rows_simulate_with_the_purchases(self, client):
+        seed_portfolio()
+        seed_config()
+        base_rows = client.get("/api/forecast").json()["sensitivity"]
+        rows = client.get("/api/forecast", params={"purchase": f"{year_at(45)}:800000"}).json()[
+            "sensitivity"
+        ]
+        # The levels stay whole percentages of net worth...
+        assert [row["spend"] for row in rows] == [row["spend"] for row in base_rows]
+        # ...but each outcome now carries the purchase, like every
+        # other resolved override already does.
+        by_spend = {row["spend"]: row for row in rows}
+        base_by_spend = {row["spend"]: row for row in base_rows}
+        assert by_spend[30_000.0]["balance_at_100"] < base_by_spend[30_000.0]["balance_at_100"]
+
+
+class TestBaseline:
+    def test_the_baseline_is_the_no_purchase_outcome(self, client):
+        # One call answers both "where do I land?" and "what did the
+        # purchases cost me?" — the baseline matches a purchase-free
+        # request, series included, so the chart can draw the
+        # divergence.
+        seed_portfolio()
+        seed_config()
+        base = client.get("/api/forecast").json()
+        body = client.get("/api/forecast", params={"purchase": f"{year_at(45)}:800000"}).json()
+        assert body["baseline"]["run_out_age"] == base["run_out_age"]
+        assert body["baseline"]["balance_at_100"] == pytest.approx(base["balance_at_100"])
+        assert body["baseline"]["series"] == base["series"]
+        assert body["balance_at_100"] < base["balance_at_100"]
+
+    def test_without_purchases_the_baseline_equals_the_headline(self, client):
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast").json()
+        assert body["baseline"]["run_out_age"] == body["run_out_age"]
+        assert body["baseline"]["balance_at_100"] == pytest.approx(body["balance_at_100"])
+        assert body["baseline"]["series"] == body["series"]
+
+    def test_each_purchase_reports_the_outcome_without_it(self, client):
+        # One row per purchase, dropping just that one: the house row's
+        # outcome carries the car and vice versa — the marginal cost of
+        # each, not the total.
+        seed_portfolio()
+        seed_config()
+        house = f"{year_at(45)}:400000"
+        car = f"{year_at(50)}:80000"
+        body = client.get("/api/forecast", params=[("purchase", house), ("purchase", car)]).json()
+        car_only = client.get("/api/forecast", params={"purchase": car}).json()
+        house_only = client.get("/api/forecast", params={"purchase": house}).json()
+
+        costs = body["purchase_costs"]
+        assert [(row["year"], row["amount"]) for row in costs] == [
+            (year_at(45), 400_000.0),
+            (year_at(50), 80_000.0),
+        ]
+        assert costs[0]["balance_at_100"] == pytest.approx(car_only["balance_at_100"])
+        assert costs[0]["run_out_age"] == car_only["run_out_age"]
+        assert costs[1]["balance_at_100"] == pytest.approx(house_only["balance_at_100"])
+
+    def test_no_purchases_means_no_cost_rows(self, client):
+        seed_portfolio()
+        seed_config()
+        assert client.get("/api/forecast").json()["purchase_costs"] == []
 
 
 class TestSensitivity:

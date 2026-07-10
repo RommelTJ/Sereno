@@ -9,7 +9,10 @@ are recorded, and the year's spending need is withdrawn through the
 sourcing waterfall — so the 0% LTCG headroom, the gross-ups, and the
 59½ gate all apply per simulated year. Growth is all gain (the basis
 stays put); a sale reduces the basis pro-rata, so the gain fraction
-rises as an appreciating bucket is drawn down. The first year the
+rises as an appreciating bucket is drawn down. Planned purchases add
+their lump to the due year's target and their ongoing delta to every
+year from then on, so a lumpy year meets the same non-linear tax
+machinery as any other. The first year the
 waterfall cannot deliver the need is the run-out age. Pure math over
 the caller's numbers; loading buckets and config is the API layer's
 job.
@@ -42,6 +45,20 @@ class SocialSecurityBenefit:
 
 
 @dataclass(frozen=True)
+class PlannedPurchase:
+    """A dated one-off outflow — car, house, gift — with an optional
+    ongoing change to annual spend from its year onward. Both amounts
+    may be negative (a sale, a cost that ends); a windfall beyond the
+    year's need floors the draw at zero without reinvesting the
+    surplus. Keyed by age: the engine has no calendar — mapping years
+    to ages is the API layer's job."""
+
+    age: int
+    amount: float
+    ongoing_delta: float = 0.0
+
+
+@dataclass(frozen=True)
 class ForecastPoint:
     age: int
     balances: tuple[float, ...]
@@ -49,10 +66,21 @@ class ForecastPoint:
 
 
 @dataclass(frozen=True)
+class UnaffordablePurchase:
+    """A year whose lump didn't fit while the base spend still cleared:
+    short is how far the full-target attempt fell — you simply don't
+    buy it, which is a different fact from running out of money."""
+
+    age: int
+    short: float
+
+
+@dataclass(frozen=True)
 class ForecastResult:
     series: tuple[ForecastPoint, ...]
     run_out_age: int | None
     balance_at_100: float
+    unaffordable: tuple[UnaffordablePurchase, ...]
 
 
 def _grow(bucket: Bucket, real_rate: float) -> Bucket:
@@ -77,6 +105,7 @@ def simulate_forecast(
     eth_growth_pct: float | None = None,
     buckets: list[Bucket],
     social_security: Sequence[SocialSecurityBenefit] = (),
+    purchases: Sequence[PlannedPurchase] = (),
     ltcg_0_ceiling: float,
     std_deduction: float,
     ordinary_brackets: list[Bracket] | None,
@@ -86,6 +115,7 @@ def simulate_forecast(
     current = list(buckets)
     series: list[ForecastPoint] = []
     run_out_age: int | None = None
+    unaffordable: list[UnaffordablePurchase] = []
     for age in range(start_age, END_AGE + 1):
         current = [
             _grow(bucket, eth_rate if bucket.headroom_only else real_rate) for bucket in current
@@ -98,8 +128,11 @@ def simulate_forecast(
         )
         eth_balance = sum(b.balance for b in current if b.headroom_only)
         staking_income = STAKING_INCOME if eth_balance > STAKING_MIN_ETH_BALANCE else 0.0
+        lump = sum(p.amount for p in purchases if p.age == age)
+        ongoing = sum(p.ongoing_delta for p in purchases if age >= p.age)
+
         year = source_withdrawals(
-            target_spend=spend,
+            target_spend=spend + ongoing + lump,
             age=age,
             income=ss_income + staking_income,
             ordinary_income=staking_income,
@@ -108,6 +141,25 @@ def simulate_forecast(
             std_deduction=std_deduction,
             ordinary_brackets=ordinary_brackets,
         )
+        if lump > 0 and year.shortfall > _SHORTFALL_TOLERANCE:
+            # An unaffordable purchase, not a run-out: the lump simply
+            # isn't bought, and the year re-sources at the base target
+            # so later years aren't corrupted by a draw that never
+            # happens. When even the base target shorts, the run-out
+            # below wins and no unaffordable entry is recorded.
+            short = year.shortfall
+            year = source_withdrawals(
+                target_spend=spend + ongoing,
+                age=age,
+                income=ss_income + staking_income,
+                ordinary_income=staking_income,
+                buckets=current,
+                ltcg_0_ceiling=ltcg_0_ceiling,
+                std_deduction=std_deduction,
+                ordinary_brackets=ordinary_brackets,
+            )
+            if year.shortfall <= _SHORTFALL_TOLERANCE:
+                unaffordable.append(UnaffordablePurchase(age=age, short=short))
         current = [
             _after_draw(bucket, draw) for bucket, draw in zip(current, year.draws, strict=True)
         ]
@@ -116,5 +168,8 @@ def simulate_forecast(
 
     balance_at_100 = sum(sum(point.balances) for point in series if point.age == BALANCE_CHECK_AGE)
     return ForecastResult(
-        series=tuple(series), run_out_age=run_out_age, balance_at_100=balance_at_100
+        series=tuple(series),
+        run_out_age=run_out_age,
+        balance_at_100=balance_at_100,
+        unaffordable=tuple(unaffordable),
     )

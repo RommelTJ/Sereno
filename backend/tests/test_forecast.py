@@ -17,7 +17,12 @@ from collections.abc import Sequence
 
 import pytest
 
-from sereno.engine.forecast import ForecastResult, SocialSecurityBenefit, simulate_forecast
+from sereno.engine.forecast import (
+    ForecastResult,
+    PlannedPurchase,
+    SocialSecurityBenefit,
+    simulate_forecast,
+)
 from sereno.engine.sourcing import Bracket, Bucket
 
 
@@ -55,6 +60,7 @@ def run(
     eth_growth_pct: float | None = None,
     buckets: list[Bucket] | None = None,
     social_security: Sequence[SocialSecurityBenefit] = (),
+    purchases: Sequence[PlannedPurchase] = (),
     ltcg_0_ceiling: float = 96_700.0,
     std_deduction: float = 30_000.0,
     ordinary_brackets: list[Bracket] | None = None,
@@ -67,6 +73,7 @@ def run(
         eth_growth_pct=eth_growth_pct,
         buckets=buckets if buckets is not None else [brokerage(2_000_000)],
         social_security=social_security,
+        purchases=purchases,
         ltcg_0_ceiling=ltcg_0_ceiling,
         std_deduction=std_deduction,
         ordinary_brackets=ordinary_brackets,
@@ -287,3 +294,210 @@ class TestStaking:
         # No staking at exactly 50,000: the first draw is the full
         # 40,000, not 37,000.
         assert result.series[39 - 38].balances[0] == pytest.approx(10_000)
+
+
+class TestPlannedPurchases:
+    def test_a_lump_raises_only_its_years_draw(self):
+        # Zero real rate keeps the arithmetic flat: the 100,000 car at
+        # 40 comes out on top of that year's 40,000 spend, and every
+        # other year draws exactly the base spend.
+        base = run(return_pct=5, inflation_pct=5, buckets=[brokerage(5_000_000)])
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[PlannedPurchase(age=40, amount=100_000)],
+        )
+        # Balances record before the withdrawal, so the series is
+        # untouched through the purchase year itself...
+        assert result.series[: 40 - 38 + 1] == base.series[: 40 - 38 + 1]
+        # ...and every later year carries the same one-time dent.
+        assert result.series[41 - 38].balances[0] == pytest.approx(
+            base.series[41 - 38].balances[0] - 100_000
+        )
+        assert result.balance_at_100 == pytest.approx(base.balance_at_100 - 100_000)
+
+    def test_an_ongoing_delta_raises_every_year_from_its_age(self):
+        # A 5,000/yr cost from age 40 onward. The age-100 point records
+        # before its own draw, so 60 raised draws (40 through 99) have
+        # landed in balance_at_100, compounding by count at the zero
+        # real rate.
+        base = run(return_pct=5, inflation_pct=5, buckets=[brokerage(5_000_000)])
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[PlannedPurchase(age=40, amount=0.0, ongoing_delta=5_000)],
+        )
+        assert result.series[41 - 38].balances[0] == pytest.approx(
+            base.series[41 - 38].balances[0] - 5_000
+        )
+        assert result.series[42 - 38].balances[0] == pytest.approx(
+            base.series[42 - 38].balances[0] - 10_000
+        )
+        assert result.balance_at_100 == pytest.approx(base.balance_at_100 - 60 * 5_000)
+
+    def test_purchases_due_the_same_year_sum(self):
+        joint = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[
+                PlannedPurchase(age=40, amount=60_000),
+                PlannedPurchase(age=40, amount=40_000),
+            ],
+        )
+        single = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[PlannedPurchase(age=40, amount=100_000)],
+        )
+        assert joint.series == single.series
+
+    def test_a_negative_amount_is_a_windfall_reducing_the_years_need(self):
+        base = run(return_pct=5, inflation_pct=5, buckets=[brokerage(5_000_000)])
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[PlannedPurchase(age=40, amount=-15_000)],
+        )
+        assert result.series[41 - 38].balances[0] == pytest.approx(
+            base.series[41 - 38].balances[0] + 15_000
+        )
+
+    def test_a_windfall_beyond_the_years_need_is_not_reinvested(self):
+        # −100,000 against a 40,000 spend floors the year's draw at
+        # zero; the 60,000 surplus is not added to any bucket — a
+        # deliberate v1 simplification.
+        base = run(return_pct=5, inflation_pct=5, buckets=[brokerage(5_000_000)])
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(5_000_000)],
+            purchases=[PlannedPurchase(age=40, amount=-100_000)],
+        )
+        assert result.series[41 - 38].balances[0] == pytest.approx(
+            base.series[41 - 38].balances[0] + 40_000
+        )
+
+    def test_a_lump_pays_tax_an_amortized_spread_never_would(self):
+        # The same 248,000 of lifetime dollars, two ways: +4,000/yr
+        # over the 62 draws recorded in balance_at_100 (38 through 99)
+        # stays inside the 0% LTCG headroom every year, while the
+        # one-year lump blows past it and pays the 15% gross-up on the
+        # excess. At a zero real rate with full-basis buckets the two
+        # paths end identical — so the difference that appears on
+        # all-gain buckets is pure tax drag, the exact reason a lump
+        # can't be approximated by amortizing it.
+        def terminal_gap(basis: float) -> float:
+            amortized = run(
+                return_pct=5,
+                inflation_pct=5,
+                buckets=[brokerage(5_000_000, basis=basis)],
+                purchases=[PlannedPurchase(age=38, amount=0.0, ongoing_delta=4_000)],
+            )
+            lump = run(
+                return_pct=5,
+                inflation_pct=5,
+                buckets=[brokerage(5_000_000, basis=basis)],
+                purchases=[PlannedPurchase(age=38, amount=248_000)],
+            )
+            return amortized.balance_at_100 - lump.balance_at_100
+
+        assert terminal_gap(basis=5_000_000) == pytest.approx(0)
+        # The lump year targets 288,000: 96,700 sells inside the
+        # headroom, the rest grosses up at 1/(1 − 0.15).
+        extra_tax = (288_000 - 96_700) / 0.85 * 0.15
+        assert terminal_gap(basis=0.0) == pytest.approx(extra_tax)
+
+
+class TestUnaffordablePurchases:
+    def test_an_undeliverable_lump_is_unaffordable_not_a_run_out(self):
+        # 198,000 of brokerage can't deliver a 500,000 car at 40; the
+        # 1,000 base spend keeps clearing, so the money never runs out —
+        # that year simply couldn't hold the purchase.
+        result = run(
+            spend=1_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(200_000)],
+            purchases=[PlannedPurchase(age=40, amount=500_000)],
+        )
+        assert result.run_out_age is None
+        (miss,) = result.unaffordable
+        assert miss.age == 40
+        assert miss.short == pytest.approx(303_000)
+
+    def test_an_unaffordable_year_is_resourced_without_its_lump(self):
+        # You simply don't buy it: the whole path matches a plan that
+        # never held the car, so later years aren't corrupted by a draw
+        # that never happens.
+        base = run(spend=1_000, return_pct=5, inflation_pct=5, buckets=[brokerage(200_000)])
+        result = run(
+            spend=1_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(200_000)],
+            purchases=[PlannedPurchase(age=40, amount=500_000)],
+        )
+        assert result.series == base.series
+        assert result.balance_at_100 == pytest.approx(base.balance_at_100)
+
+    def test_a_pre_60_lump_is_capped_by_the_taxable_buckets(self):
+        # Lifetime money is ample — 5M sits in the 401(k) — but at 45
+        # the gate leaves only the brokerage, and the house doesn't
+        # fit. The same house past 59½ fits with room to spare.
+        early = run(
+            spend=10_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(300_000), four01k(5_000_000)],
+            purchases=[PlannedPurchase(age=45, amount=1_000_000)],
+        )
+        assert early.run_out_age is None
+        assert [(miss.age, miss.short) for miss in early.unaffordable] == [
+            (45, pytest.approx(780_000))
+        ]
+
+        late = run(
+            spend=10_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(300_000), four01k(5_000_000)],
+            purchases=[PlannedPurchase(age=62, amount=1_000_000)],
+        )
+        assert late.unaffordable == ()
+        assert late.run_out_age is None
+
+    def test_base_spend_shorting_still_sets_the_run_out_age(self):
+        # The base plan dies at 40 whether or not a purchase was
+        # planned that year: running out wins, and no unaffordable
+        # entry muddies it.
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(100_000)],
+            purchases=[PlannedPurchase(age=40, amount=10_000)],
+        )
+        assert result.run_out_age == 40
+        assert result.unaffordable == ()
+
+    def test_ongoing_deltas_survive_an_unaffordable_lump(self):
+        # The recurring commitment is its own fact: the car isn't
+        # bought at 40, but the 5,000/yr from that year stays in the
+        # base target — and counts inside the year's failed attempt.
+        base = run(spend=1_000, return_pct=5, inflation_pct=5, buckets=[brokerage(200_000)])
+        result = run(
+            spend=1_000,
+            return_pct=5,
+            inflation_pct=5,
+            buckets=[brokerage(200_000)],
+            purchases=[PlannedPurchase(age=40, amount=500_000, ongoing_delta=5_000)],
+        )
+        (miss,) = result.unaffordable
+        assert miss.short == pytest.approx(308_000)
+        assert result.series[41 - 38].balances[0] == pytest.approx(
+            base.series[41 - 38].balances[0] - 5_000
+        )
