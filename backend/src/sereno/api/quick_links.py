@@ -66,6 +66,31 @@ def create_quick_link(link: QuickLinkBody, db: Db) -> QuickLink:
     return _quick_link(db, cursor.lastrowid)
 
 
+class QuickLinkOrder(BaseModel):
+    """The complete ordered list of quick link ids — total, so a partial
+    update can never interleave two reorders."""
+
+    ids: list[int]
+
+
+@router.put("/quick-links/order")
+def reorder_quick_links(order: QuickLinkOrder, db: Db) -> list[QuickLink]:
+    """Persists a user-defined display order: position in the list becomes
+    sort_order (1-based). Declared before /quick-links/{quick_link_id} so
+    "order" is never parsed as a link id. No active flag here — every row
+    renders, so the order covers every row."""
+    all_ids = {row["id"] for row in db.execute("SELECT id FROM quick_link")}
+    if len(order.ids) != len(all_ids) or set(order.ids) != all_ids:
+        raise HTTPException(status_code=422, detail="ids must be exactly the quick link ids")
+    db.executemany(
+        "UPDATE quick_link SET sort_order = ? WHERE id = ?",
+        list(enumerate(order.ids, start=1)),
+    )
+    db.commit()
+    rows = db.execute("SELECT id, label, url FROM quick_link ORDER BY sort_order, id")
+    return [QuickLink(**dict(row)) for row in rows]
+
+
 def _require_quick_link(db: sqlite3.Connection, quick_link_id: int) -> None:
     if db.execute("SELECT 1 FROM quick_link WHERE id = ?", (quick_link_id,)).fetchone() is None:
         raise HTTPException(status_code=404, detail="quick link not found")
