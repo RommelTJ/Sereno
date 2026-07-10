@@ -9,7 +9,7 @@ links are edited in place and hard-deleted, the one delete in the app.
 import sqlite3
 from typing import Annotated, Self
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, StringConstraints, model_validator
 
 from sereno.db.connection import get_db
@@ -64,3 +64,29 @@ def create_quick_link(link: QuickLinkBody, db: Db) -> QuickLink:
     )
     db.commit()
     return _quick_link(db, cursor.lastrowid)
+
+
+def _require_quick_link(db: sqlite3.Connection, quick_link_id: int) -> None:
+    if db.execute("SELECT 1 FROM quick_link WHERE id = ?", (quick_link_id,)).fetchone() is None:
+        raise HTTPException(status_code=404, detail="quick link not found")
+
+
+@router.put("/quick-links/{quick_link_id}")
+def update_quick_link(quick_link_id: int, link: QuickLinkBody, db: Db) -> QuickLink:
+    _require_quick_link(db, quick_link_id)
+    db.execute(
+        "UPDATE quick_link SET label = ?, url = ? WHERE id = ?",
+        (link.label, link.url, quick_link_id),
+    )
+    db.commit()
+    return _quick_link(db, quick_link_id)
+
+
+@router.delete("/quick-links/{quick_link_id}", status_code=204)
+def delete_quick_link(quick_link_id: int, db: Db) -> None:
+    """A true hard delete — the one in the app. Every other removal is a
+    soft flag because financial history must keep counting; a quick link
+    has no facts attached, so there is nothing to keep."""
+    _require_quick_link(db, quick_link_id)
+    db.execute("DELETE FROM quick_link WHERE id = ?", (quick_link_id,))
+    db.commit()
