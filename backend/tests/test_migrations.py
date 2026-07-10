@@ -99,6 +99,37 @@ def test_income_source_label_backfills_from_note(conn, tmp_path):
     assert rows == [("Spouse paycheck", None), (None, None)]
 
 
+def test_sort_order_backfills_from_id(conn, tmp_path):
+    # A database migrated before 0009 existed keeps its insertion order:
+    # sort_order takes over each row's id, so accounts and envelopes render
+    # exactly as they did when the lists were ordered by id alone.
+    for name in (
+        "0001_initial_schema.sql",
+        "0002_category_plan.sql",
+        "0003_account_emoji.sql",
+        "0004_carry_forward_views.sql",
+        "0005_fund_emoji.sql",
+        "0006_budget_month_fund_spend.sql",
+        "0007_fund_entry_source.sql",
+        "0008_income_source_label.sql",
+    ):
+        (tmp_path / name).write_text((MIGRATIONS_DIR / name).read_text())
+    migrate(conn, tmp_path)
+    conn.execute("INSERT INTO account (name, kind) VALUES ('Ethereum', 'eth')")
+    conn.execute(
+        "INSERT INTO account (name, kind, is_liability) VALUES ('Mortgage', 'mortgage', 1)"
+    )
+    conn.execute("INSERT INTO category (name) VALUES ('Groceries')")
+    conn.execute("INSERT INTO category (name) VALUES ('Dining out')")
+    sort_migration = "0009_sort_order.sql"
+    (tmp_path / sort_migration).write_text((MIGRATIONS_DIR / sort_migration).read_text())
+    assert migrate(conn, tmp_path) == [sort_migration]
+    accounts = conn.execute("SELECT id, sort_order FROM account ORDER BY id").fetchall()
+    assert accounts == [(1, 1), (2, 2)]
+    categories = conn.execute("SELECT id, sort_order FROM category ORDER BY id").fetchall()
+    assert categories == [(1, 1), (2, 2)]
+
+
 def test_fund_emoji_backfills_existing_seed_funds(conn, tmp_path):
     # A database migrated before 0005 existed, already holding the
     # seed-named funds, gets its emojis backfilled by name.
