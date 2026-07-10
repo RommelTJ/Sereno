@@ -107,6 +107,18 @@ class TestSeedSatisfiesTheViews:
         assert row["funded_in"] > 0
         assert row["total_spent"] > 0
 
+    def test_income_titles_seed_as_source_labels_not_notes(self, db):
+        # The seed's income titles ("Spouse paycheck") are display titles,
+        # so they belong in source_label; note stays free for a real note.
+        seed(db)
+        rows = db.execute("SELECT source_label, note FROM income_event ORDER BY id").fetchall()
+        assert [row["source_label"] for row in rows] == [
+            "You paycheck",
+            "Spouse paycheck",
+            "Spouse paycheck",
+        ]
+        assert all(row["note"] is None for row in rows)
+
     def test_eth_balances_are_quantity_times_price(self, db):
         seed(db)
         rows = db.execute(

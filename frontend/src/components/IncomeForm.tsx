@@ -16,15 +16,33 @@ function IncomeForm({
   const [amount, setAmount] = useState('')
   const [month, setMonth] = useState(months[0].value)
   const [sourceKey, setSourceKey] = useState(SOURCE_OPTIONS[0].value)
+  const [sourceLabel, setSourceLabel] = useState(SOURCE_OPTIONS[0].sourceLabel)
+  const [note, setNote] = useState('')
   const [adding, setAdding] = useState(false)
 
+  // Switching the source re-prefills the title, overwriting any edit —
+  // the title belongs to the selected source, not to the form session.
+  const handleSourceChange = (value: string) => {
+    setSourceKey(value)
+    const option = SOURCE_OPTIONS.find((source) => source.value === value)
+    if (option) setSourceLabel(option.sourceLabel)
+  }
+
   const handleAdd = async () => {
-    const input = incomeInput(amount, sourceKey, month, todayIso())
+    const input = incomeInput(
+      amount,
+      sourceKey,
+      month,
+      todayIso(),
+      sourceLabel,
+      note,
+    )
     if (!input) return
     setAdding(true)
     try {
       await onAdd(input)
       setAmount('')
+      setNote('')
     } finally {
       setAdding(false)
     }
@@ -72,7 +90,7 @@ function IncomeForm({
           id="income-source"
           className={inputClasses}
           value={sourceKey}
-          onChange={(event) => setSourceKey(event.target.value)}
+          onChange={(event) => handleSourceChange(event.target.value)}
         >
           {SOURCE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -81,6 +99,27 @@ function IncomeForm({
           ))}
         </select>
       </label>
+      <div className="mt-[11px] grid grid-cols-1 gap-[11px] sm:grid-cols-2">
+        <label htmlFor="income-source-title" className="block">
+          <FieldLabel text="Source title" />
+          <input
+            id="income-source-title"
+            className={inputClasses}
+            value={sourceLabel}
+            onChange={(event) => setSourceLabel(event.target.value)}
+          />
+        </label>
+        <label htmlFor="income-note" className="block">
+          <FieldLabel text="Note" />
+          <input
+            id="income-note"
+            className={inputClasses}
+            placeholder="optional"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+          />
+        </label>
+      </div>
       <button
         type="button"
         disabled={adding}

@@ -252,6 +252,64 @@ describe('Add a spending item', () => {
 
     expect(expenseBody(fetchMock)).toBeUndefined()
   })
+
+  it('posts the note alongside the expense', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/expenses': { id: 102 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('spending-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '180' },
+    })
+    fireEvent.change(within(form).getByLabelText('Note'), {
+      target: { value: 'Anniversary dinner' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add spending row' }),
+    )
+
+    await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
+    expect(expenseBody(fetchMock)).toEqual({
+      txn_date: todayIso(),
+      category_id: 1,
+      amount: 180,
+      funded_from: 'discretionary',
+      note: 'Anniversary dinner',
+    })
+    expect(within(form).getByLabelText('Note')).toHaveValue('')
+  })
+
+  it('omits a whitespace-only note from the payload', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/expenses': { id: 103 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('spending-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '45' },
+    })
+    fireEvent.change(within(form).getByLabelText('Note'), {
+      target: { value: '   ' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add spending row' }),
+    )
+
+    await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
+    expect(expenseBody(fetchMock)).toEqual({
+      txn_date: todayIso(),
+      category_id: 1,
+      amount: 45,
+      funded_from: 'discretionary',
+    })
+  })
 })
 
 describe('Add an income item', () => {
@@ -310,9 +368,95 @@ describe('Add an income item', () => {
       budget_month: fundsMonth(1).value,
       source: 'paycheck',
       amount: 2400,
-      note: 'You paycheck',
+      source_label: 'You paycheck',
     })
     expect(within(form).getByLabelText('Amount')).toHaveValue('')
+  })
+
+  it('prefills the source title from the selected option', async () => {
+    render(<SafeToSpend />)
+
+    const form = await screen.findByTestId('income-form')
+    expect(within(form).getByLabelText('Source title')).toHaveValue(
+      'Spouse paycheck',
+    )
+
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'eth-harvest' },
+    })
+
+    expect(within(form).getByLabelText('Source title')).toHaveValue(
+      'ETH harvest',
+    )
+  })
+
+  it('posts an edited source title and a note', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 6 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('income-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '350' },
+    })
+    fireEvent.change(within(form).getByLabelText('Source title'), {
+      target: { value: 'Freelance invoice' },
+    })
+    fireEvent.change(within(form).getByLabelText('Note'), {
+      target: { value: 'June retainer' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/income')).toBeDefined(),
+    )
+    expect(postBody(fetchMock, '/api/income')).toEqual({
+      txn_date: todayIso(),
+      budget_month: fundsMonth(0).value,
+      source: 'paycheck',
+      amount: 350,
+      source_label: 'Freelance invoice',
+      note: 'June retainer',
+    })
+    expect(within(form).getByLabelText('Note')).toHaveValue('')
+  })
+
+  it('omits a blank source title and note from the payload', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 7 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('income-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '100' },
+    })
+    fireEvent.change(within(form).getByLabelText('Source title'), {
+      target: { value: '   ' },
+    })
+    fireEvent.change(within(form).getByLabelText('Note'), {
+      target: { value: '  ' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/income')).toBeDefined(),
+    )
+    expect(postBody(fetchMock, '/api/income')).toEqual({
+      txn_date: todayIso(),
+      budget_month: fundsMonth(0).value,
+      source: 'paycheck',
+      amount: 100,
+    })
   })
 
   it('maps every source option onto the API source values', async () => {

@@ -99,6 +99,7 @@ export interface ActivityItem {
   amount: number
   category: string | null
   source: string | null
+  source_label: string | null
   note: string | null
 }
 
@@ -342,21 +343,27 @@ export type IncomeSource =
   | 'soc_sec'
 
 // budget_month is omitted so it defaults to the transaction's month
-// server-side; fund_id goes with funded_from='fund', never alone.
+// server-side; fund_id goes with funded_from='fund', never alone. A blank
+// note is omitted, not sent empty.
 export type ExpenseInput = {
   txn_date: string
   category_id: number
   amount: number
+  note?: string
 } & (
   | { funded_from: 'discretionary' }
   | { funded_from: 'fund'; fund_id: number }
 )
 
+// source_label is the row's display title ("Spouse paycheck") — the
+// context the source enum can't carry; note is a true note. Blank values
+// are omitted, not sent empty.
 export interface IncomeInput {
   txn_date: string
   budget_month: string
   source: IncomeSource
   amount: number
+  source_label?: string
   note?: string
 }
 

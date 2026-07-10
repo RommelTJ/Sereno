@@ -68,13 +68,14 @@ export function previousMonth(month: string): string {
 }
 
 // The funding sources the handoff's prototype offers, mapped onto the API's
-// source values; the label context that the enum can't carry (whose
-// paycheck, which transfer) goes in the note, matching the seed's style.
+// source values; the title context that the enum can't carry (whose
+// paycheck, which transfer) prefills the editable Source title field and
+// posts as source_label, matching the seed's style.
 export interface SourceOption {
   value: string
   label: string
   source: IncomeSource
-  note: string
+  sourceLabel: string
 }
 
 export const SOURCE_OPTIONS: SourceOption[] = [
@@ -82,31 +83,31 @@ export const SOURCE_OPTIONS: SourceOption[] = [
     value: 'spouse-paycheck',
     label: '💵 Spouse paycheck',
     source: 'paycheck',
-    note: 'Spouse paycheck',
+    sourceLabel: 'Spouse paycheck',
   },
   {
     value: 'your-paycheck',
     label: '💵 Your paycheck',
     source: 'paycheck',
-    note: 'You paycheck',
+    sourceLabel: 'You paycheck',
   },
   {
     value: 'brokerage-withdrawal',
     label: '🏦 Brokerage withdrawal',
     source: 'transfer_in',
-    note: 'Brokerage withdrawal',
+    sourceLabel: 'Brokerage withdrawal',
   },
   {
     value: 'eth-harvest',
     label: 'Ξ ETH harvest',
     source: 'staking',
-    note: 'ETH harvest',
+    sourceLabel: 'ETH harvest',
   },
   {
     value: 'cash-plus-transfer',
     label: '🏠 Cash Plus transfer',
     source: 'transfer_in',
-    note: 'Cash Plus transfer',
+    sourceLabel: 'Cash Plus transfer',
   },
 ]
 
@@ -131,36 +132,52 @@ export function fundsMonthOptions(todayIsoDate: string): MonthOption[] {
   })
 }
 
+// Returns null when the amount doesn't parse — nothing should be posted.
+// A whitespace-only source title or note is omitted from the payload,
+// never sent empty.
 export function incomeInput(
   rawAmount: string,
   sourceKey: string,
   budgetMonth: string,
   txnDate: string,
+  rawSourceLabel: string,
+  rawNote: string,
 ): IncomeInput | null {
   const amount = parseAmount(rawAmount)
   const option = SOURCE_OPTIONS.find((source) => source.value === sourceKey)
   if (!amount || !option) return null
+  const sourceLabel = rawSourceLabel.trim()
+  const note = rawNote.trim()
   return {
     txn_date: txnDate,
     budget_month: budgetMonth,
     source: option.source,
     amount,
-    note: option.note,
+    ...(sourceLabel ? { source_label: sourceLabel } : {}),
+    ...(note ? { note } : {}),
   }
 }
 
 // The funded-from select encodes its choice as 'discretionary' or
 // 'fund:<id>'. budget_month is left to the server default (the txn's month).
 // Returns null when the amount doesn't parse — nothing should be posted.
+// A whitespace-only note is omitted from the payload, never sent empty.
 export function expenseInput(
   rawAmount: string,
   categoryId: number,
   fundedFrom: string,
   txnDate: string,
+  rawNote: string,
 ): ExpenseInput | null {
   const amount = parseAmount(rawAmount)
   if (!amount) return null
-  const base = { txn_date: txnDate, category_id: categoryId, amount }
+  const note = rawNote.trim()
+  const base = {
+    txn_date: txnDate,
+    category_id: categoryId,
+    amount,
+    ...(note ? { note } : {}),
+  }
   return fundedFrom === 'discretionary'
     ? { ...base, funded_from: 'discretionary' }
     : {

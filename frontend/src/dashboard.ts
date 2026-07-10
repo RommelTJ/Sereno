@@ -76,11 +76,15 @@ export function activityRow(
   const key = `${item.type}-${item.id}`
   const date = shortDate(item.txn_date)
   if (item.type === 'income') {
+    // The source label is the row's title; a row from before source_label
+    // existed keeps its title-style note as the title, so the note only
+    // joins the subtitle when it isn't already serving up top.
+    const note = item.source_label != null ? item.note : null
     return {
       key,
       icon: '💵',
-      title: item.note ?? item.source ?? 'Income',
-      sub: `Funds ${monthLabel(budget.month)} · ${date}`,
+      title: item.source_label ?? item.note ?? item.source ?? 'Income',
+      sub: `Funds ${monthLabel(budget.month)} · ${date}${note ? ` · ${note}` : ''}`,
       amount: `+${usd(item.amount)}`,
       tone: 'credit',
     }

@@ -26,6 +26,7 @@ def test_startup_applies_migrations(monkeypatch, tmp_path):
         "0005_fund_emoji.sql",
         "0006_budget_month_fund_spend.sql",
         "0007_fund_entry_source.sql",
+        "0008_income_source_label.sql",
     ]
 
 

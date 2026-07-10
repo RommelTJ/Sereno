@@ -107,7 +107,9 @@ class Expense(BaseModel):
 
 class IncomeCreate(BaseModel):
     """budget_month is the month this inflow funds; it defaults to the txn's
-    month — the prepay pattern passes the next month (June pay funds July)."""
+    month — the prepay pattern passes the next month (June pay funds July).
+    source_label is the row's display title ("Spouse paycheck") — the context
+    the source enum can't carry — leaving note to be a true note."""
 
     txn_date: date
     budget_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
@@ -115,6 +117,7 @@ class IncomeCreate(BaseModel):
     amount: PositiveFloat
     tax_treatment: Literal["ORDINARY", "LTCG", "TAX_FREE"] | None = None
     account_id: int | None = None
+    source_label: str | None = None
     note: str | None = None
 
 
@@ -126,6 +129,7 @@ class Income(BaseModel):
     amount: float
     tax_treatment: str | None
     account_id: int | None
+    source_label: str | None
     note: str | None
     created_at: datetime
 
@@ -146,6 +150,7 @@ class ActivityItem(BaseModel):
     amount: float
     category: str | None
     source: str | None
+    source_label: str | None
     note: str | None
 
 
@@ -323,7 +328,7 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
     _require(db, "account", income.account_id, "account")
     cursor = db.execute(
         "INSERT INTO income_event (txn_date, budget_month, source, amount,"
-        " tax_treatment, account_id, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        " tax_treatment, account_id, source_label, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (
             income.txn_date.isoformat(),
             income.budget_month or income.txn_date.strftime("%Y-%m"),
@@ -331,13 +336,14 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
             income.amount,
             income.tax_treatment,
             income.account_id,
+            income.source_label,
             income.note,
         ),
     )
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, source, amount, tax_treatment,"
-        " account_id, note, created_at FROM income_event WHERE id = ?",
+        " account_id, source_label, note, created_at FROM income_event WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
     return Income(**dict(row))
@@ -391,7 +397,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         (target,),
     )
     incomes = db.execute(
-        "SELECT id, txn_date, amount, source, note, created_at"
+        "SELECT id, txn_date, amount, source, source_label, note, created_at"
         " FROM income_event WHERE budget_month = ?",
         (target,),
     )
@@ -409,9 +415,11 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         (target,),
     )
     merged = sorted(
-        [dict(row) | {"type": "expense", "source": None} for row in expenses]
+        [dict(row) | {"type": "expense", "source": None, "source_label": None} for row in expenses]
         + [dict(row) | {"type": "income", "category": None} for row in incomes]
-        + [dict(row) | {"type": "fund", "note": None} for row in fund_entries],
+        + [
+            dict(row) | {"type": "fund", "source_label": None, "note": None} for row in fund_entries
+        ],
         key=lambda row: (row["txn_date"], row["created_at"], row["id"]),
         reverse=True,
     )

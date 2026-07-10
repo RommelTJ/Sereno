@@ -238,6 +238,87 @@ describe('Recent activity', () => {
     expect(screen.getByText('+$2,400').className).toContain('text-accent')
   })
 
+  it('titles an income row by its source label with the note in the subtitle', async () => {
+    stubDashboard({
+      '/api/budget-month': {
+        ...BUDGET_MONTH,
+        activity: [
+          {
+            type: 'income',
+            id: 21,
+            txn_date: '2026-06-12',
+            amount: 350,
+            category: null,
+            source: 'transfer_in',
+            source_label: 'Freelance invoice',
+            note: 'June retainer',
+          },
+        ],
+      },
+    })
+    renderDashboard()
+
+    const rows = await screen.findAllByTestId('activity-row')
+    expect(within(rows[0]).getByText('Freelance invoice')).toBeInTheDocument()
+    expect(
+      within(rows[0]).getByText('Funds June · Jun 12 · June retainer'),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps a note-only income title without repeating it in the subtitle', async () => {
+    // A row created before source_label existed (or by an API client that
+    // only sent a note): the note serves as the title, so the subtitle
+    // must not repeat it.
+    stubDashboard({
+      '/api/budget-month': {
+        ...BUDGET_MONTH,
+        activity: [
+          {
+            type: 'income',
+            id: 22,
+            txn_date: '2026-06-12',
+            amount: 350,
+            category: null,
+            source: 'transfer_in',
+            source_label: null,
+            note: 'Brokerage withdrawal',
+          },
+        ],
+      },
+    })
+    renderDashboard()
+
+    const rows = await screen.findAllByTestId('activity-row')
+    expect(
+      within(rows[0]).getByText('Brokerage withdrawal'),
+    ).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Funds June · Jun 12')).toBeInTheDocument()
+  })
+
+  it('falls back to the source when an income row has no label or note', async () => {
+    stubDashboard({
+      '/api/budget-month': {
+        ...BUDGET_MONTH,
+        activity: [
+          {
+            type: 'income',
+            id: 23,
+            txn_date: '2026-06-12',
+            amount: 12.34,
+            category: null,
+            source: 'interest',
+            source_label: null,
+            note: null,
+          },
+        ],
+      },
+    })
+    renderDashboard()
+
+    const rows = await screen.findAllByTestId('activity-row')
+    expect(within(rows[0]).getByText('interest')).toBeInTheDocument()
+  })
+
   it('renders a fund row with its fund emoji and parked tone', async () => {
     stubDashboard()
     renderDashboard()

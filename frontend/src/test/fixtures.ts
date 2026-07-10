@@ -122,6 +122,7 @@ export const BUDGET_MONTH = {
       amount: 28.4,
       category: 'Entertainment',
       source: null,
+      source_label: null,
       note: 'Poke — treat yourself',
     },
     {
@@ -131,10 +132,11 @@ export const BUDGET_MONTH = {
       amount: 387,
       category: 'Groceries',
       source: null,
+      source_label: null,
       note: null,
     },
     // A fund entry: the fund's name rides in the category slot, the entry
-    // source passes through, and the table has no note column.
+    // source passes through, and the table has no title or note column.
     {
       type: 'fund',
       id: 9,
@@ -142,8 +144,11 @@ export const BUDGET_MONTH = {
       amount: 500,
       category: 'Emergency fund',
       source: 'monthly_plan',
+      source_label: null,
       note: null,
     },
+    // An income row's title lives in source_label (migration 0008 moved
+    // the old title-style notes there), leaving note as a true note.
     {
       type: 'income',
       id: 2,
@@ -151,7 +156,8 @@ export const BUDGET_MONTH = {
       amount: 2_400,
       category: null,
       source: 'paycheck',
-      note: 'Spouse paycheck',
+      source_label: 'Spouse paycheck',
+      note: null,
     },
   ],
 }
