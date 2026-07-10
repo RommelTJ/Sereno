@@ -105,6 +105,45 @@ class TestPutQuickLink:
         assert response.json()["detail"] == "quick link not found"
 
 
+class TestReorderQuickLinks:
+    def test_persists_and_echoes_the_new_order(self, client):
+        chase = create(client, "Chase", "https://chase.com").json()["id"]
+        vanguard = create(client, "Vanguard", "https://vanguard.com").json()["id"]
+        fidelity = create(client, "Fidelity", "https://fidelity.com").json()["id"]
+        response = client.put("/api/quick-links/order", json={"ids": [fidelity, chase, vanguard]})
+        assert response.status_code == 200
+        assert [link["label"] for link in response.json()] == [
+            "Fidelity",
+            "Chase",
+            "Vanguard",
+        ]
+        labels = [link["label"] for link in client.get("/api/quick-links").json()]
+        assert labels == ["Fidelity", "Chase", "Vanguard"]
+
+    def assert_rejected(self, response):
+        assert response.status_code == 422
+        assert response.json()["detail"] == "ids must be exactly the quick link ids"
+
+    def test_ids_must_cover_exactly_the_quick_links(self, client):
+        chase = create(client, "Chase", "https://chase.com").json()["id"]
+        vanguard = create(client, "Vanguard", "https://vanguard.com").json()["id"]
+        self.assert_rejected(client.put("/api/quick-links/order", json={"ids": [chase]}))
+        self.assert_rejected(
+            client.put("/api/quick-links/order", json={"ids": [chase, vanguard, 999]})
+        )
+        self.assert_rejected(
+            client.put("/api/quick-links/order", json={"ids": [chase, chase, vanguard]})
+        )
+
+    def test_new_link_lists_last_after_a_reorder(self, client):
+        chase = create(client, "Chase", "https://chase.com").json()["id"]
+        vanguard = create(client, "Vanguard", "https://vanguard.com").json()["id"]
+        client.put("/api/quick-links/order", json={"ids": [vanguard, chase]})
+        create(client, "Fidelity", "https://fidelity.com")
+        labels = [link["label"] for link in client.get("/api/quick-links").json()]
+        assert labels == ["Vanguard", "Chase", "Fidelity"]
+
+
 class TestDeleteQuickLink:
     def test_deletes_the_row_and_keeps_the_rest_in_order(self, client):
         create(client, "Chase", "https://chase.com")
