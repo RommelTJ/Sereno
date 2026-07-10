@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.0.0**
+**v2.1.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -654,6 +654,24 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.1.0 — Activity rows learn to explain themselves. Both safe-to-spend
+forms gain an optional Note, and income rows get a dedicated title:
+until now the bold income title *was* the `note` column — the form
+hardcoded a per-source note ("Spouse paycheck") — so a real note had
+no room without displacing the source from the row. Migration 0008
+adds `income_event.source_label` and backfills it from the old
+title-style notes, so every existing row keeps its rendered title;
+`POST /api/income` accepts and echoes the label, the budget-month
+activity payload carries it, and the seed writes its titles there.
+The income form keeps its source select and gains an editable Source
+title prefilled from the selected option (switching the source
+re-prefills it) plus a Note input; the spending form's note titles
+the row with the category in the subtitle, the way the feed already
+rendered notes. Income rows title by `source_label`, falling back to
+the note and then the source, a note joins the subtitle only when it
+isn't already serving as the title, and a blank title or note is
+omitted from the payload, never sent empty.
 
 v2.0.0 — Planned purchases and the max-affordable solver. The
 forecast learns lumpy years: repeated `purchase=year:amount[:delta]`
