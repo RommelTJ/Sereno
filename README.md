@@ -126,7 +126,9 @@ The balances slice:
 - `GET /api/accounts` — the account dimension rows (name, emoji, kind,
   tax treatment, liability and investable flags, withdrawal priority,
   and access age; inactive accounts stay listed with `active: false` so
-  history keeps its labels).
+  history keeps its labels), ordered by `sort_order` then id, so every
+  consumer — the ledger columns, the balance form picker, the Settings
+  cards — renders the user-defined order.
 - `POST /api/accounts` — creates an asset or liability: inserts the
   `account` row (name, emoji, `is_liability`; kind `other`, net-worth-only
   until classified) plus an initial `balance_entry` dated today. The
@@ -142,6 +144,13 @@ The balances slice:
   Guardrails (investable), Sourcing, and Forecast (priority buckets). A
   liability can never be investable or hold a priority; unknown kinds or
   treatments, out-of-range priorities, and negative access ages are 422s.
+- `PUT /api/accounts/order` — persists a user-defined display order:
+  the body's `ids` must be exactly the active account ids (a 422
+  otherwise), and each id's position becomes its `sort_order`. Accounts
+  created afterwards append at the end (`MAX(sort_order) + 1` — SQLite
+  sorts NULLs first, so an unset order would jump to the top), and
+  inactive accounts keep their stale order, since they never render in
+  an ordered surface.
 - `POST /api/accounts/{id}/deactivate` — soft remove: the account drops out
   of the pickers and stops carrying forward, but the months it was really
   entered keep counting in net worth and its name frees up for reuse. No
@@ -164,6 +173,8 @@ The budget slice:
 - `GET /api/categories` — the category dimension with each envelope's planned
   amount for a month (`?month=YYYY-MM`, default the current month). Plans are
   effective-dated: the latest `category_plan` row on or before the month wins.
+  Ordered by `sort_order` then id, like accounts, and the budget month's
+  envelope list follows the same order.
 - `POST /api/categories` — creates an envelope: inserts the `category` row
   (name, emoji) plus its initial `category_plan` row (`effective_month`
   defaults to the current month). A blank name or negative planned amount is
@@ -173,6 +184,10 @@ The budget slice:
   latest row per month wins). New and revised envelopes flow into the
   Safe-to-spend select, envelope bars, and budget-month math with no
   further wiring.
+- `PUT /api/categories/order` — persists a user-defined envelope order,
+  the exact mirror of `PUT /api/accounts/order`: `ids` must be exactly
+  the active category ids, positions become `sort_order`, and new
+  envelopes append at the end.
 - `PUT /api/categories/{id}` — renames an envelope's name and emoji in
   place (a null emoji clears it). The category row is a dimension, not a
   fact, so its identity is mutable; plans and expense lines keep their
@@ -605,7 +620,13 @@ The forecast slice (the third Plan engine):
   created here can feed Guardrails, Withdrawal sourcing, and the
   Longevity forecast; liabilities are never classified. Adding or
   deactivating an account refreshes the header net-worth readout
-  immediately, like a Ledger save. Fund rows no longer appear
+  immediately, like a Ledger save. Every account and envelope row
+  carries a grip handle — drag one (mouse, touch, or keyboard: lift
+  with Enter, move with the arrows) to reorder the card, persisted via
+  the `order` endpoints, so the ledger columns, the balance form
+  picker, and the Safe-to-spend envelopes all follow the same order;
+  assets and liabilities reorder independently within their own cards.
+  Fund rows no longer appear
   on Settings — funds live on Funds & Goals, where their targets and
   progress already are. Below them sit the Envelopes card, the
   Assumptions summary
