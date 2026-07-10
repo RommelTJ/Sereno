@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.2.0**
+**v2.3.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -702,6 +702,22 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.3.0 — Quick links join the balance ritual. Updating a month's
+balances means visiting each institution's website, and those URLs
+lived in browser bookmarks, disconnected from the app. Migration 0010
+adds the `quick_link` table (label, URL, sort_order) and the
+`/api/quick-links` router: list, create, edit, the #79-style reorder
+endpoint, and the API's one hard delete — a link is a navigation
+utility with no facts attached, so there is no history for a soft flag
+to protect. A URL without a scheme gets `https://` prefixed; host,
+path, and query are stored verbatim. Settings & data gains a Quick
+links card (add, edit, delete, and the same drag-handle reordering as
+the account and envelope cards), and the Ledger renders the links
+directly below the balance form — one click per site whose balance is
+being copied in, each opening in a new tab — hidden until links exist.
+Real institution URLs live only in the local database; the public
+repo's fixtures use fakes.
 
 v2.2.0 — Accounts and envelopes learn their place. Until now every
 list rendered in insertion order (`ORDER BY id`), so the Ledger's
