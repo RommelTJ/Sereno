@@ -597,7 +597,8 @@ class TestPostIncome:
                 "amount": 2800,
                 "tax_treatment": "ORDINARY",
                 "account_id": account_id,
-                "note": "You paycheck",
+                "source_label": "You paycheck",
+                "note": "Includes the spot bonus",
             },
         )
         assert response.status_code == 201
@@ -611,10 +612,27 @@ class TestPostIncome:
             "amount": 2800,
             "tax_treatment": "ORDINARY",
             "account_id": account_id,
-            "note": "You paycheck",
+            "source_label": "You paycheck",
+            "note": "Includes the spot bonus",
         }
-        rows = query("SELECT budget_month, source, amount FROM income_event")
-        assert rows == [{"budget_month": "2026-06", "source": "paycheck", "amount": 2800}]
+        rows = query("SELECT budget_month, source, amount, source_label, note FROM income_event")
+        assert rows == [
+            {
+                "budget_month": "2026-06",
+                "source": "paycheck",
+                "amount": 2800,
+                "source_label": "You paycheck",
+                "note": "Includes the spot bonus",
+            }
+        ]
+
+    def test_source_label_defaults_to_null(self, client):
+        response = client.post(
+            "/api/income",
+            json={"txn_date": "2026-06-15", "source": "interest", "amount": 12.34},
+        )
+        assert response.status_code == 201
+        assert response.json()["source_label"] is None
 
     def test_budget_month_defaults_to_the_txn_month(self, client):
         response = client.post(
@@ -779,6 +797,29 @@ class TestGetBudgetMonth:
         assert body["activity"][1]["note"] == "Costco"
         assert body["activity"][2]["source"] == "paycheck"
         assert body["activity"][2]["category"] is None
+
+    def test_activity_items_carry_the_income_source_label(self, client):
+        # Income rows carry their title separately from a true note; the
+        # other two activity types have no title column, so theirs is null.
+        fund_id = insert_fund("Emergency fund")
+        insert_fund_entry(fund_id, "2026-06-01", 500, contribution=500, source="monthly_plan")
+        payload = {
+            "txn_date": "2026-05-24",
+            "budget_month": "2026-06",
+            "source": "paycheck",
+            "amount": 2800,
+            "source_label": "You paycheck",
+            "note": "Includes the spot bonus",
+        }
+        assert client.post("/api/income", json=payload).status_code == 201
+        self.spend(client, 96, txn_date="2026-06-20")
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [(item["type"], item["source_label"]) for item in body["activity"]] == [
+            ("expense", None),
+            ("fund", None),
+            ("income", "You paycheck"),
+        ]
+        assert body["activity"][2]["note"] == "Includes the spot bonus"
 
     def test_monthly_plan_and_top_up_entries_appear_as_fund_activity(self, client):
         # The feed lists exactly the sources the fund_contributions headline
