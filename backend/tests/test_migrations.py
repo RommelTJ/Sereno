@@ -68,6 +68,37 @@ def test_account_emoji_backfills_existing_seed_accounts(conn, tmp_path):
     assert emojis == {"Ethereum": "⚡", "Mortgage": "🏡"}
 
 
+def test_income_source_label_backfills_from_note(conn, tmp_path):
+    # A database migrated before 0008 existed holds title-style income notes
+    # ("Spouse paycheck" — the seed's and the income form's hardcoded style),
+    # so the new source_label column takes them over and note empties out,
+    # keeping every row's rendered title unchanged.
+    for name in (
+        "0001_initial_schema.sql",
+        "0002_category_plan.sql",
+        "0003_account_emoji.sql",
+        "0004_carry_forward_views.sql",
+        "0005_fund_emoji.sql",
+        "0006_budget_month_fund_spend.sql",
+        "0007_fund_entry_source.sql",
+    ):
+        (tmp_path / name).write_text((MIGRATIONS_DIR / name).read_text())
+    migrate(conn, tmp_path)
+    conn.execute(
+        "INSERT INTO income_event (txn_date, budget_month, source, amount, note)"
+        " VALUES ('2026-05-27', '2026-06', 'paycheck', 2400, 'Spouse paycheck')"
+    )
+    conn.execute(
+        "INSERT INTO income_event (txn_date, budget_month, source, amount, note)"
+        " VALUES ('2026-06-15', '2026-06', 'interest', 12.34, NULL)"
+    )
+    label_migration = "0008_income_source_label.sql"
+    (tmp_path / label_migration).write_text((MIGRATIONS_DIR / label_migration).read_text())
+    assert migrate(conn, tmp_path) == [label_migration]
+    rows = conn.execute("SELECT source_label, note FROM income_event ORDER BY id").fetchall()
+    assert rows == [("Spouse paycheck", None), (None, None)]
+
+
 def test_fund_emoji_backfills_existing_seed_funds(conn, tmp_path):
     # A database migrated before 0005 existed, already holding the
     # seed-named funds, gets its emojis backfilled by name.
