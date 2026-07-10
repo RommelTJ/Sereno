@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.1.0**
+**v2.2.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -675,6 +675,23 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.2.0 — Accounts and envelopes learn their place. Until now every
+list rendered in insertion order (`ORDER BY id`), so the Ledger's
+balance form listed accounts in whatever order they were added and
+nothing could group related ones or put the frequently updated first.
+Migration 0009 adds `sort_order` to `account` and `category`
+(backfilled from id, so existing installs keep their order), the list
+queries order by it, and `PUT /api/accounts/order` /
+`PUT /api/categories/order` persist a reorder — the body must be
+exactly the active ids, positions become `sort_order`, and new rows
+append at the end rather than jumping to the top. On Settings & data,
+every Assets, Liabilities, and Envelopes row gains a grip handle
+(@dnd-kit): drag by mouse, touch, or keyboard, and the drop reorders
+locally, PUTs the full order, and refetches. Assets and liabilities
+reorder independently within their own cards, and the order flows to
+the ledger columns, the balance form picker, and the Safe-to-spend
+envelopes automatically, since no consumer sorts client-side.
 
 v2.1.0 — Activity rows learn to explain themselves. Both safe-to-spend
 forms gain an optional Note, and income rows get a dedicated title:
