@@ -1398,6 +1398,36 @@ describe('Envelope reordering', () => {
   })
 })
 
+describe('Quick link reordering', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('persists a dragged quick-link row and re-renders the new order', async () => {
+    const liveRoutes: Record<string, unknown> = routes()
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+    await screen.findAllByTestId('settings-quick-link-row')
+    stubRects()
+
+    liveRoutes['PUT /api/quick-links/order'] = []
+    liveRoutes['/api/quick-links'] = [QUICK_LINKS[1], QUICK_LINKS[0]]
+    const card = screen.getByTestId('quick-links-card')
+    await dragByOne(within(card).getByLabelText('Reorder Chase'), 'ArrowDown')
+
+    await waitFor(() =>
+      expect(putBody(fetchMock, '/api/quick-links/order')).toEqual({
+        ids: [2, 1],
+      }),
+    )
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('settings-quick-link-row')
+      expect(within(rows[0]).getByText('Vanguard')).toBeInTheDocument()
+      expect(within(rows[1]).getByText('Chase')).toBeInTheDocument()
+    })
+  })
+})
+
 describe('Responsive layout', () => {
   it('stacks the assumptions row into one column on narrow screens', async () => {
     render(<Settings />)
