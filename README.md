@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.2.0**
+**v2.3.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -167,6 +167,25 @@ The balances slice:
 - `GET /api/net-worth` — current net worth, year-over-year change vs. the same
   month a year earlier (`null` until 12 months of history exist), and the
   last-12-months series for the sparkline.
+
+The quick links slice (the Ledger's bookmarks):
+
+- `GET /api/quick-links` — the user-managed institution URLs shown
+  beside the Ledger's balance form, ordered by `sort_order` then id.
+- `POST /api/quick-links` — creates a link. Label and URL are stripped
+  and must be non-blank (a 422 otherwise); a URL without a scheme gets
+  `https://` prefixed — host, path, and query stored verbatim — so it
+  opens absolutely instead of resolving relative to the app. New links
+  append at the end of the order.
+- `PUT /api/quick-links/order` — persists a user-defined display
+  order, the mirror of the account and category reorder endpoints:
+  the body's `ids` must be exactly the quick link ids (a 422
+  otherwise), and each id's position becomes its `sort_order`.
+- `PUT /api/quick-links/{id}` — revises a link's label and URL in
+  place, under the same validation as creation.
+- `DELETE /api/quick-links/{id}` — removes the link outright, the
+  API's one hard delete: quick links are navigation utilities with no
+  facts attached, so there is no history for a soft flag to protect.
 
 The budget slice:
 
@@ -470,7 +489,10 @@ The forecast slice (the third Plan engine):
   draft before anything is saved. Saving appends one dated row via
   `POST /api/balance-entries` — the latest entry in a month wins and earlier
   rows are kept as history — then the table and the header net-worth readout
-  refresh from the API.
+  refresh from the API. Below the form, the Quick links card lists the
+  user's institution URLs from `GET /api/quick-links` — one click per site
+  whose balance is being copied in, each opening in a new tab — managed on
+  Settings & data and absent entirely while no links exist.
 - **Safe-to-spend** (<http://localhost:5173/safe-to-spend>) — the daily-use
   view. The dark hero shows the month's Safe-to-spend headline from
   `GET /api/budget-month` (stored funding baseline − total spent) with the
@@ -643,7 +665,12 @@ The forecast slice (the third Plan engine):
   Archive that soft-removes the envelope while its plans and spending
   history keep counting, and an add form (name, a curated emoji select,
   $ / month) that creates the category with its initial plan — new
-  envelopes appear in Safe-to-spend immediately. Settings is where config changes are
+  envelopes appear in Safe-to-spend immediately. Below the envelopes,
+  the Quick links card manages the Ledger's institution URLs: label and
+  URL rows with a per-row Edit and a Delete — a true delete, since a
+  link has no history to keep — an add form, and the same drag-handle
+  reordering as the account and envelope cards, so the Ledger card
+  follows the user's order. Settings is where config changes are
   *persisted*: saving the Assumptions or Social Security cards appends
   new rows effective today (only configs whose values actually changed
   are posted), the tax card's Edit revises the displayed year in place,
@@ -675,6 +702,22 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.3.0 — Quick links join the balance ritual. Updating a month's
+balances means visiting each institution's website, and those URLs
+lived in browser bookmarks, disconnected from the app. Migration 0010
+adds the `quick_link` table (label, URL, sort_order) and the
+`/api/quick-links` router: list, create, edit, the #79-style reorder
+endpoint, and the API's one hard delete — a link is a navigation
+utility with no facts attached, so there is no history for a soft flag
+to protect. A URL without a scheme gets `https://` prefixed; host,
+path, and query are stored verbatim. Settings & data gains a Quick
+links card (add, edit, delete, and the same drag-handle reordering as
+the account and envelope cards), and the Ledger renders the links
+directly below the balance form — one click per site whose balance is
+being copied in, each opening in a new tab — hidden until links exist.
+Real institution URLs live only in the local database; the public
+repo's fixtures use fakes.
 
 v2.2.0 — Accounts and envelopes learn their place. Until now every
 list rendered in insertion order (`ORDER BY id`), so the Ledger's
