@@ -23,6 +23,7 @@ beforeEach(() => {
     '/api/budget-month': EMPTY_BUDGET_MONTH,
     '/api/funds': [],
     '/api/categories': [],
+    '/api/quick-links': [],
     '/api/guardrails': null,
     '/api/sourcing': null,
     '/api/forecast': null,

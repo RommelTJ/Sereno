@@ -59,6 +59,7 @@ import {
   updateCategoryOrder,
   updateCategoryPlan,
   updateQuickLink,
+  updateQuickLinkOrder,
   updateTaxParam,
 } from '../api.ts'
 import EmojiSelect from '../components/EmojiSelect.tsx'
@@ -521,6 +522,8 @@ function QuickLinkRow({
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [values, setValues] = useState({ label: '', url: '' })
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: link.id })
 
   const set = (key: keyof typeof values) => (value: string) =>
     setValues((current) => ({ ...current, [key]: value }))
@@ -546,6 +549,8 @@ function QuickLinkRow({
 
   return (
     <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       data-testid="settings-quick-link-row"
       className="flex items-center justify-between gap-3 border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
     >
@@ -567,7 +572,14 @@ function QuickLinkRow({
         </div>
       ) : (
         <>
-          <p className="shrink-0 font-semibold">{link.label}</p>
+          <div className="flex shrink-0 items-center gap-2">
+            <DragHandle
+              name={link.label}
+              attributes={attributes}
+              listeners={listeners}
+            />
+            <p className="font-semibold">{link.label}</p>
+          </div>
           <div className="flex min-w-0 items-center gap-3">
             <p className="truncate text-muted-2">{link.url}</p>
             <EditButton onClick={startEditing} />
@@ -587,11 +599,13 @@ function QuickLinksCard({
   onAdd,
   onSave,
   onDelete,
+  onReorder,
 }: {
   links: QuickLink[]
   onAdd: (input: QuickLinkInput) => Promise<void>
   onSave: (quickLinkId: number, input: QuickLinkInput) => Promise<void>
   onDelete: (quickLinkId: number) => Promise<void>
+  onReorder: (ids: number[]) => Promise<void>
 }) {
   const [values, setValues] = useState({ label: '', url: '' })
   const [adding, setAdding] = useState(false)
@@ -623,14 +637,16 @@ function QuickLinksCard({
         {links.length === 0 && (
           <p className="text-[12.5px] leading-8 text-muted-2">no links yet</p>
         )}
-        {links.map((link) => (
-          <QuickLinkRow
-            key={link.id}
-            link={link}
-            onSave={onSave}
-            onDelete={onDelete}
-          />
-        ))}
+        <SortableRows ids={links.map((link) => link.id)} onReorder={onReorder}>
+          {links.map((link) => (
+            <QuickLinkRow
+              key={link.id}
+              link={link}
+              onSave={onSave}
+              onDelete={onDelete}
+            />
+          ))}
+        </SortableRows>
       </div>
       <div className="mt-4 grid grid-cols-1 items-end gap-[11px] border-t border-hairline-2 pt-4 sm:grid-cols-[1fr_2fr_auto]">
         <EditField
@@ -1448,6 +1464,18 @@ function Settings() {
     await refetchQuickLinks()
   }
 
+  // Every quick link renders in the card, so the card's new order is
+  // already the complete list the PUT wants.
+  const reorderQuickLinks = async (ids: number[]) => {
+    setData((current) =>
+      current
+        ? { ...current, quickLinks: applyOrder(current.quickLinks, ids) }
+        : current,
+    )
+    await updateQuickLinkOrder(ids)
+    await refetchQuickLinks()
+  }
+
   const saveAssumptions = async (edit: AssumptionsEdit) => {
     if (edit.assumption) {
       await createAssumption(edit.assumption)
@@ -1528,6 +1556,7 @@ function Settings() {
         onAdd={addQuickLink}
         onSave={saveQuickLink}
         onDelete={removeQuickLink}
+        onReorder={reorderQuickLinks}
       />
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <AssumptionsCard

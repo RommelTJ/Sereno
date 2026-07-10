@@ -616,6 +616,8 @@ export const createQuickLink = (input: QuickLinkInput) =>
   postJson('/api/quick-links', input)
 export const updateQuickLink = (quickLinkId: number, input: QuickLinkInput) =>
   putJson(`/api/quick-links/${quickLinkId}`, input)
+export const updateQuickLinkOrder = (ids: number[]) =>
+  putJson('/api/quick-links/order', { ids })
 export const deleteQuickLink = (quickLinkId: number) =>
   deleteJson(`/api/quick-links/${quickLinkId}`)
 export const createExpense = (input: ExpenseInput) =>
