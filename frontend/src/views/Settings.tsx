@@ -51,6 +51,7 @@ import {
   updateAccount,
   updateAccountOrder,
   updateCategory,
+  updateCategoryOrder,
   updateCategoryPlan,
   updateTaxParam,
 } from '../api.ts'
@@ -529,6 +530,8 @@ function EnvelopeRow({
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [values, setValues] = useState({ name: '', emoji: '', planned: '' })
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: category.id })
 
   const set = (key: keyof typeof values) => (value: string) =>
     setValues((current) => ({ ...current, [key]: value }))
@@ -558,6 +561,8 @@ function EnvelopeRow({
 
   return (
     <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       data-testid="settings-envelope-row"
       className="flex items-center justify-between gap-3 border-b border-hairline-2 py-[11px] text-[13px] last:border-b-0"
     >
@@ -585,10 +590,17 @@ function EnvelopeRow({
         </div>
       ) : (
         <>
-          <p className="font-semibold">
-            <span className="mr-2">{category.emoji ?? '🧾'}</span>
-            <span>{category.name}</span>
-          </p>
+          <div className="flex items-center gap-2">
+            <DragHandle
+              name={category.name}
+              attributes={attributes}
+              listeners={listeners}
+            />
+            <p className="font-semibold">
+              <span className="mr-2">{category.emoji ?? '🧾'}</span>
+              <span>{category.name}</span>
+            </p>
+          </div>
           <div className="flex items-center gap-3">
             <p className="num font-bold">{formatUsd(category.planned)} / mo</p>
             <EditButton onClick={startEditing} />
@@ -608,11 +620,13 @@ function EnvelopesCard({
   onAdd,
   onSave,
   onArchive,
+  onReorder,
 }: {
   categories: Category[]
   onAdd: (input: CategoryInput) => Promise<void>
   onSave: (categoryId: number, edit: EnvelopeEdit) => Promise<void>
   onArchive: (categoryId: number) => Promise<void>
+  onReorder: (ids: number[]) => Promise<void>
 }) {
   const [values, setValues] = useState({ name: '', emoji: '', planned: '' })
   const [adding, setAdding] = useState(false)
@@ -646,14 +660,19 @@ function EnvelopesCard({
             no envelopes yet
           </p>
         )}
-        {categories.map((category) => (
-          <EnvelopeRow
-            key={category.id}
-            category={category}
-            onSave={onSave}
-            onArchive={onArchive}
-          />
-        ))}
+        <SortableRows
+          ids={categories.map((category) => category.id)}
+          onReorder={onReorder}
+        >
+          {categories.map((category) => (
+            <EnvelopeRow
+              key={category.id}
+              category={category}
+              onSave={onSave}
+              onArchive={onArchive}
+            />
+          ))}
+        </SortableRows>
       </div>
       <div className="mt-4 grid grid-cols-1 items-end gap-[11px] border-t border-hairline-2 pt-4 sm:grid-cols-[1fr_1fr_1fr_auto]">
         <EditField
@@ -1237,6 +1256,18 @@ function Settings() {
     await refetchCategories()
   }
 
+  // GET /api/categories only lists active envelopes, so the card's new
+  // order is already the complete list the PUT wants.
+  const reorderEnvelopes = async (ids: number[]) => {
+    setData((current) =>
+      current
+        ? { ...current, categories: applyOrder(current.categories, ids) }
+        : current,
+    )
+    await updateCategoryOrder(ids)
+    await refetchCategories()
+  }
+
   const saveAssumptions = async (edit: AssumptionsEdit) => {
     if (edit.assumption) {
       await createAssumption(edit.assumption)
@@ -1310,6 +1341,7 @@ function Settings() {
         onAdd={addEnvelope}
         onSave={saveEnvelope}
         onArchive={archiveEnvelope}
+        onReorder={reorderEnvelopes}
       />
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <AssumptionsCard
