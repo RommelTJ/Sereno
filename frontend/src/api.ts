@@ -354,11 +354,15 @@ export type ExpenseInput = {
   | { funded_from: 'fund'; fund_id: number }
 )
 
+// source_label is the row's display title ("Spouse paycheck") — the
+// context the source enum can't carry; note is a true note. Blank values
+// are omitted, not sent empty.
 export interface IncomeInput {
   txn_date: string
   budget_month: string
   source: IncomeSource
   amount: number
+  source_label?: string
   note?: string
 }
 
