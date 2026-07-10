@@ -28,6 +28,7 @@ def test_startup_applies_migrations(monkeypatch, tmp_path):
         "0007_fund_entry_source.sql",
         "0008_income_source_label.sql",
         "0009_sort_order.sql",
+        "0010_quick_links.sql",
     ]
 
 

@@ -130,6 +130,20 @@ def test_sort_order_backfills_from_id(conn, tmp_path):
     assert categories == [(1, 1), (2, 2)]
 
 
+def test_quick_link_table_holds_labeled_urls(conn):
+    # Quick links are user-managed navigation rows (a label, a URL, a place
+    # in the list). 0010 creates the table empty — a new table, so unlike
+    # 0009 there is nothing to backfill and sort_order is NOT NULL from the
+    # start: every insert sets it explicitly.
+    migrate(conn)
+    conn.execute(
+        "INSERT INTO quick_link (label, url, sort_order)"
+        " VALUES ('Chase', 'https://chaseonline.chase.com/MyAccounts.aspx', 1)"
+    )
+    rows = conn.execute("SELECT label, url, sort_order FROM quick_link").fetchall()
+    assert rows == [("Chase", "https://chaseonline.chase.com/MyAccounts.aspx", 1)]
+
+
 def test_fund_emoji_backfills_existing_seed_funds(conn, tmp_path):
     # A database migrated before 0005 existed, already holding the
     # seed-named funds, gets its emojis backfilled by name.
