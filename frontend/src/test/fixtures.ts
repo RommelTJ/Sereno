@@ -162,6 +162,52 @@ export const BUDGET_MONTH = {
   ],
 }
 
+const blankReportMonth = (month: string) => ({
+  month,
+  planned: null,
+  actual: null,
+  variance: null,
+  cumulative_variance: null,
+  provisional: false,
+})
+
+const reportMonth = (
+  month: string,
+  planned: number,
+  actual: number,
+  cumulative: number,
+  provisional = false,
+) => ({
+  month,
+  planned,
+  actual,
+  variance: planned - actual,
+  cumulative_variance: cumulative,
+  provisional,
+})
+
+// The yearly report exactly as GET /api/budget-year returns it: a mid-year
+// picture where the data starts in March and July is still in progress, so
+// both edges of the coverage window render blank.
+export const BUDGET_YEAR = {
+  year: 2025,
+  data_start: '2025-03',
+  months: [
+    blankReportMonth('2025-01'),
+    blankReportMonth('2025-02'),
+    reportMonth('2025-03', 7500, 7000, 500),
+    reportMonth('2025-04', 7500, 8200, -200),
+    reportMonth('2025-05', 7500, 6100, 1200),
+    reportMonth('2025-06', 7500, 6850, 1850),
+    reportMonth('2025-07', 7500, 2400, 6950, true),
+    blankReportMonth('2025-08'),
+    blankReportMonth('2025-09'),
+    blankReportMonth('2025-10'),
+    blankReportMonth('2025-11'),
+    blankReportMonth('2025-12'),
+  ],
+}
+
 // The category dimension exactly as GET /api/categories returns it: each
 // active envelope with its planned amount resolved for the month.
 export const CATEGORIES = [

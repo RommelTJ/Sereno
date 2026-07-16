@@ -13,6 +13,8 @@ const EMPTY_BUDGET_MONTH = {
   activity: [],
 }
 
+const EMPTY_BUDGET_YEAR = { year: 2026, data_start: null, months: [] }
+
 beforeEach(() => {
   window.history.pushState({}, '', '/')
   stubApi({
@@ -21,6 +23,7 @@ beforeEach(() => {
     '/api/ledger': [],
     '/api/net-worth': { current: null, yoy: null, series: [] },
     '/api/budget-month': EMPTY_BUDGET_MONTH,
+    '/api/budget-year': EMPTY_BUDGET_YEAR,
     '/api/funds': [],
     '/api/categories': [],
     '/api/quick-links': [],
@@ -47,12 +50,13 @@ describe('App shell navigation', () => {
     expect(screen.getByTestId('view-guardrails')).toBeInTheDocument()
   })
 
-  it('renders each of the eight views as it navigates through the sidebar', () => {
+  it('renders each of the nine views as it navigates through the sidebar', () => {
     render(<App />)
 
     const views: Array<[string, string]> = [
       ['Ledger entries', 'view-ledger'],
       ['Safe-to-spend', 'view-safe-to-spend'],
+      ['Budget report', 'view-budget-report'],
       ['Funds & goals', 'view-funds'],
       ['Guardrails', 'view-guardrails'],
       ['Withdrawal sourcing', 'view-withdrawals'],
@@ -162,6 +166,7 @@ describe('Header net worth', () => {
       '/api/health': { status: 'ok', version: '1.2.3' },
       '/api/net-worth': { current: 1_744_000, yoy: 0.017, series: [] },
       '/api/budget-month': EMPTY_BUDGET_MONTH,
+      '/api/budget-year': EMPTY_BUDGET_YEAR,
       '/api/funds': [],
       '/api/guardrails': null,
       '/api/forecast': null,
@@ -182,6 +187,7 @@ describe('Header net worth', () => {
       '/api/quick-links': [],
       '/api/net-worth': { current: 1_744_000, yoy: 0.017, series: [] },
       '/api/budget-month': EMPTY_BUDGET_MONTH,
+      '/api/budget-year': EMPTY_BUDGET_YEAR,
       '/api/funds': [],
       '/api/guardrails': null,
       '/api/forecast': null,

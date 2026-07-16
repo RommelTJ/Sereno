@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import {
   ArrowDownUp,
+  CalendarRange,
   Database,
   Gauge,
   LayoutDashboard,
@@ -47,6 +48,13 @@ export const NAV_GROUPS: NavGroup[] = [
         title: 'Safe-to-spend',
         subtitle: 'Total cash − bills due − money in funds',
         icon: Wallet,
+      },
+      {
+        path: '/report',
+        label: 'Budget report',
+        title: 'Budget report',
+        subtitle: 'Planned vs. actual, month by month',
+        icon: CalendarRange,
       },
       {
         path: '/funds',

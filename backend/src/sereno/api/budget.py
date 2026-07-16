@@ -164,6 +164,21 @@ class BudgetMonth(BaseModel):
     activity: list[ActivityItem]
 
 
+class BudgetYearMonth(BaseModel):
+    month: str
+    planned: float | None
+    actual: float | None
+    variance: float | None
+    cumulative_variance: float | None
+    provisional: bool
+
+
+class BudgetYear(BaseModel):
+    year: int
+    data_start: str | None
+    months: list[BudgetYearMonth]
+
+
 def _require(db: sqlite3.Connection, table: str, row_id: int | None, label: str) -> None:
     if row_id is None:
         return
@@ -463,3 +478,86 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         categories=envelopes,
         activity=[ActivityItem.model_validate(row) for row in merged],
     )
+
+
+@router.get("/budget-year")
+def budget_year(db: Db, year: int | None = None) -> BudgetYear:
+    """One row per month: planned (annual_target / 12 from the spend plan
+    effective for that month — the latest effective_date on or before the
+    month's end, so a mid-year revision splits the year) vs actual — the
+    month's discretionary spending plus its monthly_plan/top_up fund
+    contributions, the money-leaving-the-spendable-pool definition the
+    Safe-to-spend headline uses — with the variance (positive = under plan)
+    and its within-year running total.
+
+    Months outside data-start → the current month are entirely null — the
+    app cannot distinguish "no data" from "spent nothing", so a partial
+    year must be visibly partial. The current month rides along flagged
+    provisional, since it undercounts until it closes."""
+    target_year = year if year is not None else date.today().year
+    # Like the budget month, the report must see this month's automatic
+    # funding even when the funds list was never read.
+    apply_monthly_plans(db, date.today())
+    current = _current_month()
+    data_start = db.execute("SELECT MIN(budget_month) FROM expense_line").fetchone()[0]
+
+    spent = {
+        row["month"]: row["total_spent"]
+        for row in db.execute(
+            "SELECT month, total_spent FROM v_budget_month WHERE month LIKE ?",
+            (f"{target_year:04d}-%",),
+        )
+    }
+    contributed = {
+        row["month"]: row["contribution"]
+        for row in db.execute(
+            "SELECT substr(as_of_date, 1, 7) AS month, SUM(contribution) AS contribution"
+            " FROM fund_entry WHERE source IN ('monthly_plan', 'top_up')"
+            " AND substr(as_of_date, 1, 4) = ? GROUP BY month",
+            (f"{target_year:04d}",),
+        )
+    }
+    plans = db.execute(
+        "SELECT substr(effective_date, 1, 7) AS effective_month, annual_target"
+        " FROM spend_plan ORDER BY effective_date, id"
+    ).fetchall()
+
+    months: list[BudgetYearMonth] = []
+    cumulative = 0.0
+    for number in range(1, 13):
+        month = f"{target_year:04d}-{number:02d}"
+        if data_start is None or not data_start <= month <= current:
+            months.append(
+                BudgetYearMonth(
+                    month=month,
+                    planned=None,
+                    actual=None,
+                    variance=None,
+                    cumulative_variance=None,
+                    provisional=False,
+                )
+            )
+            continue
+        planned = next(
+            (
+                row["annual_target"] / 12
+                for row in reversed(plans)
+                if row["effective_month"] <= month
+            ),
+            None,
+        )
+        actual = spent.get(month, 0) + contributed.get(month, 0)
+        variance = planned - actual if planned is not None else None
+        if variance is not None:
+            cumulative += variance
+        months.append(
+            BudgetYearMonth(
+                month=month,
+                planned=planned,
+                actual=actual,
+                variance=variance,
+                cumulative_variance=cumulative if variance is not None else None,
+                provisional=month == current,
+            )
+        )
+    return BudgetYear(year=target_year, data_start=data_start, months=months)

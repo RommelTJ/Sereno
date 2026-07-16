@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.4.0**
+**v2.5.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -261,6 +261,23 @@ The budget slice:
   budget month applies
   the monthly-plan catch-up itself, so the headline never misses a
   contribution the funds list hasn't been asked for yet.
+- `GET /api/budget-year` — the yearly plan-vs-actual report (`?year=`,
+  default the current year): one row per month with `planned`
+  (`annual_target / 12` from the spend plan effective for that month —
+  the latest row on or before the month's end, so a mid-year revision
+  splits the year instead of repricing January), `actual` (discretionary
+  expense lines plus monthly-plan and top-up fund contributions — the
+  same money-leaving-the-spendable-pool definition as the Safe-to-spend
+  headline, so fund-funded lines never count and a release reads as
+  money back), `variance` (planned − actual, positive = under plan), and
+  `cumulative_variance`, the within-year running total. Months outside
+  data-start (the first logged expense's budget month, echoed as
+  `data_start`) → the current month are entirely null — the app cannot
+  distinguish "no data" from "spent nothing", so a partial year stays
+  visibly partial — and the current month rides along flagged
+  `provisional`, since it undercounts until it closes. Reading the
+  report applies the monthly-plan catch-up, like the budget month, so
+  the current month's automatic funding always counts.
 The funds slice:
 
 - `GET /api/funds` — the active funds (sinking funds and goals: name, emoji,
@@ -461,7 +478,12 @@ The forecast slice (the third Plan engine):
   `GET /api/budget-month` with its share of the funding baseline as a
   progress bar, and the Funds & goals card shows the total parked and a
   top-3 mini list (percent to target; an open-ended fund shows its
-  balance) from `GET /api/funds` — both deep-link to their views. Recent
+  balance) from `GET /api/funds` — both deep-link to their views. The
+  Budget report card shows the year-to-date cumulative variance vs. plan
+  from `GET /api/budget-year` — "$1,850 under plan (4 months)", green
+  under plan and red over, always through the last complete month, since
+  the in-progress one undercounts — linking to the Budget report view.
+  Recent
   activity lists the full current month — spending, income, and fund
   entries merged newest first — as emoji-tile rows with signed amounts
   under a dated month header: income rows titled by their source label
@@ -531,6 +553,16 @@ The forecast slice (the third Plan engine):
   forms, the Activity card renders the same uncapped, month-paged feed as
   the Dashboard's Recent activity: a new item lands in the newest section
   the moment a form submits, and the loaded history stays put.
+- **Budget report** (<http://localhost:5173/report>) — the "does it
+  balance out?" view: the monthly discipline is `annual_target / 12`,
+  most months land a little under, some go over, and this table is where
+  that assumption gets checked. A year picker (data-start's year through
+  the current one) over a 12-row table — month, planned, actual,
+  variance, cumulative variance — every figure from
+  `GET /api/budget-year`, variances signed and colored (green under
+  plan, red over). Months outside the data render blank, never $0, so a
+  partial year is visibly partial, and the in-progress month is marked
+  "· in progress" since it undercounts until it closes.
 - **Funds & goals** (<http://localhost:5173/funds>) — sinking funds and
   dated goals as one concept, in a single card: a header with the total
   parked and the "notes auto-calculate" hint, the dashed **+ New fund or
@@ -710,6 +742,23 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.5.0 — The yearly budget report. The monthly discipline is
+`annual_target / 12`, and the assumption that under- and over-months
+balance out over the year finally has a place to be checked:
+`GET /api/budget-year` returns one row per month — planned from the
+month-effective spend plan (a mid-year revision splits the year),
+actual as discretionary spending plus fund contributions, the
+Safe-to-spend definition of money leaving the pool, the variance
+(positive = under plan), and a within-year running total. Months
+outside data-start → now are null, never zero — the app cannot
+distinguish "no data" from "spent nothing", so a partial year stays
+visibly partial — and the in-progress month is flagged provisional.
+The Budget report view (/report, in the TRACK nav) renders a year
+picker over the 12-row table with blank out-of-coverage rows, and the
+Dashboard's card row gains a Budget report card — "$1,850 under plan
+(4 months)", always through the last complete month, green under and
+red over — deep-linking to it.
 
 v2.4.0 — One question instead of two. The spending form's separate
 Category and Funded-from selects forced a category onto fund-funded

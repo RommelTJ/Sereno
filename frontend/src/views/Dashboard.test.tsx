@@ -3,7 +3,14 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import NetWorthProvider from '../components/NetWorthProvider.tsx'
 import { markerLeftPct } from '../guardrails.ts'
-import { BUDGET_MONTH, FORECAST, FUNDS, GUARDRAILS, NET_WORTH } from '../test/fixtures.ts'
+import {
+  BUDGET_MONTH,
+  BUDGET_YEAR,
+  FORECAST,
+  FUNDS,
+  GUARDRAILS,
+  NET_WORTH,
+} from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import Dashboard from './Dashboard.tsx'
 
@@ -16,7 +23,7 @@ const renderDashboard = () =>
     </MemoryRouter>,
   )
 
-// The wired dashboard fetches all five APIs; tests override per route.
+// The wired dashboard fetches all six APIs; tests override per route.
 const stubDashboard = (routes: Record<string, unknown> = {}) =>
   stubApi({
     '/api/net-worth': NET_WORTH,
@@ -24,6 +31,7 @@ const stubDashboard = (routes: Record<string, unknown> = {}) =>
     '/api/funds': FUNDS,
     '/api/guardrails': GUARDRAILS,
     '/api/forecast': FORECAST,
+    '/api/budget-year': BUDGET_YEAR,
     ...routes,
   })
 
@@ -205,6 +213,48 @@ describe('Funds & goals card', () => {
     const card = screen.getByRole('link', { name: /funds & goals/i })
     expect(await within(card).findByText('Travel fund')).toBeInTheDocument()
     expect(within(card).getByText('$4,200')).toBeInTheDocument()
+  })
+})
+
+describe('Budget report card', () => {
+  it('deep-links and shows the variance through the last complete month', async () => {
+    stubDashboard()
+    renderDashboard()
+
+    const card = await screen.findByRole('link', { name: /budget report/i })
+    expect(card).toHaveAttribute('href', '/report')
+    // The fixture's July is provisional, so the headline stops at June's
+    // cumulative and July never counts toward the coverage.
+    expect(await within(card).findByText('$1,850')).toBeInTheDocument()
+    expect(within(card).getByText('$1,850')).toHaveClass('text-accent')
+    expect(within(card).getByText('under plan (4 months)')).toBeInTheDocument()
+  })
+
+  it('reads red and "over plan" when spending runs ahead of the plan', async () => {
+    const months = BUDGET_YEAR.months.map((row) =>
+      row.month === '2025-06' ? { ...row, cumulative_variance: -430 } : row,
+    )
+    stubDashboard({ '/api/budget-year': { ...BUDGET_YEAR, months } })
+    renderDashboard()
+
+    const card = await screen.findByRole('link', { name: /budget report/i })
+    expect(await within(card).findByText('$430')).toBeInTheDocument()
+    expect(within(card).getByText('$430')).toHaveClass('text-red')
+    expect(within(card).getByText('over plan (4 months)')).toBeInTheDocument()
+  })
+
+  it('shows a muted placeholder before any complete month exists', async () => {
+    stubDashboard({
+      '/api/budget-year': {
+        ...BUDGET_YEAR,
+        data_start: null,
+        months: BUDGET_YEAR.months.slice(0, 2),
+      },
+    })
+    renderDashboard()
+
+    const card = await screen.findByRole('link', { name: /budget report/i })
+    expect(await within(card).findByText('no data yet')).toBeInTheDocument()
   })
 })
 
@@ -431,6 +481,7 @@ describe('Recent activity', () => {
     const routes: Record<string, unknown> = {
       '/api/net-worth': NET_WORTH,
       '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-year': BUDGET_YEAR,
       '/api/funds': FUNDS,
       '/api/guardrails': GUARDRAILS,
       '/api/forecast': FORECAST,
@@ -506,7 +557,11 @@ describe('Responsive layout', () => {
       'grid-cols-1',
       'lg:grid-cols-[1.5fr_1fr]',
     )
-    expect(view.children[1]).toHaveClass('grid-cols-1', 'sm:grid-cols-3')
+    expect(view.children[1]).toHaveClass(
+      'grid-cols-1',
+      'sm:grid-cols-2',
+      'lg:grid-cols-4',
+    )
   })
 
   it('scales the hero figures down on narrow screens', async () => {
