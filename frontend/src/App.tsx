@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import Header from './components/Header.tsx'
 import Sidebar from './components/Sidebar.tsx'
 import NetWorthProvider from './components/NetWorthProvider.tsx'
+import BudgetReport from './views/BudgetReport.tsx'
 import Dashboard from './views/Dashboard.tsx'
 import Forecast from './views/Forecast.tsx'
 import Funds from './views/Funds.tsx'
@@ -45,6 +46,7 @@ function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/ledger" element={<Ledger />} />
                 <Route path="/safe-to-spend" element={<SafeToSpend />} />
+                <Route path="/report" element={<BudgetReport />} />
                 <Route path="/funds" element={<Funds />} />
                 <Route path="/guardrails" element={<Guardrails />} />
                 <Route path="/withdrawals" element={<Withdrawals />} />
