@@ -415,9 +415,14 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         )
     ]
 
+    # A fund-funded expense posts no category — the fund itself says what
+    # the spend was for — so its name rides where the category's would
+    # have been; rows carrying both keep the category name.
     expenses = db.execute(
-        "SELECT e.id, e.txn_date, e.amount, c.name AS category, e.note, e.created_at"
+        "SELECT e.id, e.txn_date, e.amount, COALESCE(c.name, f.name) AS category,"
+        " e.note, e.created_at"
         " FROM expense_line e LEFT JOIN category c ON c.id = e.category_id"
+        " LEFT JOIN fund f ON f.id = e.fund_id"
         " WHERE e.budget_month = ?",
         (target,),
     )
