@@ -228,6 +228,39 @@ describe('Recent activity', () => {
     expect(screen.getByText('−$28.40').className).toContain('text-red')
   })
 
+  it('renders a fund-funded expense with the fund emoji on the debit tile', async () => {
+    // A fund-funded spend posts no category, so the fund's name rides the
+    // category slot: the emoji resolves from the funds list, but the row
+    // stays a debit — money leaving the household — and can never be a
+    // treat, since there is no envelope to overspend.
+    stubDashboard({
+      '/api/budget-month': {
+        ...BUDGET_MONTH,
+        activity: [
+          {
+            type: 'expense',
+            id: 31,
+            txn_date: '2026-06-12',
+            amount: 850,
+            category: 'Emergency fund',
+            source: null,
+            source_label: null,
+            note: 'New water heater',
+          },
+        ],
+      },
+    })
+    renderDashboard()
+
+    const rows = await screen.findAllByTestId('activity-row')
+    expect(within(rows[0]).getByText('New water heater')).toBeInTheDocument()
+    expect(
+      within(rows[0]).getByText('Emergency fund · Jun 12'),
+    ).toBeInTheDocument()
+    expect(within(rows[0]).getByText('🚨')).toHaveClass('bg-tile')
+    expect(within(rows[0]).getByText('−$850').className).toContain('text-ink')
+  })
+
   it('renders a funding row with a green amount and the funded month', async () => {
     stubDashboard()
     renderDashboard()
