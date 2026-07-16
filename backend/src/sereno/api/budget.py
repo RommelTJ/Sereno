@@ -170,10 +170,12 @@ class BudgetYearMonth(BaseModel):
     actual: float | None
     variance: float | None
     cumulative_variance: float | None
+    provisional: bool
 
 
 class BudgetYear(BaseModel):
     year: int
+    data_start: str | None
     months: list[BudgetYearMonth]
 
 
@@ -486,11 +488,18 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     month's discretionary spending plus its monthly_plan/top_up fund
     contributions, the money-leaving-the-spendable-pool definition the
     Safe-to-spend headline uses — with the variance (positive = under plan)
-    and its within-year running total."""
+    and its within-year running total.
+
+    Months outside data-start → the current month are entirely null — the
+    app cannot distinguish "no data" from "spent nothing", so a partial
+    year must be visibly partial. The current month rides along flagged
+    provisional, since it undercounts until it closes."""
     target_year = year if year is not None else date.today().year
     # Like the budget month, the report must see this month's automatic
     # funding even when the funds list was never read.
     apply_monthly_plans(db, date.today())
+    current = _current_month()
+    data_start = db.execute("SELECT MIN(budget_month) FROM expense_line").fetchone()[0]
 
     spent = {
         row["month"]: row["total_spent"]
@@ -517,6 +526,18 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     cumulative = 0.0
     for number in range(1, 13):
         month = f"{target_year:04d}-{number:02d}"
+        if data_start is None or not data_start <= month <= current:
+            months.append(
+                BudgetYearMonth(
+                    month=month,
+                    planned=None,
+                    actual=None,
+                    variance=None,
+                    cumulative_variance=None,
+                    provisional=False,
+                )
+            )
+            continue
         planned = next(
             (
                 row["annual_target"] / 12
@@ -536,6 +557,7 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
                 actual=actual,
                 variance=variance,
                 cumulative_variance=cumulative if variance is not None else None,
+                provisional=month == current,
             )
         )
-    return BudgetYear(year=target_year, months=months)
+    return BudgetYear(year=target_year, data_start=data_start, months=months)
