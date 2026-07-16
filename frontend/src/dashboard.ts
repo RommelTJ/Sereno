@@ -2,9 +2,27 @@
 // from GET /api/budget-month and GET /api/funds — nothing is recomputed
 // client-side beyond display math.
 
-import type { ActivityItem, BudgetMonth, Fund } from './api.ts'
+import type { ActivityItem, BudgetMonth, BudgetYear, Fund } from './api.ts'
 import { monthLabel } from './budget.ts'
 import { formatUsd } from './ledger.ts'
+
+export interface YtdSummary {
+  cumulative: number
+  months: number
+}
+
+// The Budget report card's headline: the running variance through the
+// last complete month, with how many months the number covers. The
+// provisional month never counts — it undercounts until it closes, which
+// would always skew the headline toward "under plan".
+export function ytdSummary(report: BudgetYear): YtdSummary | null {
+  const complete = report.months.filter(
+    (row) => !row.provisional && row.cumulative_variance != null,
+  )
+  const last = complete.at(-1)
+  if (last?.cumulative_variance == null) return null
+  return { cumulative: last.cumulative_variance, months: complete.length }
+}
 
 // The Safe-to-spend card's progress bar: the share of the month's funding
 // baseline still free to spend. A month with no funding keeps an empty bar.

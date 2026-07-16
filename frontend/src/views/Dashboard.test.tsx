@@ -481,6 +481,7 @@ describe('Recent activity', () => {
     const routes: Record<string, unknown> = {
       '/api/net-worth': NET_WORTH,
       '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-year': BUDGET_YEAR,
       '/api/funds': FUNDS,
       '/api/guardrails': GUARDRAILS,
       '/api/forecast': FORECAST,
@@ -556,7 +557,11 @@ describe('Responsive layout', () => {
       'grid-cols-1',
       'lg:grid-cols-[1.5fr_1fr]',
     )
-    expect(view.children[1]).toHaveClass('grid-cols-1', 'sm:grid-cols-3')
+    expect(view.children[1]).toHaveClass(
+      'grid-cols-1',
+      'sm:grid-cols-2',
+      'lg:grid-cols-4',
+    )
   })
 
   it('scales the hero figures down on narrow screens', async () => {

@@ -2,13 +2,14 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import ActivityFeed from '../components/ActivityFeed.tsx'
-import { fundsMini, stsBarPct } from '../dashboard.ts'
+import { fundsMini, stsBarPct, ytdSummary } from '../dashboard.ts'
 import { totalParked } from '../funds.ts'
 import { formatRate, markerLeftPct, zoneCopy } from '../guardrails.ts'
 import { formatUsd } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
 import type {
   BudgetMonth,
+  BudgetYear,
   Forecast,
   Fund,
   Guardrails,
@@ -16,6 +17,7 @@ import type {
 } from '../api.ts'
 import {
   fetchBudgetMonth,
+  fetchBudgetYear,
   fetchForecast,
   fetchFunds,
   fetchGuardrails,
@@ -205,6 +207,39 @@ function LongevityCard({ forecast }: { forecast: Forecast | null }) {
   )
 }
 
+function BudgetReportCard({ report }: { report: BudgetYear | null }) {
+  const summary = report != null ? ytdSummary(report) : null
+  if (summary == null) {
+    return (
+      <CardLink to="/report" label="Budget report">
+        <p className="num mt-1.5 text-[30px] font-extrabold text-muted-2">—</p>
+        <p className="mt-2 text-[12.5px] font-bold text-muted-2">
+          no data yet
+        </p>
+      </CardLink>
+    )
+  }
+  const under = summary.cumulative >= 0
+  return (
+    <CardLink to="/report" label="Budget report">
+      <p
+        className={`num mt-1.5 text-[30px] font-extrabold ${
+          under ? 'text-accent' : 'text-red'
+        }`}
+      >
+        {formatUsd(Math.abs(summary.cumulative))}
+      </p>
+      <p className="text-xs text-muted">
+        {under ? 'under plan' : 'over plan'} ({summary.months}{' '}
+        {summary.months === 1 ? 'month' : 'months'})
+      </p>
+      <p className="mt-3 text-[12.5px] text-muted-2">
+        See the month-by-month trail →
+      </p>
+    </CardLink>
+  )
+}
+
 function FundsCard({ funds }: { funds: Fund[] | null }) {
   return (
     <CardLink to="/funds" label="Funds & goals">
@@ -255,12 +290,14 @@ function RecentActivity({
 
 function Dashboard() {
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
+  const [budgetYear, setBudgetYear] = useState<BudgetYear | null>(null)
   const [funds, setFunds] = useState<Fund[] | null>(null)
   const [guardrails, setGuardrails] = useState<Guardrails | null>(null)
   const [forecast, setForecast] = useState<Forecast | null>(null)
 
   useEffect(() => {
     void fetchBudgetMonth().then(setBudget)
+    void fetchBudgetYear().then(setBudgetYear)
     void fetchFunds().then(setFunds)
     void fetchGuardrails().then(setGuardrails)
     void fetchForecast().then(setForecast)
@@ -272,7 +309,8 @@ function Dashboard() {
         <NetWorthHero />
         <SafeToSpendCard budget={budget} />
       </div>
-      <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
+      <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <BudgetReportCard report={budgetYear} />
         <GuardrailCard guardrails={guardrails} />
         <LongevityCard forecast={forecast} />
         <FundsCard funds={funds} />
