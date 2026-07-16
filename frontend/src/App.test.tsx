@@ -19,6 +19,7 @@ beforeEach(() => {
     '/api/funds': [],
     '/api/guardrails': null,
     '/api/forecast': null,
+    '/api/budget-year': { year: 2026, data_start: null, months: [] },
   })
 })
 
@@ -33,13 +34,14 @@ describe('App shell', () => {
     expect(screen.getByText('SETTINGS')).toBeInTheDocument()
   })
 
-  it('renders a nav link for each of the eight views', () => {
+  it('renders a nav link for each of the nine views', () => {
     render(<App />)
 
     for (const label of [
       'Dashboard',
       'Ledger entries',
       'Safe-to-spend',
+      'Budget report',
       'Funds & goals',
       'Guardrails',
       'Withdrawal sourcing',
@@ -70,5 +72,17 @@ describe('App shell', () => {
       year: 'numeric',
     })
     expect(screen.getByText(month)).toBeInTheDocument()
+  })
+})
+
+describe('Budget report route', () => {
+  it('renders the Budget report view at /report with its header title', () => {
+    window.history.pushState({}, '', '/report')
+    render(<App />)
+
+    expect(screen.getByTestId('view-budget-report')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Budget report' }),
+    ).toBeInTheDocument()
   })
 })
