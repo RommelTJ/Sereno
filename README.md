@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.3.0**
+**v2.4.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -710,6 +710,24 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.4.0 — One question instead of two. The spending form's separate
+Category and Funded-from selects forced a category onto fund-funded
+spending, where it did nothing: the envelope math only counts
+discretionary lines, so the pick never moved a bar or the headline —
+it only mislabeled the feed. The merged "Paid from" select offers the
+month's budget envelopes and the active funds as two optgroups: an
+envelope pick posts discretionary spending against that category, a
+fund pick posts the fund with no category — the invalid state
+(category + fund together) is unrepresentable, enforced by the
+ExpenseInput union. In the activity feed, a category-less fund spend
+carries its fund's name where the category's would have been
+(COALESCE in the budget-month query; historical rows carrying both
+keep their category) and resolves its emoji from the funds list,
+staying a neutral debit — amber stays reserved for contributions and
+releases, and with no envelope a fund spend can never read as a
+treat. No backend contract change: ExpenseCreate.category_id was
+optional all along.
 
 v2.3.0 — Quick links join the balance ritual. Updating a month's
 balances means visiting each institution's website, and those URLs
