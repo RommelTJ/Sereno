@@ -121,18 +121,32 @@ describe('Funds card', () => {
 })
 
 describe('Add a spending item', () => {
-  it('offers the discretionary budget and each active fund as sources', async () => {
+  it('offers the envelopes and funds as grouped paid-from sources', async () => {
     render(<SafeToSpend />)
 
     const form = await screen.findByTestId('spending-form')
-    const options = within(form)
-      .getAllByRole('option')
-      .map((option) => option.textContent)
-    expect(options).toContain('June budget · discretionary')
-    expect(options).toContain('🚨 Emergency fund')
-    expect(options).toContain('🚲 Bike fund')
+    const select = within(form).getByLabelText('Paid from')
+    const envelopes = within(select).getByRole('group', {
+      name: 'Budget envelopes',
+    })
+    expect(
+      within(envelopes)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['🛒 Groceries', '🛢️ Gas', '🤪 Entertainment', '✈️ Travel'])
+    const funds = within(select).getByRole('group', { name: 'Funds' })
     // A fund without an emoji keeps its plain name.
-    expect(options).toContain('Travel fund')
+    expect(
+      within(funds)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['🚨 Emergency fund', '🚲 Bike fund', 'Travel fund'])
+    // The old catch-all is gone — picking an envelope IS discretionary.
+    expect(
+      within(form).queryByRole('option', {
+        name: 'June budget · discretionary',
+      }),
+    ).not.toBeInTheDocument()
   })
 
   it('posts the expense and refreshes the hero and envelopes', async () => {
@@ -148,8 +162,8 @@ describe('Add a spending item', () => {
     fireEvent.change(within(form).getByLabelText('Amount'), {
       target: { value: '45' },
     })
-    fireEvent.change(within(form).getByLabelText('Category'), {
-      target: { value: '2' },
+    fireEvent.change(within(form).getByLabelText('Paid from'), {
+      target: { value: 'cat:2' },
     })
     routes['/api/budget-month'] = {
       ...BUDGET_MONTH,
@@ -183,7 +197,7 @@ describe('Add a spending item', () => {
       within(form).queryByText(/Log a matching withdrawal/),
     ).not.toBeInTheDocument()
 
-    fireEvent.change(within(form).getByLabelText('Funded from'), {
+    fireEvent.change(within(form).getByLabelText('Paid from'), {
       target: { value: 'fund:2' },
     })
 
@@ -200,10 +214,11 @@ describe('Add a spending item', () => {
       within(form).getByRole('button', { name: '+ Add spending row' }),
     )
 
+    // No category_id: the fund itself says what the spend was for, and
+    // the envelope math never counts fund-funded lines anyway.
     await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
     expect(expenseBody(fetchMock)).toEqual({
       txn_date: todayIso(),
-      category_id: 1,
       amount: 1200,
       funded_from: 'fund',
       fund_id: 2,
@@ -220,7 +235,7 @@ describe('Add a spending item', () => {
     render(<SafeToSpend />)
     const form = await screen.findByTestId('spending-form')
 
-    fireEvent.change(within(form).getByLabelText('Funded from'), {
+    fireEvent.change(within(form).getByLabelText('Paid from'), {
       target: { value: 'fund:1' },
     })
     fireEvent.change(within(form).getByLabelText('Amount'), {

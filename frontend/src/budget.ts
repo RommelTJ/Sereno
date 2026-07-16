@@ -158,14 +158,15 @@ export function incomeInput(
   }
 }
 
-// The funded-from select encodes its choice as 'discretionary' or
-// 'fund:<id>'. budget_month is left to the server default (the txn's month).
-// Returns null when the amount doesn't parse — nothing should be posted.
-// A whitespace-only note is omitted from the payload, never sent empty.
+// The Paid-from select encodes its choice as 'cat:<id>' (an envelope —
+// discretionary spending against that category) or 'fund:<id>' (fund
+// spending, no category). budget_month is left to the server default (the
+// txn's month). Returns null when the amount or the picked id doesn't
+// parse — nothing should be posted. A whitespace-only note is omitted
+// from the payload, never sent empty.
 export function expenseInput(
   rawAmount: string,
-  categoryId: number,
-  fundedFrom: string,
+  paidFrom: string,
   txnDate: string,
   rawNote: string,
 ): ExpenseInput | null {
@@ -174,15 +175,15 @@ export function expenseInput(
   const note = rawNote.trim()
   const base = {
     txn_date: txnDate,
-    category_id: categoryId,
     amount,
     ...(note ? { note } : {}),
   }
-  return fundedFrom === 'discretionary'
-    ? { ...base, funded_from: 'discretionary' }
-    : {
-        ...base,
-        funded_from: 'fund',
-        fund_id: Number(fundedFrom.slice('fund:'.length)),
-      }
+  const [kind, rawId] = paidFrom.split(':')
+  const id = Number(rawId)
+  if (!id) return null
+  if (kind === 'cat') {
+    return { ...base, funded_from: 'discretionary', category_id: id }
+  }
+  if (kind === 'fund') return { ...base, funded_from: 'fund', fund_id: id }
+  return null
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Envelope, ExpenseInput, Fund } from '../api.ts'
-import { expenseInput, monthLabel } from '../budget.ts'
+import { expenseInput } from '../budget.ts'
 import { todayIso } from '../ledger.ts'
 
 const inputClasses =
@@ -15,27 +15,25 @@ export function FieldLabel({ text }: { text: string }) {
 }
 
 interface SpendingFormProps {
-  month: string
   categories: Envelope[]
   funds: Fund[]
   onAdd: (input: ExpenseInput) => Promise<void>
 }
 
-function SpendingForm({ month, categories, funds, onAdd }: SpendingFormProps) {
+function SpendingForm({ categories, funds, onAdd }: SpendingFormProps) {
   const [amount, setAmount] = useState('')
-  const [categoryId, setCategoryId] = useState(String(categories[0]?.id ?? ''))
-  const [fundedFrom, setFundedFrom] = useState('discretionary')
+  // One select answers "where does the money come from?": an envelope pick
+  // is discretionary spending against that category, a fund pick draws the
+  // fund down with no category — the invalid state (category + fund
+  // together) is unrepresentable.
+  const [paidFrom, setPaidFrom] = useState(
+    categories[0] ? `cat:${categories[0].id}` : '',
+  )
   const [note, setNote] = useState('')
   const [adding, setAdding] = useState(false)
 
   const handleAdd = async () => {
-    const input = expenseInput(
-      amount,
-      Number(categoryId),
-      fundedFrom,
-      todayIso(),
-      note,
-    )
+    const input = expenseInput(amount, paidFrom, todayIso(), note)
     if (!input) return
     setAdding(true)
     try {
@@ -64,43 +62,34 @@ function SpendingForm({ month, categories, funds, onAdd }: SpendingFormProps) {
             onChange={(event) => setAmount(event.target.value)}
           />
         </label>
-        <label htmlFor="spend-category" className="block">
-          <FieldLabel text="Category" />
+        <label htmlFor="spend-paid-from" className="block">
+          <FieldLabel text="Paid from" />
           <select
-            id="spend-category"
+            id="spend-paid-from"
             className={inputClasses}
-            value={categoryId}
-            onChange={(event) => setCategoryId(event.target.value)}
+            value={paidFrom}
+            onChange={(event) => setPaidFrom(event.target.value)}
           >
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.emoji
-                  ? `${category.emoji} ${category.name}`
-                  : category.name}
-              </option>
-            ))}
+            <optgroup label="Budget envelopes">
+              {categories.map((category) => (
+                <option key={category.id} value={`cat:${category.id}`}>
+                  {category.emoji
+                    ? `${category.emoji} ${category.name}`
+                    : category.name}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Funds">
+              {funds.map((fund) => (
+                <option key={fund.id} value={`fund:${fund.id}`}>
+                  {fund.emoji ? `${fund.emoji} ${fund.name}` : fund.name}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </label>
       </div>
-      <label htmlFor="spend-funded-from" className="mt-[11px] block">
-        <FieldLabel text="Funded from" />
-        <select
-          id="spend-funded-from"
-          className={inputClasses}
-          value={fundedFrom}
-          onChange={(event) => setFundedFrom(event.target.value)}
-        >
-          <option value="discretionary">
-            {monthLabel(month)} budget · discretionary
-          </option>
-          {funds.map((fund) => (
-            <option key={fund.id} value={`fund:${fund.id}`}>
-              {fund.emoji ? `${fund.emoji} ${fund.name}` : fund.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {fundedFrom !== 'discretionary' && (
+      {paidFrom.startsWith('fund:') && (
         <p className="mt-2 rounded-tile bg-amber-soft-2 px-[11px] py-2 text-[11.5px] text-amber-text">
           ↳ Log a matching withdrawal from Vanguard Cash Plus so the fund and
           cash draw down together.

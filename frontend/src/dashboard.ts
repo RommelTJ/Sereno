@@ -106,12 +106,19 @@ export function activityRow(
       tone: 'fund',
     }
   }
+  // A fund-funded expense carries its fund's name in the category slot,
+  // so when the envelope lookup misses, the emoji resolves from the funds
+  // list instead — the tone stays a debit either way: parked or not, the
+  // money left the household, and with no envelope there is no treat.
   const envelope = budget.categories.find(
     (category) => category.name === item.category,
   )
+  const fund = envelope
+    ? undefined
+    : funds.find((candidate) => candidate.name === item.category)
   return {
     key,
-    icon: envelope?.emoji ?? '🧾',
+    icon: envelope?.emoji ?? fund?.emoji ?? '🧾',
     title: item.note ?? item.category ?? 'Expense',
     sub: item.category ? `${item.category} · ${date}` : date,
     amount: `−${usd(item.amount)}`,

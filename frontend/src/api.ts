@@ -343,15 +343,16 @@ export type IncomeSource =
   | 'soc_sec'
 
 // budget_month is omitted so it defaults to the transaction's month
-// server-side; fund_id goes with funded_from='fund', never alone. A blank
-// note is omitted, not sent empty.
+// server-side. The union pairs each funding source with its id: an
+// envelope pick is discretionary spending against its category, a fund
+// pick posts the fund_id and no category — the fund itself says what the
+// spend was for. A blank note is omitted, not sent empty.
 export type ExpenseInput = {
   txn_date: string
-  category_id: number
   amount: number
   note?: string
 } & (
-  | { funded_from: 'discretionary' }
+  | { funded_from: 'discretionary'; category_id: number }
   | { funded_from: 'fund'; fund_id: number }
 )
 

@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.3.0**
+**v2.4.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -222,7 +222,9 @@ The budget slice:
   the transaction's month; pass a later month to prepay. An optional `note`
   ("Anniversary dinner") titles the row in the activity feeds, with the
   category moving to the subtitle. `funded_from` is
-  `discretionary` or `fund` (then `fund_id` is required). Fund spending
+  `discretionary` or `fund` (then `fund_id` is required, and `category_id`
+  is normally omitted — the fund itself says what the spend was for, and
+  the envelope math never counts fund-funded lines). Fund spending
   draws the fund down in the same transaction: a `fund_entry` with
   `source = 'spend'`, the balance minus the amount, and a negative
   contribution is appended, dated the transaction — and an expense that
@@ -240,7 +242,10 @@ The budget slice:
   (`baseline − fund_contributions − total_spent`, where the baseline is the
   month's stored funding — never recomputed from live spend), and the
   activity list — expense lines, income events, and fund entries merged
-  newest first. A fund entry carries its fund's name and its source, and
+  newest first. A category-less fund-funded expense carries its fund's
+  name in the category slot — the fund itself says what the spend was
+  for; rows carrying both keep the category name. A fund entry carries
+  its fund's name and its source, and
   only `monthly_plan` and `top_up` rows are listed — exactly the set the
   `fund_contributions` headline subtracts, so the feed reconciles with the
   number above it: a `spend` drawdown would double-count its expense line,
@@ -504,12 +509,15 @@ The forecast slice (the third Plan engine):
   happen: the total parked in its header and one row per active fund with
   its emoji-led name, available balance, and "$X / mo" plan — blank for a
   fund saving at no set pace — straight from the same `GET /api/funds`
-  list the forms already load. Beside them, "Add a spending item" (amount, category,
-  funded-from: the month's discretionary budget or any active fund via
-  `GET /api/funds` — funds labeled `emoji + name` like the categories;
-  choosing a fund reveals the matching
-  Cash-Plus-withdrawal reminder — and an optional note that titles the
-  row in the activity feeds) posts to `POST /api/expenses`, and "Add an
+  list the forms already load. Beside them, "Add a spending item" (amount,
+  a single "Paid from" select — the month's budget envelopes and the
+  active funds from `GET /api/funds` as two optgroups, every option
+  labeled `emoji + name`: an envelope pick posts discretionary spending
+  against that category, a fund pick posts the fund with no category, so
+  a category-plus-fund line can't be entered; choosing a fund reveals the
+  matching Cash-Plus-withdrawal reminder — and an optional note that
+  titles the row in the activity feeds) posts to `POST /api/expenses`,
+  and "Add an
   income item" (amount, funds month — the current or next two, so a
   paycheck can prepay next month — source, an editable Source title
   prefilled from the selected source — the row's bold title, posted as
@@ -702,6 +710,24 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.4.0 — One question instead of two. The spending form's separate
+Category and Funded-from selects forced a category onto fund-funded
+spending, where it did nothing: the envelope math only counts
+discretionary lines, so the pick never moved a bar or the headline —
+it only mislabeled the feed. The merged "Paid from" select offers the
+month's budget envelopes and the active funds as two optgroups: an
+envelope pick posts discretionary spending against that category, a
+fund pick posts the fund with no category — the invalid state
+(category + fund together) is unrepresentable, enforced by the
+ExpenseInput union. In the activity feed, a category-less fund spend
+carries its fund's name where the category's would have been
+(COALESCE in the budget-month query; historical rows carrying both
+keep their category) and resolves its emoji from the funds list,
+staying a neutral debit — amber stays reserved for contributions and
+releases, and with no envelope a fund spend can never read as a
+treat. No backend contract change: ExpenseCreate.category_id was
+optional all along.
 
 v2.3.0 — Quick links join the balance ritual. Updating a month's
 balances means visiting each institution's website, and those URLs

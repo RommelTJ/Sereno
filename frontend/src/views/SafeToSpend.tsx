@@ -69,7 +69,6 @@ function SafeToSpend() {
           </div>
           <div className="flex flex-col gap-5">
             <SpendingForm
-              month={budget.month}
               categories={budget.categories}
               funds={funds}
               onAdd={addExpense}
