@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.4.0**
+**v2.5.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -742,6 +742,23 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.5.0 — The yearly budget report. The monthly discipline is
+`annual_target / 12`, and the assumption that under- and over-months
+balance out over the year finally has a place to be checked:
+`GET /api/budget-year` returns one row per month — planned from the
+month-effective spend plan (a mid-year revision splits the year),
+actual as discretionary spending plus fund contributions, the
+Safe-to-spend definition of money leaving the pool, the variance
+(positive = under plan), and a within-year running total. Months
+outside data-start → now are null, never zero — the app cannot
+distinguish "no data" from "spent nothing", so a partial year stays
+visibly partial — and the in-progress month is flagged provisional.
+The Budget report view (/report, in the TRACK nav) renders a year
+picker over the 12-row table with blank out-of-coverage rows, and the
+Dashboard's card row gains a Budget report card — "$1,850 under plan
+(4 months)", always through the last complete month, green under and
+red over — deep-linking to it.
 
 v2.4.0 — One question instead of two. The spending form's separate
 Category and Funded-from selects forced a category onto fund-funded
