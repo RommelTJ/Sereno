@@ -954,6 +954,39 @@ class TestGetBudgetMonth:
             ("income", 5200),
         ]
 
+    def test_a_category_less_fund_expense_carries_the_fund_name(self, client):
+        # With the merged Paid-from select, a fund-funded spend posts no
+        # category — the fund itself says what the spend was for, so its
+        # name rides where the category's would have been.
+        car_id = insert_fund("Car fund")
+        insert_fund_entry(car_id, "2026-06-01", 5000)
+        self.fund_month(client, 5200)
+        self.spend(client, 1200, txn_date="2026-06-10", funded_from="fund", fund_id=car_id)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        expense = body["activity"][0]
+        assert expense["type"] == "expense"
+        assert expense["category"] == "Car fund"
+
+    def test_a_categorized_fund_expense_keeps_its_category_name(self, client):
+        # Rows from before the merged select carry both a category and a
+        # fund; the category wins, so history renders exactly as it did.
+        travel_id = insert_category("Travel", emoji="✈️")
+        car_id = insert_fund("Car fund")
+        insert_fund_entry(car_id, "2026-06-01", 5000)
+        self.fund_month(client, 5200)
+        self.spend(
+            client,
+            1200,
+            txn_date="2026-06-10",
+            category_id=travel_id,
+            funded_from="fund",
+            fund_id=car_id,
+        )
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        expense = body["activity"][0]
+        assert expense["type"] == "expense"
+        assert expense["category"] == "Travel"
+
     def test_everything_is_scoped_to_the_requested_month(self, client):
         self.fund_month(client, 5200)
         self.spend(client, 100)
