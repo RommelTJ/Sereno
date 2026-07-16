@@ -9,6 +9,8 @@ the Safe-to-spend headline, so fund-funded expense lines never count and
 a release's negative contribution reads as money back.
 """
 
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -156,3 +158,67 @@ class TestBudgetYearMonths:
         insert_expense("2025-03", 7100)  # +400 → +400
         months = get_months(client, 2025)
         assert [row["cumulative_variance"] for row in months[:3]] == [500.0, 0.0, 400.0]
+
+
+class TestBudgetYearCoverage:
+    """The app cannot distinguish "no data" from "spent nothing", so rows
+    outside data-start → current month are null, never zero — a partial
+    year must be visibly partial."""
+
+    def test_months_before_the_first_expense_are_null(self, client):
+        insert_spend_plan("2024-12-01", 90000)
+        insert_expense("2025-03", 7000)
+        months = get_months(client, 2025)
+        for row in months[:2]:  # Jan and Feb predate the data
+            assert row["planned"] is None
+            assert row["actual"] is None
+            assert row["variance"] is None
+            assert row["cumulative_variance"] is None
+        assert months[2]["actual"] == 7000.0
+
+    def test_cumulative_variance_starts_at_data_start(self, client):
+        insert_spend_plan("2024-12-01", 90000)
+        insert_expense("2025-03", 7000)
+        months = get_months(client, 2025)
+        assert months[2]["cumulative_variance"] == 500.0
+
+    def test_data_start_is_the_first_expense_month(self, client):
+        insert_expense("2025-03", 100)
+        body = client.get("/api/budget-year", params={"year": 2025}).json()
+        assert body["data_start"] == "2025-03"
+
+    def test_an_empty_database_reads_blank(self, client):
+        insert_spend_plan("2024-12-01", 90000)
+        body = client.get("/api/budget-year", params={"year": 2025}).json()
+        assert body["data_start"] is None
+        assert all(row["planned"] is None and row["actual"] is None for row in body["months"])
+
+    def test_defaults_to_the_current_year_with_a_provisional_current_month(self, client):
+        current = date.today().strftime("%Y-%m")
+        insert_expense(current, 100)
+        response = client.get("/api/budget-year")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["year"] == date.today().year
+        by_month = {row["month"]: row for row in body["months"]}
+        assert by_month[current]["provisional"] is True
+        assert by_month[current]["actual"] == 100.0
+        assert all(row["provisional"] is False for row in body["months"] if row["month"] != current)
+
+    def test_months_after_the_current_one_are_null(self, client):
+        # Empty in December — the guard costs nothing the rest of the year.
+        insert_spend_plan("2024-12-01", 90000)
+        current = date.today().strftime("%Y-%m")
+        insert_expense(current, 100)
+        months = get_months(client, date.today().year)
+        future = [row for row in months if row["month"] > current]
+        assert all(
+            row["planned"] is None and row["actual"] is None and row["variance"] is None
+            for row in future
+        )
+
+    def test_a_covered_month_with_no_rows_reads_zero_not_null(self, client):
+        insert_spend_plan("2024-12-01", 90000)
+        insert_expense("2025-01", 100)
+        months = get_months(client, 2025)
+        assert months[1]["actual"] == 0.0  # February: covered, nothing logged
