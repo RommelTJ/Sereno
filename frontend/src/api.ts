@@ -112,6 +112,25 @@ export interface BudgetMonth {
   activity: ActivityItem[]
 }
 
+// One report row. Months outside data-start → the current month are
+// entirely null — "no data", never "spent nothing" — and the current
+// month rides along flagged provisional, since it undercounts until it
+// closes. variance is planned − actual: positive = under plan.
+export interface BudgetYearMonth {
+  month: string
+  planned: number | null
+  actual: number | null
+  variance: number | null
+  cumulative_variance: number | null
+  provisional: boolean
+}
+
+export interface BudgetYear {
+  year: number
+  data_start: string | null
+  months: BudgetYearMonth[]
+}
+
 export interface Fund {
   id: number
   name: string
@@ -527,6 +546,10 @@ export const fetchNetWorth = () => getJson<NetWorth>('/api/net-worth')
 export const fetchBudgetMonth = (month?: string) =>
   getJson<BudgetMonth>(
     month ? `/api/budget-month?month=${month}` : '/api/budget-month',
+  )
+export const fetchBudgetYear = (year?: number) =>
+  getJson<BudgetYear>(
+    year != null ? `/api/budget-year?year=${year}` : '/api/budget-year',
   )
 export const fetchCategories = () => getJson<Category[]>('/api/categories')
 export const fetchFunds = () => getJson<Fund[]>('/api/funds')
