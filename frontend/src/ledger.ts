@@ -33,11 +33,13 @@ export function formatUsd(value: number): string {
   return rounded < 0 ? `-$${digits}` : `$${digits}`
 }
 
-export function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-').map(Number)
-  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
+// The row represents the month, so its "YYYY-MM" key formats as
+// "July 2026" — never an entry's exact date, which shifts as the
+// month gets updated.
+export function formatMonth(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number)
+  return new Date(year, monthNumber - 1, 1).toLocaleDateString('en-US', {
+    month: 'long',
     year: 'numeric',
   })
 }
@@ -145,13 +147,9 @@ export function ledgerRows(
     const byAccount = new Map(
       month.balances.map((balance) => [balance.account_id, balance]),
     )
-    let latest = ''
-    for (const balance of month.balances) {
-      if (balance.as_of_date > latest) latest = balance.as_of_date
-    }
     return {
       month: month.month,
-      date: latest ? formatDate(latest) : month.month,
+      date: formatMonth(month.month),
       values: columns.map((account) => {
         const balance = byAccount.get(account.id)
         if (!balance) return 0
