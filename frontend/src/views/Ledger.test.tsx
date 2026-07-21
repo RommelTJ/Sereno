@@ -58,10 +58,10 @@ describe('Ledger monthly balance table', () => {
 
     const rows = await screen.findAllByTestId('ledger-row')
     expect(rows).toHaveLength(2)
-    expect(rows[0]).toHaveTextContent('Jun 1, 2026')
+    expect(rows[0]).toHaveTextContent('June 2026')
     expect(within(rows[0]).getByText('$70,000')).toBeInTheDocument()
     expect(within(rows[0]).getByText('$700,000')).toBeInTheDocument()
-    expect(rows[1]).toHaveTextContent('May 1, 2026')
+    expect(rows[1]).toHaveTextContent('May 2026')
     expect(within(rows[1]).getByText('$68,000')).toBeInTheDocument()
     expect(within(rows[1]).getByText('$690,000')).toBeInTheDocument()
   })
@@ -366,7 +366,7 @@ describe('Saving balances', () => {
       expect(screen.getAllByTestId('ledger-row')).toHaveLength(3),
     )
     expect(screen.getAllByTestId('ledger-row')[0]).toHaveTextContent(
-      'Jul 4, 2026',
+      'July 2026',
     )
   })
 })
