@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.5.0**
+**v2.6.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -503,7 +503,9 @@ The forecast slice (the third Plan engine):
   projected age-100 balance from `GET /api/forecast` (muted until the
   forecast's inputs exist) — every dashboard card now reads the API.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
-  table (one row per month, newest first, current month highlighted) with one
+  table (one row per month, newest first, current month highlighted; each
+  row dated as month and year — "July 2026" — since the row represents the
+  month, never an entry's exact date) with one
   column per active account — assets then liabilities, liabilities negative
   in red — plus the net-worth column, horizontally scrollable as accounts
   grow. Beside it, the "Update this month's balances" form: an account picker
@@ -742,6 +744,15 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.6.0 — Ledger rows date themselves by month. The Ledger is a
+monthly view, but its date column reflected the latest entry's exact
+`as_of_date` — a new month read "Jul 1, 2026", then shifted to
+"Jul 20, 2026" after an update, implying day-level precision the row
+never had. Each row now formats its own `YYYY-MM` month key as
+"July 2026", dropping the per-row latest-date derivation entirely.
+Display-only: entries keep storing their real `as_of_date`, and no
+API or backend behavior changes.
 
 v2.5.0 — The yearly budget report. The monthly discipline is
 `annual_target / 12`, and the assumption that under- and over-months
