@@ -503,7 +503,9 @@ The forecast slice (the third Plan engine):
   projected age-100 balance from `GET /api/forecast` (muted until the
   forecast's inputs exist) — every dashboard card now reads the API.
 - **Ledger entries** (<http://localhost:5173/ledger>) — the monthly balance
-  table (one row per month, newest first, current month highlighted) with one
+  table (one row per month, newest first, current month highlighted; each
+  row dated as month and year — "July 2026" — since the row represents the
+  month, never an entry's exact date) with one
   column per active account — assets then liabilities, liabilities negative
   in red — plus the net-worth column, horizontally scrollable as accounts
   grow. Beside it, the "Update this month's balances" form: an account picker
