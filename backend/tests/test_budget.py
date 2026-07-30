@@ -1075,6 +1075,39 @@ class TestGetBudgetMonth:
         assert body["fund_contributions"] == -400
         assert body["safe_to_spend"] == 5400
 
+    def test_rollover_entries_leave_the_headline_alone(self, client):
+        # A rollover assigns last month's leftover, so the current month is
+        # never charged for money the old month already earned: the entry
+        # stays out of fund_contributions and safe-to-spend — locked in here
+        # rather than left incidental to the ('monthly_plan', 'top_up')
+        # filter.
+        fund_id = insert_fund("Pool fund")
+        insert_fund_entry(fund_id, first_of_month(), 5000)
+        payload = {"txn_date": date.today().isoformat(), "source": "paycheck", "amount": 5000}
+        assert client.post("/api/income", json=payload).status_code == 201
+        rollover = client.post(
+            f"/api/funds/{fund_id}/top-up", json={"amount": 1000, "source": "rollover"}
+        )
+        assert rollover.status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["fund_contributions"] == 0
+        assert body["safe_to_spend"] == 5000
+
+    def test_rollover_entries_stay_out_of_the_activity_feed(self, client):
+        # The feed lists exactly the sources the headline subtracts, so the
+        # two reconcile; a rollover's visibility surfaces are the
+        # assigned/unassigned line and the fund's own entry history.
+        fund_id = insert_fund("Pool fund")
+        insert_fund_entry(fund_id, first_of_month(), 5000)
+        payload = {"txn_date": date.today().isoformat(), "source": "paycheck", "amount": 5000}
+        assert client.post("/api/income", json=payload).status_code == 201
+        rollover = client.post(
+            f"/api/funds/{fund_id}/top-up", json={"amount": 1000, "source": "rollover"}
+        )
+        assert rollover.status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert [item["type"] for item in body["activity"]] == ["income"]
+
     def test_month_defaults_to_the_current_month(self, client):
         today = date.today()
         payload = {"txn_date": today.isoformat(), "amount": 75}
