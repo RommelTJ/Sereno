@@ -436,8 +436,14 @@ export interface FundUpdate {
 // its contribution — the server computes the new balance from the latest
 // entry. A positive amount parks money and trims the month's
 // safe-to-spend; a negative amount is a partial release, raising it back.
+// source 'rollover' assigns last month's leftover instead: recorded on the
+// fund identically, but excluded from this month's headline, feed, and
+// yearly actual. The default source is omitted, never sent.
+export type TopUpSource = 'top_up' | 'rollover'
+
 export interface FundTopUpInput {
   amount: number
+  source?: TopUpSource
 }
 
 // Config edits append: each input becomes a new effective-dated row and
