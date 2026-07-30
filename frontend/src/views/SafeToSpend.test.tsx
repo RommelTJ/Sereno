@@ -493,12 +493,18 @@ describe('Add an income item', () => {
   })
 
   it('explains the rollover behavior', async () => {
+    // The note must describe the real model — leftover is assigned to
+    // funds, or explicitly rolled into funding via an income row — not
+    // the automatic roll-forward the system doesn't have.
     render(<SafeToSpend />)
 
     const form = await screen.findByTestId('income-form')
     expect(within(form).getByText('Rollover')).toBeInTheDocument()
     expect(
-      within(form).getByText(/rolls into the next month's funding/),
+      within(form).getByText(/doesn't move on its own/),
+    ).toBeInTheDocument()
+    expect(
+      within(form).getByText(/assign last month's leftover to a fund/),
     ).toBeInTheDocument()
   })
 
