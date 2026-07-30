@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.6.0**
+**v2.7.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -750,6 +750,18 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.7.0 — The activity feed pages forward. Income can fund a future
+`budget_month` (the prepay pattern: June pay funds July), but the feed
+anchored at the current month and only paged backward, so a
+future-funded item was visible only through the API. A mirrored
+"August 2026 →"-style button at the top of the shared feed now
+prepends future months, one per click, through the existing
+`GET /api/budget-month?month=` param — `nextMonth` joins
+`previousMonth` as pure string math, forward paging is unbounded into
+empty months exactly like the back button (an empty month renders the
+"No activity yet" state), and both buttons share the loading disable.
+Frontend-only: no API or backend behavior changes.
 
 v2.6.0 — Ledger rows date themselves by month. The Ledger is a
 monthly view, but its date column reflected the latest entry's exact
