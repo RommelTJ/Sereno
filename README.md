@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.6.0**
+**v2.7.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -495,7 +495,11 @@ The forecast slice (the third Plan engine):
   their effect on the headline — a contribution parks money, a release
   frees it. A "← May 2026"-style button at the bottom pages the previous
   month in as its own dated section, one month per click, through the
-  same `?month=` param; the feed refreshes on
+  same `?month=` param, and a mirrored "August 2026 →"-style button at
+  the top prepends future months the same way — income can fund a
+  future month (the prepay pattern: June pay funds July), and this is
+  where those items show up; an empty future month simply renders the
+  "No activity yet" state. The feed refreshes on
   every visit as items are added elsewhere. The Spend guardrail card
   shows the live withdrawal rate, mini band, and zone status from
   `GET /api/guardrails` (muted until a spend plan exists), and the
@@ -553,8 +557,10 @@ The forecast slice (the third Plan engine):
   spending item refetches the funds list too, so a fund-funded spend's
   drawdown lands on the "Money in funds" card immediately. Below the
   forms, the Activity card renders the same uncapped, month-paged feed as
-  the Dashboard's Recent activity: a new item lands in the newest section
-  the moment a form submits, and the loaded history stays put.
+  the Dashboard's Recent activity — back through past months from the
+  bottom, forward into future months from the top: a new item lands in
+  the newest section the moment a form submits, and the loaded history
+  stays put.
 - **Budget report** (<http://localhost:5173/report>) — the "does it
   balance out?" view: the monthly discipline is `annual_target / 12`,
   most months land a little under, some go over, and this table is where
@@ -744,6 +750,18 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.7.0 — The activity feed pages forward. Income can fund a future
+`budget_month` (the prepay pattern: June pay funds July), but the feed
+anchored at the current month and only paged backward, so a
+future-funded item was visible only through the API. A mirrored
+"August 2026 →"-style button at the top of the shared feed now
+prepends future months, one per click, through the existing
+`GET /api/budget-month?month=` param — `nextMonth` joins
+`previousMonth` as pure string math, forward paging is unbounded into
+empty months exactly like the back button (an empty month renders the
+"No activity yet" state), and both buttons share the loading disable.
+Frontend-only: no API or backend behavior changes.
 
 v2.6.0 — Ledger rows date themselves by month. The Ledger is a
 monthly view, but its date column reflected the latest entry's exact

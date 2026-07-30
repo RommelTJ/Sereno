@@ -67,6 +67,14 @@ export function previousMonth(month: string): string {
     : `${year}-${String(monthNumber - 1).padStart(2, '0')}`
 }
 
+// "2025-12" → "2026-01", pure string math.
+export function nextMonth(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number)
+  return monthNumber === 12
+    ? `${year + 1}-01`
+    : `${year}-${String(monthNumber + 1).padStart(2, '0')}`
+}
+
 // The funding sources the handoff's prototype offers, mapped onto the API's
 // source values; the title context that the enum can't carry (whose
 // paycheck, which transfer) prefills the editable Source title field and
