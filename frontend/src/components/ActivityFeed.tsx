@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { BudgetMonth, Fund } from '../api.ts'
 import { fetchBudgetMonth } from '../api.ts'
-import { monthYearLabel, previousMonth } from '../budget.ts'
+import { monthYearLabel, nextMonth, previousMonth } from '../budget.ts'
 import type { ActivityTone } from '../dashboard.ts'
 import { activityRow } from '../dashboard.ts'
 
@@ -18,6 +18,9 @@ const ACTIVITY_TONES: Record<ActivityTone, { tile: string; amount: string }> =
 // a form submit replaces the newest section without touching the loaded
 // history — and earlier months accumulate as the button at the bottom
 // pages back through the existing GET /api/budget-month?month= param.
+// The mirrored button at the top prepends future months the same way —
+// income can fund a future budget_month (June pay funds July), and an
+// empty future month just renders the "No activity yet" state.
 // Each section keeps its own BudgetMonth, because a row's envelope emoji
 // resolves from that month's categories.
 function ActivityFeed({
@@ -27,10 +30,22 @@ function ActivityFeed({
   current: BudgetMonth
   funds: Fund[]
 }) {
+  const [later, setLater] = useState<BudgetMonth[]>([])
   const [earlier, setEarlier] = useState<BudgetMonth[]>([])
   const [loading, setLoading] = useState(false)
-  const months = [current, ...earlier]
+  const months = [...later, current, ...earlier]
+  const forwardTarget = nextMonth(months[0].month)
   const target = previousMonth(months[months.length - 1].month)
+
+  const loadLater = async () => {
+    setLoading(true)
+    try {
+      const month = await fetchBudgetMonth(forwardTarget)
+      setLater((loaded) => [month, ...loaded])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const loadEarlier = async () => {
     setLoading(true)
@@ -44,6 +59,14 @@ function ActivityFeed({
 
   return (
     <>
+      <button
+        type="button"
+        disabled={loading}
+        onClick={() => void loadLater()}
+        className="my-3.5 w-full cursor-pointer rounded-[8px] border border-input-border bg-card py-2 text-[12.5px] font-semibold text-muted disabled:opacity-60"
+      >
+        {monthYearLabel(forwardTarget)} →
+      </button>
       {months.map((budget) => (
         <section key={budget.month}>
           <p className="pt-3.5 text-[11px] font-semibold tracking-[1.2px] text-muted-2 uppercase">
