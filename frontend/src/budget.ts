@@ -3,6 +3,7 @@
 // headline is never recomputed client-side.
 
 import type {
+  BudgetMonth,
   Envelope,
   ExpenseInput,
   IncomeInput,
@@ -65,6 +66,30 @@ export function previousMonth(month: string): string {
   return monthNumber === 1
     ? `${year - 1}-12`
     : `${year}-${String(monthNumber - 1).padStart(2, '0')}`
+}
+
+// The leftover line: "May left $1,000 · $600 assigned · $400 unassigned" —
+// last month's safe_to_spend against the current month's assigned rollover
+// total, ticking down to $0 unassigned as the money is given a job. More
+// assigned than the month left reads "over-assigned $X" rather than
+// hiding: that amount came out of the current month's checking buffer. A
+// month that left nothing, with nothing assigned, has nothing to say —
+// the line is null.
+export function leftoverLine(
+  previous: BudgetMonth,
+  assigned: number,
+): string | null {
+  const leftover = previous.safe_to_spend
+  if (leftover <= 0 && assigned === 0) return null
+  const unassigned = leftover - assigned
+  const remainder =
+    unassigned >= 0
+      ? `${formatUsd(unassigned)} unassigned`
+      : `over-assigned ${formatUsd(-unassigned)}`
+  return (
+    `${monthLabel(previous.month)} left ${formatUsd(leftover)}` +
+    ` · ${formatUsd(assigned)} assigned · ${remainder}`
+  )
 }
 
 // "2025-12" → "2026-01", pure string math.

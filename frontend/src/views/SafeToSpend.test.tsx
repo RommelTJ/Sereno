@@ -573,7 +573,10 @@ describe('Activity feed', () => {
 
     const form = await screen.findByTestId('income-form')
     const feed = screen.getByTestId('sts-activity')
-    expect(form.nextElementSibling).toBe(feed)
+    // The leftover line rides between the funding form and the feed.
+    const line = await screen.findByTestId('leftover-line')
+    expect(form.nextElementSibling).toBe(line)
+    expect(line.nextElementSibling).toBe(feed)
     expect(within(feed).getByText('Activity')).toBeInTheDocument()
     // Uncapped: all four fixture items, the fund entry among them.
     expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)

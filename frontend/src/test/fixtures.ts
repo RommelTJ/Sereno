@@ -1,7 +1,7 @@
 // Shared API fixtures. Accounts mirror the seed dimension rows: table
 // columns map by kind, except the three brokerage funds, which map by name.
 
-import type { Forecast, Sourcing } from '../api.ts'
+import type { BudgetMonth, Forecast, Sourcing } from '../api.ts'
 
 const account = (
   id: number,
@@ -91,7 +91,7 @@ export const NET_WORTH = {
 // over budget; Travel has no plan yet (planned 0). rollover_assigned is the
 // sum of the month's rollover fund entries — $600 of May's leftover already
 // given a job.
-export const BUDGET_MONTH = {
+export const BUDGET_MONTH: BudgetMonth = {
   month: '2026-06',
   baseline: 5_200,
   rollover_assigned: 600,
@@ -168,7 +168,7 @@ export const BUDGET_MONTH = {
 // The month before BUDGET_MONTH, as the Safe-to-spend leftover line reads
 // it: May closed with $1,000 of safe-to-spend left over. Only month and
 // safe_to_spend matter to the line; the rest rides along for the type.
-export const MAY_BUDGET_MONTH = {
+export const MAY_BUDGET_MONTH: BudgetMonth = {
   ...BUDGET_MONTH,
   month: '2026-05',
   safe_to_spend: 1_000,

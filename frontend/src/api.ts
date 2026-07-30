@@ -103,9 +103,14 @@ export interface ActivityItem {
   note: string | null
 }
 
+// rollover_assigned sums the month's rollover fund entries — last month's
+// leftover being given a job. It never joins the safe-to-spend
+// subtraction; the leftover line computes the unassigned remainder as the
+// previous month's safe_to_spend minus it.
 export interface BudgetMonth {
   month: string
   baseline: number
+  rollover_assigned: number
   total_spent: number
   safe_to_spend: number
   categories: Envelope[]

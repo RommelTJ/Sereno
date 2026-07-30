@@ -6,6 +6,7 @@ import {
   fetchBudgetMonth,
   fetchFunds,
 } from '../api.ts'
+import { leftoverLine, previousMonth } from '../budget.ts'
 import ActivityFeed from '../components/ActivityFeed.tsx'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
 import IncomeForm from '../components/IncomeForm.tsx'
@@ -31,10 +32,16 @@ function Hero({ safeToSpend }: { safeToSpend: number }) {
 
 function SafeToSpend() {
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
+  const [previous, setPrevious] = useState<BudgetMonth | null>(null)
   const [funds, setFunds] = useState<Fund[] | null>(null)
 
   useEffect(() => {
-    void fetchBudgetMonth().then(setBudget)
+    // The leftover line reads last month's closing safe-to-spend, so the
+    // previous month loads once the current one names itself.
+    void fetchBudgetMonth().then((current) => {
+      setBudget(current)
+      return fetchBudgetMonth(previousMonth(current.month)).then(setPrevious)
+    })
     void fetchFunds().then(setFunds)
   }, [])
 
@@ -74,6 +81,14 @@ function SafeToSpend() {
               onAdd={addExpense}
             />
             <IncomeForm onAdd={addIncome} />
+            {previous && leftoverLine(previous, budget.rollover_assigned) && (
+              <p
+                data-testid="leftover-line"
+                className="px-1 text-[12.5px] font-medium text-muted-2"
+              >
+                {leftoverLine(previous, budget.rollover_assigned)}
+              </p>
+            )}
             <section
               data-testid="sts-activity"
               className="rounded-card border border-card-border bg-card px-6 py-2"
