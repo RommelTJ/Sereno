@@ -752,6 +752,7 @@ class TestGetBudgetMonth:
             "month": "2026-06",
             "baseline": 0,
             "fund_contributions": 0,
+            "rollover_assigned": 0,
             "total_spent": 0,
             "safe_to_spend": 0,
             "categories": [],
@@ -1107,6 +1108,58 @@ class TestGetBudgetMonth:
         assert rollover.status_code == 201
         body = client.get("/api/budget-month").json()
         assert [item["type"] for item in body["activity"]] == ["income"]
+
+    def test_rollover_assigned_sums_the_months_rollover_entries(self, client):
+        # The client computes unassigned leftover as last month's
+        # safe-to-spend minus this total, so the line can tick down to zero
+        # as the money is given a job.
+        pool_id = insert_fund("Pool fund")
+        insert_fund_entry(pool_id, first_of_month(), 5000)
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, first_of_month(), 1000)
+        for fund_id, amount in ((pool_id, 400), (bike_id, 200)):
+            response = client.post(
+                f"/api/funds/{fund_id}/top-up", json={"amount": amount, "source": "rollover"}
+            )
+            assert response.status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["rollover_assigned"] == 600
+
+    def test_a_negative_rollover_shrinks_the_assigned_total(self, client):
+        # Un-assigning a mis-routed rollover subtracts from the total the
+        # same way a release subtracts from fund_contributions.
+        fund_id = insert_fund("Pool fund")
+        insert_fund_entry(fund_id, first_of_month(), 5000)
+        for amount in (500, -200):
+            response = client.post(
+                f"/api/funds/{fund_id}/top-up", json={"amount": amount, "source": "rollover"}
+            )
+            assert response.status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["rollover_assigned"] == 300
+
+    def test_other_sources_stay_out_of_rollover_assigned(self, client):
+        # The mirror of the headline exclusion: a top-up or monthly-plan
+        # contribution is this month's money being parked, never last
+        # month's leftover being assigned.
+        fund_id = insert_fund("Pool fund")
+        insert_fund_entry(fund_id, first_of_month(), 5000)
+        insert_fund_entry(fund_id, first_of_month(), 5500, contribution=500, source="monthly_plan")
+        top_up = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 250})
+        assert top_up.status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["rollover_assigned"] == 0
+
+    def test_rollover_assigned_scopes_by_calendar_month(self, client):
+        # fund_entry has no budget_month column; the sum scopes by calendar
+        # month, exactly like fund_contributions.
+        fund_id = insert_fund("Pool fund")
+        insert_fund_entry(fund_id, first_of_month(1), 4600, contribution=400, source="rollover")
+        body = client.get("/api/budget-month").json()
+        assert body["rollover_assigned"] == 0
+        last_month = first_of_month(1)[:7]
+        body = client.get("/api/budget-month", params={"month": last_month}).json()
+        assert body["rollover_assigned"] == 400
 
     def test_month_defaults_to_the_current_month(self, client):
         today = date.today()
