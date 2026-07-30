@@ -495,7 +495,11 @@ The forecast slice (the third Plan engine):
   their effect on the headline — a contribution parks money, a release
   frees it. A "← May 2026"-style button at the bottom pages the previous
   month in as its own dated section, one month per click, through the
-  same `?month=` param; the feed refreshes on
+  same `?month=` param, and a mirrored "August 2026 →"-style button at
+  the top prepends future months the same way — income can fund a
+  future month (the prepay pattern: June pay funds July), and this is
+  where those items show up; an empty future month simply renders the
+  "No activity yet" state. The feed refreshes on
   every visit as items are added elsewhere. The Spend guardrail card
   shows the live withdrawal rate, mini band, and zone status from
   `GET /api/guardrails` (muted until a spend plan exists), and the
@@ -553,8 +557,10 @@ The forecast slice (the third Plan engine):
   spending item refetches the funds list too, so a fund-funded spend's
   drawdown lands on the "Money in funds" card immediately. Below the
   forms, the Activity card renders the same uncapped, month-paged feed as
-  the Dashboard's Recent activity: a new item lands in the newest section
-  the moment a form submits, and the loaded history stays put.
+  the Dashboard's Recent activity — back through past months from the
+  bottom, forward into future months from the top: a new item lands in
+  the newest section the moment a form submits, and the loaded history
+  stays put.
 - **Budget report** (<http://localhost:5173/report>) — the "does it
   balance out?" view: the monthly discipline is `annual_target / 12`,
   most months land a little under, some go over, and this table is where
