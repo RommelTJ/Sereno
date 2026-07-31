@@ -545,6 +545,45 @@ describe('topping up a fund', () => {
     ).toBeInTheDocument()
   })
 
+  it('offers an As-of date defaulting to today', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+
+    expect(within(rows[0]).getByLabelText('As of')).toHaveValue(todayIso())
+  })
+
+  it('posts a changed As-of date so the move lands in its own month', async () => {
+    // The existing payload tests lock the mirror case with toEqual: an
+    // untouched date stays out of the body, so the server keeps stamping
+    // today.
+    const toppedUp = { ...FUNDS[0], balance: 10_250 }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/funds/1/top-up': toppedUp,
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
+      target: { value: '250' },
+    })
+    fireEvent.change(within(rows[0]).getByLabelText('As of'), {
+      target: { value: '2026-07-02' },
+    })
+    routes['/api/funds'] = [toppedUp, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('$10,250 / $30,000')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({
+      amount: 250,
+      as_of_date: '2026-07-02',
+    })
+  })
+
   it('posts the rollover source when the leftover option is picked', async () => {
     const toppedUp = { ...FUNDS[0], balance: 10_400 }
     const routes: Record<string, unknown> = {
@@ -627,6 +666,124 @@ describe('topping up a fund', () => {
     expect(
       fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST'),
     ).toHaveLength(0)
+  })
+})
+
+describe('correcting a fund balance', () => {
+  // The restatement is the headline-neutral lever: a hand-entered fund
+  // entry (NULL source) moves the tracker while safe-to-spend never
+  // hears about it — reconciling against the real account, and the
+  // neutral half of income-row + drawdown month-funding.
+  it('opens prefilled with the current balance', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+
+    expect(within(rows[0]).getByLabelText('New balance')).toHaveValue('10000')
+  })
+
+  it('posts a restatement dated today and refetches', async () => {
+    const corrected = { ...FUNDS[0], balance: 9_500 }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/fund-entries': { id: 99 },
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+    fireEvent.change(within(rows[0]).getByLabelText('New balance'), {
+      target: { value: '9500' },
+    })
+    routes['/api/funds'] = [corrected, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('$9,500 / $30,000')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/fund-entries')).toEqual({
+      fund_id: 1,
+      as_of_date: todayIso(),
+      balance: 9500,
+    })
+    expect(
+      within(rows[0]).queryByLabelText('New balance'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('posts a zero balance — blank and 0 are different corrections', async () => {
+    const corrected = { ...FUNDS[0], balance: 0 }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/fund-entries': { id: 99 },
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+    fireEvent.change(within(rows[0]).getByLabelText('New balance'), {
+      target: { value: '0' },
+    })
+    routes['/api/funds'] = [corrected, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('$0 / $30,000')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/fund-entries')).toEqual({
+      fund_id: 1,
+      as_of_date: todayIso(),
+      balance: 0,
+    })
+  })
+
+  it('does not post an unchanged balance', async () => {
+    const fetchMock = stubApi({ '/api/funds': FUNDS })
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(postBody(fetchMock, '/api/fund-entries')).toBeUndefined()
+  })
+
+  it('does not post a blank balance', async () => {
+    const fetchMock = stubApi({ '/api/funds': FUNDS })
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+    fireEvent.change(within(rows[0]).getByLabelText('New balance'), {
+      target: { value: '' },
+    })
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(postBody(fetchMock, '/api/fund-entries')).toBeUndefined()
+  })
+
+  it('closes an open top-up form when it opens', async () => {
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+
+    expect(
+      within(rows[0]).queryByLabelText('$ amount'),
+    ).not.toBeInTheDocument()
+    expect(within(rows[0]).getByLabelText('New balance')).toBeInTheDocument()
   })
 })
 

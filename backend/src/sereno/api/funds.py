@@ -87,10 +87,15 @@ class FundTopUp(BaseModel):
     feed, and the yearly actual all filter on ('monthly_plan', 'top_up'),
     so the current month is never charged for money the old month already
     earned. fund_entry has no CHECK constraint on source, so the Literal
-    gates the accepted values here."""
+    gates the accepted values here.
+
+    as_of_date lands the move in the calendar month it belongs to — the
+    budget month scopes fund entries by substr(as_of_date, 1, 7) — and
+    defaults to today when omitted."""
 
     amount: float
     source: Literal["top_up", "rollover"] = "top_up"
+    as_of_date: date | None = None
 
     @field_validator("amount")
     @classmethod
@@ -237,23 +242,41 @@ def update_fund(fund_id: int, update: FundUpdate, db: Db) -> Fund:
 @router.post("/funds/{fund_id}/top-up", status_code=201)
 def top_up_fund(fund_id: int, top_up: FundTopUp, db: Db) -> Fund:
     """Appends a 'top_up' entry with the delta as its contribution, dated
-    today. The budget month counts these alongside the monthly-plan rows,
-    so a top-up trims safe-to-spend the moment it lands and a release
-    raises it back. A release may not exceed the balance (the mirror of
-    the overdraw guard on fund-funded expenses), and an archived fund
-    takes no top-ups — it is invisible everywhere money is displayed, so
-    parking money in one would trim the headline with no surface showing
-    where it went."""
+    as_of_date (today when omitted). The budget month counts these
+    alongside the monthly-plan rows, so a top-up trims its month's
+    safe-to-spend the moment it lands and a release raises it back. A
+    date behind the fund's latest entry is a 422 — snapshots resolve
+    newest-first, so a mid-chain insert would corrupt the balance chain.
+    A release may not exceed the balance (the mirror of the overdraw
+    guard on fund-funded expenses), and an archived fund takes no
+    top-ups — it is invisible everywhere money is displayed, so parking
+    money in one would trim the headline with no surface showing where
+    it went."""
     fund = db.execute("SELECT active FROM fund WHERE id = ?", (fund_id,)).fetchone()
     if fund is None:
         raise HTTPException(status_code=404, detail="fund not found")
     if not fund["active"]:
         raise HTTPException(status_code=422, detail="fund is archived")
-    (balance,) = db.execute(
-        "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
-        "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
+    as_of = top_up.as_of_date or date.today()
+    # Due plans land before the one-off: a top-up dated on a 1st would
+    # otherwise become the anchor and stand for its month, silently
+    # swallowing the planned contribution. The catch-up runs through the
+    # top-up's date — a future-dated move writes its month's planned
+    # contribution eagerly — and the balance below then includes it.
+    apply_monthly_plans(db, max(date.today(), as_of))
+    latest = db.execute(
+        "SELECT as_of_date, balance FROM fund_entry WHERE fund_id = ?"
+        " ORDER BY as_of_date DESC, id DESC LIMIT 1",
         (fund_id,),
     ).fetchone()
+    balance = latest["balance"] if latest is not None else 0
+    # Entries snapshot absolute balances resolved newest-first, so a date
+    # behind the latest entry would slot mid-chain and silently drop out
+    # of the displayed balance — the same reason expense corrections are
+    # dated today. Same-day ties break by insertion order, so the latest
+    # entry's own day is still fair game.
+    if latest is not None and as_of.isoformat() < latest["as_of_date"]:
+        raise HTTPException(status_code=422, detail="date precedes the fund's latest entry")
     if top_up.amount < 0 and -top_up.amount > balance:
         raise HTTPException(status_code=422, detail="release exceeds fund balance")
     db.execute(
@@ -261,7 +284,7 @@ def top_up_fund(fund_id: int, top_up: FundTopUp, db: Db) -> Fund:
         " VALUES (?, ?, ?, ?, ?)",
         (
             fund_id,
-            date.today().isoformat(),
+            as_of.isoformat(),
             balance + top_up.amount,
             top_up.amount,
             top_up.source,

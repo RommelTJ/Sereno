@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.13.0**
+**v2.14.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -352,7 +352,10 @@ The funds slice:
   balance and earlier rows are kept as history. Entries carry a `source`
   telling their kinds apart: `'spend'` for the drawdown behind a
   fund-funded expense, `'monthly_plan'` for an automatic contribution,
-  null for the hand-entered rows this endpoint appends.
+  null for the hand-entered rows this endpoint appends — invisible to
+  the safe-to-spend formula by design, which is why the Funds & goals
+  Correct balance action posts them: the tracker restates without the
+  headline moving.
 - `PUT /api/funds/{id}` — revises the fund's `name`, `emoji` and
   `monthly_plan` in place — the fund row is a dimension, like a category
   rename, so its identity fields are mutable and the append-only entry
@@ -380,8 +383,18 @@ The funds slice:
   headline, the activity feed, and the budget-year actual all filter
   on `('monthly_plan', 'top_up')`, so the current month is never
   charged for money the old month already earned; any other value is
-  a 422. A zero amount or an archived fund is a 422; an unknown fund
-  is a 404.
+  a 422. An optional `as_of_date` (default today) lands the move in
+  the calendar month it belongs to — the headline, the feed, and the
+  budget-year actual all scope fund entries by calendar month, so a
+  park recorded late charges its own month and a release dated into a
+  coming month credits that month's headline, not today's. The date
+  may not precede the fund's latest entry (a 422): entries snapshot
+  absolute balances resolved newest-first, so a mid-chain insert
+  would silently drop out of the fund's balance. Due monthly-plan
+  contributions through the date are applied before the entry lands,
+  so a move dated on a 1st can never swallow that month's planned
+  contribution. A zero amount or an archived fund is a 422; an
+  unknown fund is a 404.
 - `POST /api/funds/{id}/archive` — soft remove, like envelope
   archiving: flips `fund.active` to 0 so the fund drops out of the
   funds list, the dashboard parked total, and the safe-to-spend
@@ -666,12 +679,24 @@ The forecast slice (the third Plan engine):
   button that opens an inline $ amount input beside a source select —
   a regular top-up (the default, counts against this month) or "From
   last month's leftover", posted as `source = 'rollover'` so the new
-  month's headline never pays for it — Save posts the delta to
+  month's headline never pays for it — and an "As of" date defaulting
+  to today, reset on every open: backdate a park recorded late or date
+  a release into the month it funds, and the move lands in that
+  calendar month's headline (an untouched date stays out of the
+  payload) — Save posts the delta to
   `POST /api/funds/{id}/top-up`, moving money between the month's
   safe-to-spend and the fund (a negative amount releases part of the
   balance back to spendable; a negative rollover un-assigns), and
   refetches so the balance and note move
-  immediately — an Edit
+  immediately — a Correct balance button that opens an inline New
+  balance input prefilled with the fund's current balance — Save posts
+  a hand-entered `fund_entry` dated today via `POST /api/fund-entries`,
+  the headline-neutral restatement: the tracker and note move on the
+  refetch while safe-to-spend never hears of it, which is how the fund
+  is reconciled against the real account and how a month funded by
+  income row + fund drawdown records its neutral half; a blank or
+  unchanged value posts nothing, while $0 is a real correction — an
+  Edit
   button that opens an inline Name input, the same curated emoji select as
   the new-fund form, and a $ / month input, each prefilled with the fund's
   current values — Save revises all three via `PUT /api/funds/{id}` (a
@@ -839,6 +864,27 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.14.0 — Fund moves land in the month they belong to. Top-ups were
+always stamped `date.today()`, so funding a coming budget month from a
+fund double-counted spendable money — the release raised the current
+month's headline while the transfer income raised the target month's —
+and a park recorded late charged the wrong month; the headline-neutral
+restatement existed only as curl against `POST /api/fund-entries`.
+`POST /api/funds/{id}/top-up` gains an optional `as_of_date` (default
+today): the entry scopes into its calendar month — the headline, feed,
+and yearly actual already group by `substr(as_of_date, 1, 7)` — a date
+behind the fund's latest entry is a 422 (snapshots resolve
+newest-first, so a mid-chain insert would silently drop out of the
+balance), and due monthly plans are applied through the date before
+the entry lands, so a move dated on a 1st can never swallow that
+month's planned contribution. The top-up form gains the matching
+"As of" date, and each fund row gains Correct balance — an inline form
+posting a hand-entered entry dated today, the NULL-source restatement
+safe-to-spend deliberately ignores — so reconciling a fund against the
+real account and the income-row + fund-drawdown month-funding recipe
+both work from a phone. No migration: `fund_entry` already carries
+every column.
 
 v2.13.0 — Envelopes answer "what did we actually spend?" on tap. There
 was no way to drill down from an envelope to its transactions —

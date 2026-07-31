@@ -14,27 +14,36 @@ import NewFundForm from '../components/NewFundForm.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
 import { FUND_EMOJI_OPTIONS } from '../emoji.ts'
 import type { NewFund } from '../funds.ts'
-import { fundEdit, fundView, topUpAmount, totalParked } from '../funds.ts'
+import {
+  correctedBalance,
+  fundEdit,
+  fundView,
+  topUpAmount,
+  totalParked,
+} from '../funds.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
 
-// One inline form open per row at a time: the plan edit and the top-up
-// share the row's footer, so opening one closes the other — and keeps a
-// single Save/Cancel pair on screen.
-type RowForm = 'plan' | 'topup' | null
+// One inline form open per row at a time: the plan edit, the top-up, and
+// the balance correction share the row's footer, so opening one closes
+// the others — and keeps a single Save/Cancel pair on screen.
+type RowForm = 'plan' | 'topup' | 'correct' | null
 
 function FundRow({
   fund,
   onArchive,
+  onCorrect,
   onSavePlan,
   onTopUp,
 }: {
   fund: Fund
   onArchive: (fundId: number) => Promise<void>
+  onCorrect: (fundId: number, balance: number) => Promise<void>
   onSavePlan: (fundId: number, edit: FundUpdate) => Promise<void>
   onTopUp: (
     fundId: number,
     amount: number,
     source: TopUpSource,
+    asOf: string,
   ) => Promise<void>
 }) {
   const view = fundView(fund)
@@ -45,6 +54,8 @@ function FundRow({
   const [monthly, setMonthly] = useState('')
   const [amount, setAmount] = useState('')
   const [source, setSource] = useState<TopUpSource>('top_up')
+  const [asOf, setAsOf] = useState(todayIso)
+  const [corrected, setCorrected] = useState('')
 
   const startEditing = () => {
     setName(fund.name)
@@ -55,10 +66,17 @@ function FundRow({
 
   const startToppingUp = () => {
     setAmount('')
-    // The source belongs to the move being entered, not to the row: a
-    // rollover pick never sticks around for the next top-up.
+    // The source and date belong to the move being entered, not to the
+    // row: a rollover pick or a backdate never sticks around for the
+    // next top-up.
     setSource('top_up')
+    setAsOf(todayIso())
     setForm('topup')
+  }
+
+  const startCorrecting = () => {
+    setCorrected(String(fund.balance))
+    setForm('correct')
   }
 
   const save = async () => {
@@ -77,7 +95,19 @@ function FundRow({
     if (!delta) return
     setSaving(true)
     try {
-      await onTopUp(fund.id, delta, source)
+      await onTopUp(fund.id, delta, source, asOf)
+      setForm(null)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveCorrection = async () => {
+    const balance = correctedBalance(corrected)
+    if (balance === null || balance === fund.balance) return
+    setSaving(true)
+    try {
+      await onCorrect(fund.id, balance)
       setForm(null)
     } finally {
       setSaving(false)
@@ -93,9 +123,10 @@ function FundRow({
             · {view.meta}
           </span>
         </p>
-        <div className="flex items-baseline gap-3">
+        <div className="flex flex-wrap items-baseline justify-end gap-3">
           <p className="num text-[13.5px] font-semibold">{view.amount}</p>
           <GhostButton label="Top up" onClick={startToppingUp} />
+          <GhostButton label="Correct balance" onClick={startCorrecting} />
           <GhostButton label="Edit" onClick={startEditing} />
           <GhostButton
             label="Archive"
@@ -187,6 +218,16 @@ function FundRow({
               <option value="rollover">From last month's leftover</option>
             </select>
           </label>
+          <label htmlFor={`fund-topup-date-${fund.id}`} className="block">
+            <FieldLabel text="As of" />
+            <input
+              id={`fund-topup-date-${fund.id}`}
+              type="date"
+              className="mt-1 rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+              value={asOf}
+              onChange={(event) => setAsOf(event.target.value)}
+            />
+          </label>
           <button
             type="button"
             disabled={saving}
@@ -196,6 +237,32 @@ function FundRow({
             Save
           </button>
           <GhostButton label="Cancel" onClick={() => setForm(null)} />
+        </div>
+      )}
+      {form === 'correct' && (
+        <div className="mt-2 flex flex-wrap items-end gap-2">
+          <label htmlFor={`fund-correct-${fund.id}`} className="block">
+            <FieldLabel text="New balance" />
+            <input
+              id={`fund-correct-${fund.id}`}
+              className="num mt-1 w-[140px] rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+              placeholder="tracker only"
+              value={corrected}
+              onChange={(event) => setCorrected(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void saveCorrection()}
+            className="cursor-pointer rounded-[8px] bg-accent px-3 py-1 text-[11.5px] font-bold text-white disabled:opacity-60"
+          >
+            Save
+          </button>
+          <GhostButton label="Cancel" onClick={() => setForm(null)} />
+          <p className="text-[11.5px] text-muted-2">
+            restates the tracker — safe-to-spend is untouched
+          </p>
         </div>
       )}
     </div>
@@ -231,16 +298,25 @@ function Funds() {
     setFunds(await fetchFunds())
   }
 
+  const correct = async (fundId: number, balance: number) => {
+    // A hand-entered entry is the headline-neutral restatement: NULL
+    // source, so the tracker moves and safe-to-spend never hears of it.
+    await createFundEntry({ fund_id: fundId, as_of_date: todayIso(), balance })
+    setFunds(await fetchFunds())
+  }
+
   const topUp = async (
     fundId: number,
     amount: number,
     source: TopUpSource,
+    asOf: string,
   ) => {
-    // The default source is omitted, never sent — only a rollover marks
-    // the payload.
+    // The default source and a today date are omitted, never sent — only
+    // a rollover or a redated move marks the payload.
     await topUpFund(fundId, {
       amount,
       ...(source === 'rollover' ? { source } : {}),
+      ...(asOf && asOf !== todayIso() ? { as_of_date: asOf } : {}),
     })
     setFunds(await fetchFunds())
   }
@@ -267,6 +343,7 @@ function Funds() {
                 key={fund.id}
                 fund={fund}
                 onArchive={archive}
+                onCorrect={correct}
                 onSavePlan={savePlan}
                 onTopUp={topUp}
               />

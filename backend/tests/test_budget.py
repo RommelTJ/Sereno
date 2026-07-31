@@ -54,6 +54,8 @@ def first_of_month(months_back=0):
     year, month = today.year, today.month - months_back
     while month < 1:
         year, month = year - 1, month + 12
+    while month > 12:
+        year, month = year + 1, month - 12
     return date(year, month, 1).isoformat()
 
 
@@ -1598,6 +1600,24 @@ class TestGetBudgetMonth:
         body = client.get("/api/budget-month").json()
         assert body["fund_contributions"] == -400
         assert body["safe_to_spend"] == 5400
+
+    def test_a_dated_release_lands_in_its_own_months_headline(self, client):
+        # Funding a coming month from a fund: the release is dated into the
+        # target month, so that month's headline gains the money and the
+        # current month's is never touched — one headline touch, not two.
+        fund_id = insert_fund("Vacation fund")
+        insert_fund_entry(fund_id, first_of_month(), 5000)
+        release = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": -500, "as_of_date": first_of_month(-1)},
+        )
+        assert release.status_code == 201
+        body = client.get("/api/budget-month").json()
+        assert body["fund_contributions"] == 0
+        next_month = first_of_month(-1)[:7]
+        body = client.get("/api/budget-month", params={"month": next_month}).json()
+        assert body["fund_contributions"] == -500
+        assert body["safe_to_spend"] == 500
 
     def test_rollover_entries_leave_the_headline_alone(self, client):
         # A rollover assigns last month's leftover, so the current month is

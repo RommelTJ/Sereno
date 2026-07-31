@@ -131,3 +131,11 @@ export function topUpAmount(raw: string): number {
   const sign = raw.trim().startsWith('-') ? -1 : 1
   return sign * parseAmount(raw)
 }
+
+// The Correct balance form's raw field → the absolute balance to post,
+// or null when nothing should be. Blank means "no correction", never $0:
+// emptying a fund is a real correction, so 0 passes through.
+export function correctedBalance(raw: string): number | null {
+  if (!raw.trim()) return null
+  return parseAmount(raw)
+}

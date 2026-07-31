@@ -52,11 +52,14 @@ def insert_fund_entry(fund_id, as_of_date, balance, contribution=0, source=None)
 
 def first_of_month(months_back=0):
     """The 1st of the month months_back before today, ISO — catch-up tests
-    date entries relative to the wall clock so they can't drift stale."""
+    date entries relative to the wall clock so they can't drift stale. A
+    negative months_back reaches forward, for future-dated top-ups."""
     today = date.today()
     year, month = today.year, today.month - months_back
     while month < 1:
         year, month = year - 1, month + 12
+    while month > 12:
+        year, month = year + 1, month - 12
     return date(year, month, 1).isoformat()
 
 
@@ -350,6 +353,45 @@ class TestMonthlyPlanCatchUp:
             "monthly_plan",
         )
 
+    def test_a_top_up_on_the_first_does_not_hide_the_due_contribution(self, client):
+        # A one-off dated exactly on a 1st would otherwise become the
+        # catch-up anchor and stand for the month, silently swallowing
+        # the planned contribution. Due plans are applied before the
+        # top-up lands, so the contribution is written first and the
+        # top-up anchors after it.
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 1000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": 250, "as_of_date": first_of_month(0)},
+        )
+        assert response.status_code == 201
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 1750
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(1), 1000, 0, None),
+            (first_of_month(0), 1500, 500, "monthly_plan"),
+            (first_of_month(0), 1750, 250, "top_up"),
+        ]
+
+    def test_a_future_dated_top_up_applies_plans_through_its_date(self, client):
+        # The catch-up runs through the top-up's date, not just today: a
+        # release dated into a coming month writes that month's planned
+        # contribution first, so the plan can never be silently
+        # swallowed when the month arrives.
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(0), 1000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": -200, "as_of_date": first_of_month(-1)},
+        )
+        assert response.status_code == 201
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(0), 1000, 0, None),
+            (first_of_month(-1), 1500, 500, "monthly_plan"),
+            (first_of_month(-1), 1300, -200, "top_up"),
+        ]
+
     def test_a_fund_with_no_entries_is_skipped(self, client):
         # Direct SQL can create an entry-less fund; with no anchor there is
         # no schedule to catch up. Funds created through the API always
@@ -570,6 +612,83 @@ class TestTopUpFund:
         client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 500})
         (fund,) = client.get("/api/funds").json()
         assert fund["balance"] == 10500
+
+    def test_a_dated_top_up_lands_on_the_provided_date(self, client):
+        # The date is the whole point of the field: the entry scopes into
+        # the calendar month it belongs to — the budget month groups fund
+        # entries by substr(as_of_date, 1, 7) — while the balance still
+        # builds on the latest entry.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(2), 10000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": 250, "as_of_date": first_of_month(1)},
+        )
+        assert response.status_code == 201
+        assert response.json()["balance"] == 10250
+        assert fetch_fund_entries_with_source(fund_id)[-1] == (
+            first_of_month(1),
+            10250,
+            250,
+            "top_up",
+        )
+
+    def test_a_future_dated_top_up_is_accepted(self, client):
+        # Funding a coming month from a fund: the release is dated into
+        # that month, so its calendar month gains the money, and the fund's
+        # balance moves now — the entry is the newest by date either way.
+        fund_id = insert_fund("Vacation fund", target_amount=8000)
+        insert_fund_entry(fund_id, first_of_month(), 5000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": -500, "as_of_date": first_of_month(-1)},
+        )
+        assert response.status_code == 201
+        assert response.json()["balance"] == 4500
+        assert fetch_fund_entries_with_source(fund_id)[-1] == (
+            first_of_month(-1),
+            4500,
+            -500,
+            "top_up",
+        )
+
+    def test_a_date_before_the_latest_entry_is_a_422(self, client):
+        # Fund entries snapshot absolute balances resolved newest-first,
+        # so an entry slotted behind the latest one would corrupt the
+        # chain — the displayed balance would silently exclude it, the
+        # same reason expense corrections are dated today. Nothing is
+        # appended.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": 250, "as_of_date": first_of_month(1)},
+        )
+        assert response.status_code == 422
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
+
+    def test_a_top_up_dated_the_latest_entrys_own_day_is_allowed(self, client):
+        # Same-day entries tie-break by insertion order, so a move dated
+        # the latest entry's own day still lands newest — only earlier
+        # dates threaten the chain.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": 250, "as_of_date": first_of_month()},
+        )
+        assert response.status_code == 201
+        assert response.json()["balance"] == 10250
+
+    def test_a_plain_top_up_behind_a_future_dated_entry_is_a_422(self, client):
+        # The guard applies to the defaulted date too: once a future-dated
+        # release exists, an undated top-up would slot mid-chain and the
+        # future entry's snapshot would keep reading as the balance.
+        fund_id = insert_fund("Vacation fund", target_amount=8000)
+        insert_fund_entry(fund_id, first_of_month(-1), 5000)
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 250})
+        assert response.status_code == 422
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
 
     def test_the_returned_note_recalculates(self, client):
         fund_id = insert_fund("Bike fund", kind="goal", target_amount=10000)
