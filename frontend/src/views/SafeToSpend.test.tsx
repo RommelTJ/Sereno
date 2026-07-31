@@ -844,3 +844,79 @@ describe('Activity item editing', () => {
     expect(screen.queryByTestId('income-edit-form')).not.toBeInTheDocument()
   })
 })
+
+describe('Income item editing', () => {
+  const feedRows = async () => {
+    const feed = await screen.findByTestId('sts-activity')
+    return within(feed).getAllByTestId('activity-row')
+  }
+
+  it('tapping an income row opens a form pre-filled from the row', async () => {
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+
+    const form = await screen.findByTestId('income-edit-form')
+    expect(within(form).getByLabelText('Amount')).toHaveValue('2400')
+    expect(within(form).getByLabelText('Funds month')).toHaveValue('2026-06')
+    expect(within(form).getByLabelText('Source')).toHaveValue('spouse-paycheck')
+    expect(within(form).getByLabelText('Source title')).toHaveValue(
+      'Spouse paycheck',
+    )
+    expect(within(form).getByLabelText('Date')).toHaveValue('2026-05-27')
+    expect(within(form).getByLabelText('Note')).toHaveValue('')
+  })
+
+  it('switching the source re-prefills the title like the create form', async () => {
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+
+    const form = await screen.findByTestId('income-edit-form')
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'eth-harvest' },
+    })
+    expect(within(form).getByLabelText('Source title')).toHaveValue(
+      'ETH harvest',
+    )
+  })
+
+  it('saving an edited income PUTs the full body and refetches', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      'PUT /api/income/2': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+    const form = await screen.findByTestId('income-edit-form')
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '2500' },
+    })
+    const budgetCalls = () =>
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).startsWith('/api/budget-month'),
+      ).length
+    const budgetBefore = budgetCalls()
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+      ).toBe(true),
+    )
+    const [url, init] = fetchMock.mock.calls.find(
+      ([, callInit]) => callInit?.method === 'PUT',
+    )!
+    expect(url).toBe('/api/income/2')
+    expect(JSON.parse(init?.body as string)).toEqual({
+      txn_date: '2026-05-27',
+      budget_month: '2026-06',
+      source: 'paycheck',
+      amount: 2500,
+      source_label: 'Spouse paycheck',
+    })
+    await waitFor(() => expect(budgetCalls()).toBeGreaterThan(budgetBefore))
+    await waitFor(() =>
+      expect(screen.queryByTestId('income-edit-form')).not.toBeInTheDocument(),
+    )
+  })
+})

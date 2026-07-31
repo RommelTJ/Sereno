@@ -6,8 +6,10 @@ import { describe, expect, it } from 'vitest'
 import {
   editMonthOptions,
   expenseUpdateInput,
+  incomeUpdateInput,
   leftoverLine,
   nextMonth,
+  sourceOptionFor,
 } from './budget.ts'
 import { BUDGET_MONTH, MAY_BUDGET_MONTH } from './test/fixtures.ts'
 
@@ -121,6 +123,78 @@ describe('expenseUpdateInput', () => {
   it('returns null when the amount does not parse', () => {
     expect(
       expenseUpdateInput(item, 'abc', 'cat:1', '2026-06-10', '2026-06', ''),
+    ).toBeNull()
+  })
+})
+
+describe('sourceOptionFor', () => {
+  it('matches the stored source and label exactly', () => {
+    expect(sourceOptionFor('paycheck', 'You paycheck').value).toBe(
+      'your-paycheck',
+    )
+  })
+
+  it('falls back to the first option carrying the source', () => {
+    expect(sourceOptionFor('transfer_in', 'Custom label').value).toBe(
+      'brokerage-withdrawal',
+    )
+  })
+
+  it('falls back to the first option for an unmapped source', () => {
+    expect(sourceOptionFor('dividend', null).value).toBe('spouse-paycheck')
+  })
+})
+
+describe('incomeUpdateInput', () => {
+  // The Spouse-paycheck income row: no tax treatment, no account.
+  const item = BUDGET_MONTH.activity[3]
+
+  it('builds the full replace body', () => {
+    expect(
+      incomeUpdateInput(
+        item,
+        '2500',
+        'spouse-paycheck',
+        '2026-06',
+        '2026-05-27',
+        'Spouse paycheck',
+        ' ',
+      ),
+    ).toEqual({
+      txn_date: '2026-05-27',
+      budget_month: '2026-06',
+      source: 'paycheck',
+      amount: 2500,
+      source_label: 'Spouse paycheck',
+    })
+  })
+
+  it('carries tax_treatment and account_id through unchanged', () => {
+    const taxed = { ...item, tax_treatment: 'ORDINARY' as const, account_id: 7 }
+    expect(
+      incomeUpdateInput(
+        taxed,
+        '2500',
+        'spouse-paycheck',
+        '2026-06',
+        '2026-05-27',
+        'Spouse paycheck',
+        '',
+      ),
+    ).toMatchObject({ tax_treatment: 'ORDINARY', account_id: 7 })
+  })
+
+  it('returns null when the amount does not parse', () => {
+    expect(
+      incomeUpdateInput(
+        item,
+        'abc',
+        'spouse-paycheck',
+        '2026-06',
+        '2026-05-27',
+        '',
+        '',
+      ),
     ).toBeNull()
   })
 })
