@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.7.0**
+**v2.8.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -777,6 +777,25 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.8.0 — Last month's leftover gets a job. Safe-to-spend is
+month-scoped, so when a month closed with money left over there was
+no good way to record sweeping it into a fund: a plain top-up charged
+the new month for money the old month already earned, and the manual
+two-row dance inflated gross income and contributions while recording
+nothing. `POST /api/funds/{id}/top-up` gains an optional `source` —
+`'top_up'` (the default, unchanged) or `'rollover'`, recording the
+contribution identically while staying out of the Safe-to-spend
+headline, the reconciling activity feed, and the budget-year actual
+(all three already filtered on `('monthly_plan', 'top_up')`; tests
+now lock the exclusion in) — and `GET /api/budget-month` gains
+`rollover_assigned`, the month's assigned total. The Funds & goals
+top-up form offers the source choice, Safe-to-spend shows the
+leftover line — "July left $1,000 · $600 assigned · $400 unassigned",
+ticking to $0 as the money is assigned, over-assignment shown rather
+than hidden — and the income form's note drops its promise of an
+automatic roll-forward the system never had. No migration:
+`fund_entry` has no CHECK constraint on `source`.
 
 v2.7.0 — The activity feed pages forward. Income can fund a future
 `budget_month` (the prepay pattern: June pay funds July), but the feed
