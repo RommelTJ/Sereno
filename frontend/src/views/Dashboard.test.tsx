@@ -639,3 +639,17 @@ describe('Responsive layout', () => {
     )
   })
 })
+
+describe('Activity rows on the dashboard', () => {
+  it('are read-only — tapping opens no edit form', async () => {
+    // Editing lives on Safe-to-spend (the issue's screen); the dashboard
+    // feed stays a glanceable read.
+    stubDashboard()
+    renderDashboard()
+
+    const rows = await screen.findAllByTestId('activity-row')
+    fireEvent.click(rows[0])
+    expect(screen.queryByTestId('expense-edit-form')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('income-edit-form')).not.toBeInTheDocument()
+  })
+})

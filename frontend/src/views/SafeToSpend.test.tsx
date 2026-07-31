@@ -748,3 +748,99 @@ describe('Responsive layout', () => {
     )
   })
 })
+
+describe('Activity item editing', () => {
+  // The fixture feed: [expense id 5, expense id 3, fund id 9, income id 2].
+  const feedRows = async () => {
+    const feed = await screen.findByTestId('sts-activity')
+    return within(feed).getAllByTestId('activity-row')
+  }
+
+  it('tapping an expense row opens a form pre-filled from the row', async () => {
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[0])
+
+    const form = await screen.findByTestId('expense-edit-form')
+    expect(within(form).getByLabelText('Amount')).toHaveValue('28.4')
+    expect(within(form).getByLabelText('Paid from')).toHaveValue('cat:3')
+    expect(within(form).getByLabelText('Budget month')).toHaveValue('2026-06')
+    expect(within(form).getByLabelText('Date')).toHaveValue('2026-06-26')
+    expect(within(form).getByLabelText('Note')).toHaveValue(
+      'Poke — treat yourself',
+    )
+  })
+
+  it('saving an edited expense PUTs the full body and refetches', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      'PUT /api/expenses/5': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[0])
+    const form = await screen.findByTestId('expense-edit-form')
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '42.75' },
+    })
+    const budgetCalls = () =>
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).startsWith('/api/budget-month'),
+      ).length
+    const fundsCalls = () =>
+      fetchMock.mock.calls.filter(([input]) => String(input) === '/api/funds')
+        .length
+    const budgetBefore = budgetCalls()
+    const fundsBefore = fundsCalls()
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+      ).toBe(true),
+    )
+    const [url, init] = fetchMock.mock.calls.find(
+      ([, callInit]) => callInit?.method === 'PUT',
+    )!
+    expect(url).toBe('/api/expenses/5')
+    expect(JSON.parse(init?.body as string)).toEqual({
+      txn_date: '2026-06-26',
+      budget_month: '2026-06',
+      category_id: 3,
+      amount: 42.75,
+      funded_from: 'discretionary',
+      note: 'Poke — treat yourself',
+    })
+    // The hero, envelopes, funds card, and feed all refetch after a save.
+    await waitFor(() => expect(budgetCalls()).toBeGreaterThan(budgetBefore))
+    expect(fundsCalls()).toBeGreaterThan(fundsBefore)
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('expense-edit-form'),
+      ).not.toBeInTheDocument(),
+    )
+  })
+
+  it('cancel closes the form without a request', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[0])
+    const form = await screen.findByTestId('expense-edit-form')
+    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByTestId('expense-edit-form')).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(
+      false,
+    )
+  })
+
+  it('fund rows offer no edit affordance', async () => {
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[2])
+
+    expect(screen.queryByTestId('expense-edit-form')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('income-edit-form')).not.toBeInTheDocument()
+  })
+})
