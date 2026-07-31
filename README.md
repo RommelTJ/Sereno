@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.9.0**
+**v2.10.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -814,6 +814,30 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.10.0 — Entry mistakes stop requiring SQL. Expenses and income were
+append-only (`POST` only), so truing up a provisional transaction —
+Lyft consolidating a day's rides into one charge, a bar adding the tip
+after settlement — or fixing a typo meant hand-editing SQLite. `PUT`
+and `DELETE /api/expenses/{id}` and `/api/income/{id}` revise or
+remove the rows in place: they are facts nothing references, so the
+append-only rule stays with the balance tables. Edits are full
+replaces of the create bodies, `budget_month` included (a prepay can
+be reassigned to the right month), and fund-funded expenses never
+touch their paired `'spend'` entry — each fund entry snapshots a
+balance, so a compensating `'spend'`-source entry is appended instead,
+dated today: a full reversal on delete or a funding-source change, a
+single delta on a same-fund amount edit, the overdraw guard
+re-applied either way. `'spend'` entries already stay out of the
+headline, the feed, and the budget-year actual, so corrections never
+move safe-to-spend. Activity rows now carry the fields an edit form
+pre-fills (category, fund, account, fixed flag, budget month, tax
+treatment) — no GET-by-id round trip — and on Safe-to-spend (the
+Dashboard feed stays read-only) tapping an expense or income row
+expands an inline pre-filled edit form: Save PUTs and refetches
+everything the item touches, Delete arms on the first tap ("Tap again
+to delete") before removing the row — tap-first, touch-friendly, no
+native dialogs. No migration: the schema already had every column.
 
 v2.9.0 — The ETH price is typed once, not once per account. The
 Ledger form's `$ / ETH` field used to prefill from the selected
