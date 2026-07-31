@@ -353,6 +353,45 @@ class TestMonthlyPlanCatchUp:
             "monthly_plan",
         )
 
+    def test_a_top_up_on_the_first_does_not_hide_the_due_contribution(self, client):
+        # A one-off dated exactly on a 1st would otherwise become the
+        # catch-up anchor and stand for the month, silently swallowing
+        # the planned contribution. Due plans are applied before the
+        # top-up lands, so the contribution is written first and the
+        # top-up anchors after it.
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 1000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": 250, "as_of_date": first_of_month(0)},
+        )
+        assert response.status_code == 201
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 1750
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(1), 1000, 0, None),
+            (first_of_month(0), 1500, 500, "monthly_plan"),
+            (first_of_month(0), 1750, 250, "top_up"),
+        ]
+
+    def test_a_future_dated_top_up_applies_plans_through_its_date(self, client):
+        # The catch-up runs through the top-up's date, not just today: a
+        # release dated into a coming month writes that month's planned
+        # contribution first, so the plan can never be silently
+        # swallowed when the month arrives.
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(0), 1000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": -200, "as_of_date": first_of_month(-1)},
+        )
+        assert response.status_code == 201
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(0), 1000, 0, None),
+            (first_of_month(-1), 1500, 500, "monthly_plan"),
+            (first_of_month(-1), 1300, -200, "top_up"),
+        ]
+
     def test_a_fund_with_no_entries_is_skipped(self, client):
         # Direct SQL can create an entry-less fund; with no anchor there is
         # no schedule to catch up. Funds created through the API always
