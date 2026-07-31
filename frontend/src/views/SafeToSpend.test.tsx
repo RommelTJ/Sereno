@@ -904,6 +904,62 @@ describe('Activity item editing', () => {
     )
   })
 
+  it('prefills a pending row checked and clears the flag on save', async () => {
+    // Unticking Pending and saving PUTs a body without the key — the
+    // server's full replace defaults it false, and the row drops its ⚠️.
+    const pendingFeed = {
+      ...BUDGET_MONTH,
+      activity: BUDGET_MONTH.activity.map((item) =>
+        item.id === 5 ? { ...item, pending: true } : item,
+      ),
+    }
+    const fetchMock = stubApi({
+      '/api/budget-month': pendingFeed,
+      '/api/funds': FUNDS,
+      'PUT /api/expenses/5': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[0])
+    const form = await screen.findByTestId('expense-edit-form')
+    expect(within(form).getByLabelText('Pending')).toBeChecked()
+    fireEvent.click(within(form).getByLabelText('Pending'))
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+      ).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(
+      ([, callInit]) => callInit?.method === 'PUT',
+    )!
+    expect(JSON.parse(init?.body as string)).not.toHaveProperty('pending')
+  })
+
+  it('saves a newly ticked pending flag', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      'PUT /api/expenses/5': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[0])
+    const form = await screen.findByTestId('expense-edit-form')
+    expect(within(form).getByLabelText('Pending')).not.toBeChecked()
+    fireEvent.click(within(form).getByLabelText('Pending'))
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+      ).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(
+      ([, callInit]) => callInit?.method === 'PUT',
+    )!
+    expect(JSON.parse(init?.body as string)).toMatchObject({ pending: true })
+  })
+
   it('cancel closes the form without a request', async () => {
     const fetchMock = stubApi({
       '/api/budget-month': BUDGET_MONTH,
@@ -1002,6 +1058,62 @@ describe('Income item editing', () => {
     await waitFor(() =>
       expect(screen.queryByTestId('income-edit-form')).not.toBeInTheDocument(),
     )
+  })
+
+  it('prefills a pending row checked and clears the flag on save', async () => {
+    const pendingFeed = {
+      ...BUDGET_MONTH,
+      activity: BUDGET_MONTH.activity.map((item) =>
+        item.id === 2 && item.type === 'income'
+          ? { ...item, pending: true }
+          : item,
+      ),
+    }
+    const fetchMock = stubApi({
+      '/api/budget-month': pendingFeed,
+      '/api/funds': FUNDS,
+      'PUT /api/income/2': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+    const form = await screen.findByTestId('income-edit-form')
+    expect(within(form).getByLabelText('Pending')).toBeChecked()
+    fireEvent.click(within(form).getByLabelText('Pending'))
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+      ).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(
+      ([, callInit]) => callInit?.method === 'PUT',
+    )!
+    expect(JSON.parse(init?.body as string)).not.toHaveProperty('pending')
+  })
+
+  it('saves a newly ticked pending flag', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      'PUT /api/income/2': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+    const form = await screen.findByTestId('income-edit-form')
+    expect(within(form).getByLabelText('Pending')).not.toBeChecked()
+    fireEvent.click(within(form).getByLabelText('Pending'))
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+      ).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(
+      ([, callInit]) => callInit?.method === 'PUT',
+    )!
+    expect(JSON.parse(init?.body as string)).toMatchObject({ pending: true })
   })
 })
 
