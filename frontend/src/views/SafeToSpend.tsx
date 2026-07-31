@@ -6,7 +6,7 @@ import {
   fetchBudgetMonth,
   fetchFunds,
 } from '../api.ts'
-import { leftoverLine, previousMonth } from '../budget.ts'
+import { envelopeView, leftoverLine, previousMonth } from '../budget.ts'
 import ActivityFeed from '../components/ActivityFeed.tsx'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
 import IncomeForm from '../components/IncomeForm.tsx'
@@ -117,8 +117,18 @@ function SafeToSpend() {
               data-testid="sts-activity"
               className="rounded-card border border-card-border bg-card px-6 py-2"
             >
-              <div className="border-b border-hairline pt-4 pb-2.5">
+              <div className="flex items-center justify-between border-b border-hairline pt-4 pb-2.5">
                 <p className="text-sm font-bold">Activity</p>
+                {filterEnvelope && (
+                  <button
+                    type="button"
+                    data-testid="activity-filter-chip"
+                    onClick={() => setFilterId(null)}
+                    className="cursor-pointer rounded-pill border border-input-border bg-tile px-3 py-[5px] text-[11.5px] font-semibold text-muted"
+                  >
+                    Filtering: {envelopeView(filterEnvelope).label} ✕
+                  </button>
+                )}
               </div>
               <ActivityFeed
                 current={budget}
