@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.10.0**
+**v2.11.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -830,6 +830,21 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.11.0 — Provisional transactions carry their reminder. Some amounts
+land wrong on purpose — Lyft consolidates a day's rides into one
+charge, bars add tips after settlement — and until now nothing marked
+the entry as needing a second look. Migration 0011 adds a `pending`
+boolean to `expense_line` and `income_event`; the create and edit
+forms gain a Pending checkbox, and a pending row's title wears a
+trailing ⚠️ in both activity feeds until the amount is trued up —
+unticking the box in the edit form and saving clears it, since the
+PUT endpoints are full replaces and pending defaults false. The flag
+is a reminder, never an exclusion: pending items still count in
+safe-to-spend and every other total, because the money has already
+moved and the known amount is a floor. Long row titles now wrap
+inside the row instead of pushing it wide, so the suffix never breaks
+the feed's layout.
 
 v2.10.0 — Entry mistakes stop requiring SQL. Expenses and income were
 append-only (`POST` only), so truing up a provisional transaction —
