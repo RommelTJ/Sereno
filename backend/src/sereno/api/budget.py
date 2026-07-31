@@ -407,6 +407,47 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
     return Income(**dict(row))
 
 
+@router.put("/income/{income_id}")
+def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
+    """Revises the row in place — a full replace under the create body's
+    validation, so a blanked title or note really clears. Income rows are
+    facts nothing references: fixing an entry mistake is a correction, not
+    new history, so the append-only rule stays with the balance tables."""
+    _require(db, "income_event", income_id, "income")
+    _require(db, "account", income.account_id, "account")
+    db.execute(
+        "UPDATE income_event SET txn_date = ?, budget_month = ?, source = ?, amount = ?,"
+        " tax_treatment = ?, account_id = ?, source_label = ?, note = ? WHERE id = ?",
+        (
+            income.txn_date.isoformat(),
+            income.budget_month or income.txn_date.strftime("%Y-%m"),
+            income.source,
+            income.amount,
+            income.tax_treatment,
+            income.account_id,
+            income.source_label,
+            income.note,
+            income_id,
+        ),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, txn_date, budget_month, source, amount, tax_treatment,"
+        " account_id, source_label, note, created_at FROM income_event WHERE id = ?",
+        (income_id,),
+    ).fetchone()
+    return Income(**dict(row))
+
+
+@router.delete("/income/{income_id}", status_code=204)
+def delete_income(income_id: int, db: Db) -> None:
+    """Hard delete: nothing references an income row, so removing a
+    provisional or mistaken entry leaves nothing dangling."""
+    _require(db, "income_event", income_id, "income")
+    db.execute("DELETE FROM income_event WHERE id = ?", (income_id,))
+    db.commit()
+
+
 @router.get("/budget-month")
 def budget_month(db: Db, month: Month = None) -> BudgetMonth:
     target = month or _current_month()
