@@ -326,14 +326,18 @@ def create_category_plan(category_id: int, plan: CategoryPlanCreate, db: Db) -> 
     return CategoryPlan(**dict(row))
 
 
+def _fund_balance(db: sqlite3.Connection, fund_id: int | None) -> float:
+    return db.execute(
+        "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
+        "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
+        (fund_id,),
+    ).fetchone()[0]
+
+
 def _draw_down_fund(db: sqlite3.Connection, expense: ExpenseCreate) -> None:
     """The other half of a fund-funded spend: append a 'spend' fund_entry so
     the earmark releases as the expense lands — appends, never updates."""
-    balance = db.execute(
-        "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
-        "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
-        (expense.fund_id,),
-    ).fetchone()[0]
+    balance = _fund_balance(db, expense.fund_id)
     if expense.amount > balance:
         raise HTTPException(status_code=422, detail="expense exceeds fund balance")
     db.execute(
@@ -345,6 +349,21 @@ def _draw_down_fund(db: sqlite3.Connection, expense: ExpenseCreate) -> None:
             balance - expense.amount,
             -expense.amount,
         ),
+    )
+
+
+def _reverse_draw_down(db: sqlite3.Connection, fund_id: int, amount: float) -> None:
+    """The compensating half of an expense delete or edit. The paired
+    'spend' entry stays — each entry snapshots the balance, so pulling a
+    mid-chain row would not restore it — and the correction appends,
+    dated today: snapshots resolve newest-first, so a backdated entry
+    carrying the current balance would corrupt the chain. 'spend'-source
+    entries stay out of the headline, the feed, and the budget-year
+    actual, so a correction never moves safe-to-spend."""
+    db.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+        " VALUES (?, ?, ?, ?, 'spend')",
+        (fund_id, date.today().isoformat(), _fund_balance(db, fund_id) + amount, amount),
     )
 
 
@@ -379,6 +398,22 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
         (cursor.lastrowid,),
     ).fetchone()
     return Expense(**dict(row))
+
+
+@router.delete("/expenses/{expense_id}", status_code=204)
+def delete_expense(expense_id: int, db: Db) -> None:
+    """Hard delete: nothing references an expense row, so a provisional or
+    mistaken entry can simply go. A fund-funded row gets its draw-down
+    fully reversed in the same transaction — see _reverse_draw_down."""
+    row = db.execute(
+        "SELECT funded_from, fund_id, amount FROM expense_line WHERE id = ?", (expense_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="expense not found")
+    if row["funded_from"] == "fund" and row["fund_id"] is not None:
+        _reverse_draw_down(db, row["fund_id"], row["amount"])
+    db.execute("DELETE FROM expense_line WHERE id = ?", (expense_id,))
+    db.commit()
 
 
 @router.post("/income", status_code=201)
