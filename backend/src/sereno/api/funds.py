@@ -257,13 +257,19 @@ def top_up_fund(fund_id: int, top_up: FundTopUp, db: Db) -> Fund:
         raise HTTPException(status_code=404, detail="fund not found")
     if not fund["active"]:
         raise HTTPException(status_code=422, detail="fund is archived")
+    as_of = top_up.as_of_date or date.today()
+    # Due plans land before the one-off: a top-up dated on a 1st would
+    # otherwise become the anchor and stand for its month, silently
+    # swallowing the planned contribution. The catch-up runs through the
+    # top-up's date — a future-dated move writes its month's planned
+    # contribution eagerly — and the balance below then includes it.
+    apply_monthly_plans(db, max(date.today(), as_of))
     latest = db.execute(
         "SELECT as_of_date, balance FROM fund_entry WHERE fund_id = ?"
         " ORDER BY as_of_date DESC, id DESC LIMIT 1",
         (fund_id,),
     ).fetchone()
     balance = latest["balance"] if latest is not None else 0
-    as_of = top_up.as_of_date or date.today()
     # Entries snapshot absolute balances resolved newest-first, so a date
     # behind the latest entry would slot mid-chain and silently drop out
     # of the displayed balance — the same reason expense corrections are
