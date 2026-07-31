@@ -245,23 +245,34 @@ def top_up_fund(fund_id: int, top_up: FundTopUp, db: Db) -> Fund:
     as_of_date (today when omitted). The budget month counts these
     alongside the monthly-plan rows, so a top-up trims its month's
     safe-to-spend the moment it lands and a release raises it back. A
-    release may not exceed the balance (the mirror of the overdraw guard
-    on fund-funded expenses), and an archived fund takes no top-ups — it
-    is invisible everywhere money is displayed, so parking money in one
-    would trim the headline with no surface showing where it went."""
+    date behind the fund's latest entry is a 422 — snapshots resolve
+    newest-first, so a mid-chain insert would corrupt the balance chain.
+    A release may not exceed the balance (the mirror of the overdraw
+    guard on fund-funded expenses), and an archived fund takes no
+    top-ups — it is invisible everywhere money is displayed, so parking
+    money in one would trim the headline with no surface showing where
+    it went."""
     fund = db.execute("SELECT active FROM fund WHERE id = ?", (fund_id,)).fetchone()
     if fund is None:
         raise HTTPException(status_code=404, detail="fund not found")
     if not fund["active"]:
         raise HTTPException(status_code=422, detail="fund is archived")
-    (balance,) = db.execute(
-        "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
-        "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
+    latest = db.execute(
+        "SELECT as_of_date, balance FROM fund_entry WHERE fund_id = ?"
+        " ORDER BY as_of_date DESC, id DESC LIMIT 1",
         (fund_id,),
     ).fetchone()
+    balance = latest["balance"] if latest is not None else 0
+    as_of = top_up.as_of_date or date.today()
+    # Entries snapshot absolute balances resolved newest-first, so a date
+    # behind the latest entry would slot mid-chain and silently drop out
+    # of the displayed balance — the same reason expense corrections are
+    # dated today. Same-day ties break by insertion order, so the latest
+    # entry's own day is still fair game.
+    if latest is not None and as_of.isoformat() < latest["as_of_date"]:
+        raise HTTPException(status_code=422, detail="date precedes the fund's latest entry")
     if top_up.amount < 0 and -top_up.amount > balance:
         raise HTTPException(status_code=422, detail="release exceeds fund balance")
-    as_of = top_up.as_of_date or date.today()
     db.execute(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
         " VALUES (?, ?, ?, ?, ?)",

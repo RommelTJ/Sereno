@@ -628,6 +628,19 @@ class TestTopUpFund:
         assert response.status_code == 422
         assert len(fetch_fund_entries_with_source(fund_id)) == 1
 
+    def test_a_top_up_dated_the_latest_entrys_own_day_is_allowed(self, client):
+        # Same-day entries tie-break by insertion order, so a move dated
+        # the latest entry's own day still lands newest — only earlier
+        # dates threaten the chain.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": 250, "as_of_date": first_of_month()},
+        )
+        assert response.status_code == 201
+        assert response.json()["balance"] == 10250
+
     def test_a_plain_top_up_behind_a_future_dated_entry_is_a_422(self, client):
         # The guard applies to the defaulted date too: once a future-dated
         # release exists, an undated top-up would slot mid-chain and the
