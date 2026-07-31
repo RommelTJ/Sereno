@@ -40,6 +40,7 @@ function IncomeEditForm({
   )
   const [txnDate, setTxnDate] = useState(item.txn_date)
   const [note, setNote] = useState(item.note ?? '')
+  const [pending, setPending] = useState(item.pending ?? false)
   const [saving, setSaving] = useState(false)
 
   const months = editMonthOptions(storedMonth, txnDate)
@@ -59,6 +60,7 @@ function IncomeEditForm({
       txnDate,
       sourceLabel,
       note,
+      pending,
     )
     if (!input) return
     setSaving(true)
@@ -153,6 +155,19 @@ function IncomeEditForm({
           />
         </label>
       </div>
+      <label
+        htmlFor="edit-income-pending"
+        className="mt-[11px] flex items-center gap-2 py-1"
+      >
+        <input
+          id="edit-income-pending"
+          type="checkbox"
+          className="h-4 w-4 accent-sidebar"
+          checked={pending}
+          onChange={(event) => setPending(event.target.checked)}
+        />
+        <FieldLabel text="Pending" />
+      </label>
       <div className="mt-3.5 flex gap-2.5">
         <button
           type="button"
