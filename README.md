@@ -579,7 +579,16 @@ The forecast slice (the third Plan engine):
   "total cash − bills due − money in funds" formula pill, above the monthly
   envelopes card: one progress bar per category, "spent · left" while under
   budget, "$spent of $budgeted · $X over" in red once over — overspending
-  is allowed and simply trims the headline. Under the envelopes, the "Money in funds" card makes
+  is allowed and simply trims the headline. Every envelope row is a tap
+  target: tapping one filters the Activity feed to that envelope's own
+  expenses — income, fund entries, and fund-funded lines belong to no
+  envelope, so they drop out, across paged-in months too — with the
+  selected row tinted, a "Filtering: 🛒 Groceries ✕" chip in the Activity
+  header whose tap clears the filter, a re-tap of the same envelope
+  toggling it off, and a tap of a different envelope replacing it, one
+  filter at a time; a filtered month with nothing left says "No 🛒
+  Groceries activity this month." instead of claiming no activity exists.
+  Under the envelopes, the "Money in funds" card makes
   the formula's money-in-funds term visible where spending decisions
   happen: the total parked in its header and one row per active fund with
   its emoji-led name, available balance, and "$X / mo" plan — blank for a
