@@ -35,6 +35,7 @@ function FundRow({
     fundId: number,
     amount: number,
     source: TopUpSource,
+    asOf: string,
   ) => Promise<void>
 }) {
   const view = fundView(fund)
@@ -45,6 +46,7 @@ function FundRow({
   const [monthly, setMonthly] = useState('')
   const [amount, setAmount] = useState('')
   const [source, setSource] = useState<TopUpSource>('top_up')
+  const [asOf, setAsOf] = useState(todayIso)
 
   const startEditing = () => {
     setName(fund.name)
@@ -55,9 +57,11 @@ function FundRow({
 
   const startToppingUp = () => {
     setAmount('')
-    // The source belongs to the move being entered, not to the row: a
-    // rollover pick never sticks around for the next top-up.
+    // The source and date belong to the move being entered, not to the
+    // row: a rollover pick or a backdate never sticks around for the
+    // next top-up.
     setSource('top_up')
+    setAsOf(todayIso())
     setForm('topup')
   }
 
@@ -77,7 +81,7 @@ function FundRow({
     if (!delta) return
     setSaving(true)
     try {
-      await onTopUp(fund.id, delta, source)
+      await onTopUp(fund.id, delta, source, asOf)
       setForm(null)
     } finally {
       setSaving(false)
@@ -187,6 +191,16 @@ function FundRow({
               <option value="rollover">From last month's leftover</option>
             </select>
           </label>
+          <label htmlFor={`fund-topup-date-${fund.id}`} className="block">
+            <FieldLabel text="As of" />
+            <input
+              id={`fund-topup-date-${fund.id}`}
+              type="date"
+              className="mt-1 rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+              value={asOf}
+              onChange={(event) => setAsOf(event.target.value)}
+            />
+          </label>
           <button
             type="button"
             disabled={saving}
@@ -235,12 +249,14 @@ function Funds() {
     fundId: number,
     amount: number,
     source: TopUpSource,
+    asOf: string,
   ) => {
-    // The default source is omitted, never sent — only a rollover marks
-    // the payload.
+    // The default source and a today date are omitted, never sent — only
+    // a rollover or a redated move marks the payload.
     await topUpFund(fundId, {
       amount,
       ...(source === 'rollover' ? { source } : {}),
+      ...(asOf && asOf !== todayIso() ? { as_of_date: asOf } : {}),
     })
     setFunds(await fetchFunds())
   }

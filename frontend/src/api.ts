@@ -477,12 +477,15 @@ export interface FundUpdate {
 // safe-to-spend; a negative amount is a partial release, raising it back.
 // source 'rollover' assigns last month's leftover instead: recorded on the
 // fund identically, but excluded from this month's headline, feed, and
-// yearly actual. The default source is omitted, never sent.
+// yearly actual. as_of_date lands the move in the calendar month it
+// belongs to; a date behind the fund's latest entry is a 422. The default
+// source and a today as_of_date are omitted, never sent.
 export type TopUpSource = 'top_up' | 'rollover'
 
 export interface FundTopUpInput {
   amount: number
   source?: TopUpSource
+  as_of_date?: string
 }
 
 // Config edits append: each input becomes a new effective-dated row and
