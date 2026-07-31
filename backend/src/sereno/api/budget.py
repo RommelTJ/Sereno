@@ -144,6 +144,11 @@ class Envelope(BaseModel):
 
 
 class ActivityItem(BaseModel):
+    """Rows carry every column their edit form pre-fills — the feed is the
+    only read, so a tap costs no GET-by-id round trip. Expense rows carry
+    the first six extras, income rows budget_month / tax_treatment /
+    account_id; fund rows (no edit affordance) carry all-null extras."""
+
     type: Literal["expense", "income", "fund"]
     id: int
     txn_date: date
@@ -152,6 +157,13 @@ class ActivityItem(BaseModel):
     source: str | None
     source_label: str | None
     note: str | None
+    category_id: int | None
+    funded_from: str | None
+    fund_id: int | None
+    account_id: int | None
+    is_fixed: bool | None
+    budget_month: str | None
+    tax_treatment: str | None
 
 
 class BudgetMonth(BaseModel):
@@ -314,14 +326,18 @@ def create_category_plan(category_id: int, plan: CategoryPlanCreate, db: Db) -> 
     return CategoryPlan(**dict(row))
 
 
+def _fund_balance(db: sqlite3.Connection, fund_id: int | None) -> float:
+    return db.execute(
+        "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
+        "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
+        (fund_id,),
+    ).fetchone()[0]
+
+
 def _draw_down_fund(db: sqlite3.Connection, expense: ExpenseCreate) -> None:
     """The other half of a fund-funded spend: append a 'spend' fund_entry so
     the earmark releases as the expense lands — appends, never updates."""
-    balance = db.execute(
-        "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
-        "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
-        (expense.fund_id,),
-    ).fetchone()[0]
+    balance = _fund_balance(db, expense.fund_id)
     if expense.amount > balance:
         raise HTTPException(status_code=422, detail="expense exceeds fund balance")
     db.execute(
@@ -333,6 +349,21 @@ def _draw_down_fund(db: sqlite3.Connection, expense: ExpenseCreate) -> None:
             balance - expense.amount,
             -expense.amount,
         ),
+    )
+
+
+def _reverse_draw_down(db: sqlite3.Connection, fund_id: int, amount: float) -> None:
+    """The compensating half of an expense delete or edit. The paired
+    'spend' entry stays — each entry snapshots the balance, so pulling a
+    mid-chain row would not restore it — and the correction appends,
+    dated today: snapshots resolve newest-first, so a backdated entry
+    carrying the current balance would corrupt the chain. 'spend'-source
+    entries stay out of the headline, the feed, and the budget-year
+    actual, so a correction never moves safe-to-spend."""
+    db.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+        " VALUES (?, ?, ?, ?, 'spend')",
+        (fund_id, date.today().isoformat(), _fund_balance(db, fund_id) + amount, amount),
     )
 
 
@@ -369,6 +400,81 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
     return Expense(**dict(row))
 
 
+@router.put("/expenses/{expense_id}")
+def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
+    """Revises the row in place — a full replace under the create body's
+    validation, budget_month defaulting from the txn month, so an item can
+    be reassigned to the right month (the prepay pattern). Fund funding is
+    corrected with compensating entries (see _reverse_draw_down): a
+    same-fund amount change appends one delta entry, a changed funding
+    source reverses the old draw-down and freshly draws the new. The
+    overdraw guard re-applies either way, checked before anything is
+    written, so a 422 changes nothing."""
+    old = db.execute(
+        "SELECT funded_from, fund_id, amount FROM expense_line WHERE id = ?", (expense_id,)
+    ).fetchone()
+    if old is None:
+        raise HTTPException(status_code=404, detail="expense not found")
+    _require(db, "category", expense.category_id, "category")
+    _require(db, "fund", expense.fund_id, "fund")
+    _require(db, "account", expense.account_id, "account")
+    old_fund = old["fund_id"] if old["funded_from"] == "fund" else None
+    new_fund = expense.fund_id if expense.funded_from == "fund" else None
+    if old_fund is not None and old_fund == new_fund:
+        delta = expense.amount - old["amount"]
+        if delta > _fund_balance(db, old_fund):
+            raise HTTPException(status_code=422, detail="expense exceeds fund balance")
+        if delta != 0:
+            _reverse_draw_down(db, old_fund, -delta)
+    else:
+        if new_fund is not None and expense.amount > _fund_balance(db, new_fund):
+            raise HTTPException(status_code=422, detail="expense exceeds fund balance")
+        if old_fund is not None:
+            _reverse_draw_down(db, old_fund, old["amount"])
+        if new_fund is not None:
+            _reverse_draw_down(db, new_fund, -expense.amount)
+    db.execute(
+        "UPDATE expense_line SET txn_date = ?, budget_month = ?, category_id = ?, amount = ?,"
+        " is_fixed = ?, funded_from = ?, fund_id = ?, account_id = ?, note = ? WHERE id = ?",
+        (
+            expense.txn_date.isoformat(),
+            expense.budget_month or expense.txn_date.strftime("%Y-%m"),
+            expense.category_id,
+            expense.amount,
+            expense.is_fixed,
+            expense.funded_from,
+            expense.fund_id,
+            expense.account_id,
+            expense.note,
+            expense_id,
+        ),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, txn_date, budget_month, category_id, amount, is_fixed,"
+        " funded_from, fund_id, account_id, note, created_at"
+        " FROM expense_line WHERE id = ?",
+        (expense_id,),
+    ).fetchone()
+    return Expense(**dict(row))
+
+
+@router.delete("/expenses/{expense_id}", status_code=204)
+def delete_expense(expense_id: int, db: Db) -> None:
+    """Hard delete: nothing references an expense row, so a provisional or
+    mistaken entry can simply go. A fund-funded row gets its draw-down
+    fully reversed in the same transaction — see _reverse_draw_down."""
+    row = db.execute(
+        "SELECT funded_from, fund_id, amount FROM expense_line WHERE id = ?", (expense_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="expense not found")
+    if row["funded_from"] == "fund" and row["fund_id"] is not None:
+        _reverse_draw_down(db, row["fund_id"], row["amount"])
+    db.execute("DELETE FROM expense_line WHERE id = ?", (expense_id,))
+    db.commit()
+
+
 @router.post("/income", status_code=201)
 def create_income(income: IncomeCreate, db: Db) -> Income:
     _require(db, "account", income.account_id, "account")
@@ -393,6 +499,47 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
         (cursor.lastrowid,),
     ).fetchone()
     return Income(**dict(row))
+
+
+@router.put("/income/{income_id}")
+def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
+    """Revises the row in place — a full replace under the create body's
+    validation, so a blanked title or note really clears. Income rows are
+    facts nothing references: fixing an entry mistake is a correction, not
+    new history, so the append-only rule stays with the balance tables."""
+    _require(db, "income_event", income_id, "income")
+    _require(db, "account", income.account_id, "account")
+    db.execute(
+        "UPDATE income_event SET txn_date = ?, budget_month = ?, source = ?, amount = ?,"
+        " tax_treatment = ?, account_id = ?, source_label = ?, note = ? WHERE id = ?",
+        (
+            income.txn_date.isoformat(),
+            income.budget_month or income.txn_date.strftime("%Y-%m"),
+            income.source,
+            income.amount,
+            income.tax_treatment,
+            income.account_id,
+            income.source_label,
+            income.note,
+            income_id,
+        ),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, txn_date, budget_month, source, amount, tax_treatment,"
+        " account_id, source_label, note, created_at FROM income_event WHERE id = ?",
+        (income_id,),
+    ).fetchone()
+    return Income(**dict(row))
+
+
+@router.delete("/income/{income_id}", status_code=204)
+def delete_income(income_id: int, db: Db) -> None:
+    """Hard delete: nothing references an income row, so removing a
+    provisional or mistaken entry leaves nothing dangling."""
+    _require(db, "income_event", income_id, "income")
+    db.execute("DELETE FROM income_event WHERE id = ?", (income_id,))
+    db.commit()
 
 
 @router.get("/budget-month")
@@ -447,14 +594,16 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
     # have been; rows carrying both keep the category name.
     expenses = db.execute(
         "SELECT e.id, e.txn_date, e.amount, COALESCE(c.name, f.name) AS category,"
-        " e.note, e.created_at"
+        " e.note, e.created_at, e.category_id, e.funded_from, e.fund_id,"
+        " e.account_id, e.is_fixed, e.budget_month"
         " FROM expense_line e LEFT JOIN category c ON c.id = e.category_id"
         " LEFT JOIN fund f ON f.id = e.fund_id"
         " WHERE e.budget_month = ?",
         (target,),
     )
     incomes = db.execute(
-        "SELECT id, txn_date, amount, source, source_label, note, created_at"
+        "SELECT id, txn_date, amount, source, source_label, note, created_at,"
+        " budget_month, tax_treatment, account_id"
         " FROM income_event WHERE budget_month = ?",
         (target,),
     )
@@ -471,11 +620,26 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         " WHERE e.source IN ('monthly_plan', 'top_up') AND substr(e.as_of_date, 1, 7) = ?",
         (target,),
     )
+    no_expense_fields = {
+        "category_id": None,
+        "funded_from": None,
+        "fund_id": None,
+        "is_fixed": None,
+    }
+    no_income_fields = {"tax_treatment": None}
     merged = sorted(
-        [dict(row) | {"type": "expense", "source": None, "source_label": None} for row in expenses]
-        + [dict(row) | {"type": "income", "category": None} for row in incomes]
+        [
+            dict(row) | {"type": "expense", "source": None, "source_label": None} | no_income_fields
+            for row in expenses
+        ]
+        + [dict(row) | {"type": "income", "category": None} | no_expense_fields for row in incomes]
         + [
-            dict(row) | {"type": "fund", "source_label": None, "note": None} for row in fund_entries
+            dict(row)
+            | {"type": "fund", "source_label": None, "note": None}
+            | no_expense_fields
+            | no_income_fields
+            | {"account_id": None, "budget_month": None}
+            for row in fund_entries
         ],
         key=lambda row: (row["txn_date"], row["created_at"], row["id"]),
         reverse=True,

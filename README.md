@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.9.0**
+**v2.10.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -236,6 +236,26 @@ The budget slice:
   is the row's display title — the context the `source` enum can't carry —
   and `note` is a true note beside it; migration 0008 moved the old
   title-style notes into `source_label`, so existing rows kept their titles.
+- `PUT /api/expenses/{id}` / `DELETE /api/expenses/{id}` — corrects or
+  removes a spending line: pending charges settle (Lyft consolidates a
+  day's rides into one charge, bars add tips) and typos happen, and
+  nothing references an expense row, so the edit revises in place and the
+  delete is a hard delete. The edit is a full replace under the create
+  body's validation, `budget_month` included, so an item can be
+  reassigned to the right month (the prepay pattern). A fund-funded row
+  never touches its paired `'spend'` entry — each fund entry snapshots a
+  balance, so removing a mid-chain row would not restore it; instead a
+  compensating `'spend'`-source entry is appended, dated today (snapshots
+  resolve newest-first, so a backdated correction would corrupt the
+  chain): a full reversal on delete or a funding-source change, a single
+  delta on a same-fund amount edit, with the overdraw guard re-applied
+  either way — a 422 writes nothing. `'spend'` entries stay out of the
+  headline, the feed, and the budget-year actual, so a correction never
+  moves safe-to-spend and nothing double-counts.
+- `PUT /api/income/{id}` / `DELETE /api/income/{id}` — the same for income
+  events: a full replace (an omitted title or note really clears),
+  `budget_month` defaulting from the txn date, and a hard delete — the
+  month's funding baseline follows immediately.
 - `GET /api/budget-month` — the computed month (`?month=`, default current):
   per-category planned/spent/remaining envelopes (overspend is allowed and
   goes negative), the Safe-to-spend headline
@@ -251,7 +271,10 @@ The budget slice:
   number above it: a `spend` drawdown would double-count its expense line,
   and hand-entered rows are balance restatements that never touched the
   headline. Having no `budget_month` column, fund entries scope by
-  calendar month, the way the headline already does.
+  calendar month, the way the headline already does. Every activity row
+  carries the fields its edit form pre-fills (category, fund, account,
+  fixed flag, budget month, tax treatment), so a tap costs no GET-by-id
+  round trip; fund rows carry them null — they have no edit affordance.
   Fund-funded expenses stay out of `total_spent` and the envelope bars —
   they were paid from parked money, and the fund's drawdown already
   released the earmark — and `fund_contributions` is the month's automatic
@@ -583,7 +606,21 @@ The forecast slice (the third Plan engine):
   the Dashboard's Recent activity — back through past months from the
   bottom, forward into future months from the top: a new item lands in
   the newest section the moment a form submits, and the loaded history
-  stays put.
+  stays put. Here — and only here; the Dashboard's feed stays a
+  glanceable read — tapping an expense or income row expands an inline
+  edit form pre-filled from the row itself (amount, the same Paid-from
+  optgroups as the create form, budget month — the stored month plus the
+  txn month and the next two, so a prepay can be reassigned — date,
+  title, and note), the way provisional transactions get trued up: Lyft
+  consolidates a day's rides, a bar adds the tip after settlement. Save
+  revises the item via the PUT endpoints — fund-funded corrections land
+  as compensating entries server-side, so the fund's balance follows —
+  and Delete arms on the first tap ("Tap again to delete") before
+  removing the row, touch-friendly destruction without a native dialog.
+  Every save or delete refetches the hero, envelopes, funds card,
+  leftover line, and each loaded feed month, so a reassigned item moves
+  between sections immediately. Fund rows belong to the funds machinery
+  and offer no edit affordance.
 - **Budget report** (<http://localhost:5173/report>) — the "does it
   balance out?" view: the monthly discipline is `annual_target / 12`,
   most months land a little under, some go over, and this table is where
@@ -777,6 +814,30 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.10.0 — Entry mistakes stop requiring SQL. Expenses and income were
+append-only (`POST` only), so truing up a provisional transaction —
+Lyft consolidating a day's rides into one charge, a bar adding the tip
+after settlement — or fixing a typo meant hand-editing SQLite. `PUT`
+and `DELETE /api/expenses/{id}` and `/api/income/{id}` revise or
+remove the rows in place: they are facts nothing references, so the
+append-only rule stays with the balance tables. Edits are full
+replaces of the create bodies, `budget_month` included (a prepay can
+be reassigned to the right month), and fund-funded expenses never
+touch their paired `'spend'` entry — each fund entry snapshots a
+balance, so a compensating `'spend'`-source entry is appended instead,
+dated today: a full reversal on delete or a funding-source change, a
+single delta on a same-fund amount edit, the overdraw guard
+re-applied either way. `'spend'` entries already stay out of the
+headline, the feed, and the budget-year actual, so corrections never
+move safe-to-spend. Activity rows now carry the fields an edit form
+pre-fills (category, fund, account, fixed flag, budget month, tax
+treatment) — no GET-by-id round trip — and on Safe-to-spend (the
+Dashboard feed stays read-only) tapping an expense or income row
+expands an inline pre-filled edit form: Save PUTs and refetches
+everything the item touches, Delete arms on the first tap ("Tap again
+to delete") before removing the row — tap-first, touch-friendly, no
+native dialogs. No migration: the schema already had every column.
 
 v2.9.0 — The ETH price is typed once, not once per account. The
 Ledger form's `$ / ETH` field used to prefill from the selected

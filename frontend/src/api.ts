@@ -92,6 +92,11 @@ export interface Envelope {
   remaining: number
 }
 
+// Rows carry every column their edit form pre-fills — the feed is the
+// only read, so a tap costs no GET-by-id round trip. Expense rows carry
+// category_id/funded_from/fund_id/account_id/is_fixed/budget_month,
+// income rows budget_month/tax_treatment/account_id; fund rows (no edit
+// affordance) carry all-null extras.
 export interface ActivityItem {
   type: 'expense' | 'income' | 'fund'
   id: number
@@ -101,6 +106,13 @@ export interface ActivityItem {
   source: string | null
   source_label: string | null
   note: string | null
+  category_id: number | null
+  funded_from: 'discretionary' | 'fund' | null
+  fund_id: number | null
+  account_id: number | null
+  is_fixed: boolean | null
+  budget_month: string | null
+  tax_treatment: 'ORDINARY' | 'LTCG' | 'TAX_FREE' | null
 }
 
 // rollover_assigned sums the month's rollover fund entries — last month's
@@ -392,6 +404,22 @@ export interface IncomeInput {
   note?: string
 }
 
+// PUT /api/expenses/{id} and /api/income/{id} are full replaces of the
+// create bodies: the edit form sends the stored value for anything it
+// doesn't edit (is_fixed, account_id, tax_treatment), so an update can't
+// clobber it. budget_month is explicit on the expense update —
+// reassigning the month is half the point of editing.
+export type ExpenseUpdateInput = ExpenseInput & {
+  budget_month: string
+  is_fixed?: boolean
+  account_id?: number
+}
+
+export interface IncomeUpdateInput extends IncomeInput {
+  tax_treatment?: 'ORDINARY' | 'LTCG' | 'TAX_FREE'
+  account_id?: number
+}
+
 // POST /api/categories inserts the category and its initial plan row;
 // effective_month is omitted so the plan starts this month. A duplicate
 // active name is a 409.
@@ -657,8 +685,16 @@ export const deleteQuickLink = (quickLinkId: number) =>
   deleteJson(`/api/quick-links/${quickLinkId}`)
 export const createExpense = (input: ExpenseInput) =>
   postJson('/api/expenses', input)
+export const updateExpense = (expenseId: number, input: ExpenseUpdateInput) =>
+  putJson(`/api/expenses/${expenseId}`, input)
+export const deleteExpense = (expenseId: number) =>
+  deleteJson(`/api/expenses/${expenseId}`)
 export const createIncome = (input: IncomeInput) =>
   postJson('/api/income', input)
+export const updateIncome = (incomeId: number, input: IncomeUpdateInput) =>
+  putJson(`/api/income/${incomeId}`, input)
+export const deleteIncome = (incomeId: number) =>
+  deleteJson(`/api/income/${incomeId}`)
 export const createFund = (input: FundInput) =>
   postJsonReturning<Fund>('/api/funds', input)
 export const createFundEntry = (input: FundEntryInput) =>
