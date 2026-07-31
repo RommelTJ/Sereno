@@ -1388,6 +1388,20 @@ class TestGetBudgetMonth:
         assert income["fund_id"] is None
         assert income["is_fixed"] is None
 
+    def test_activity_carries_the_pending_flag(self, client):
+        # The feed is the edit form's only read and the ⚠️ renders from
+        # the row itself, so expense and income rows carry the stored flag.
+        self.spend(client, 96, txn_date="2026-06-20", pending=True)
+        self.spend(client, 40, txn_date="2026-06-18")
+        payload = {"txn_date": "2026-06-24", "source": "paycheck", "amount": 2800, "pending": True}
+        assert client.post("/api/income", json=payload).status_code == 201
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [(item["type"], item["pending"]) for item in body["activity"]] == [
+            ("income", True),
+            ("expense", True),
+            ("expense", False),
+        ]
+
     def test_fund_activity_carries_null_edit_fields(self, client):
         # Fund rows belong to the funds machinery — no edit affordance, so
         # every edit-form field is null.
@@ -1403,6 +1417,7 @@ class TestGetBudgetMonth:
         assert fund_item["is_fixed"] is None
         assert fund_item["budget_month"] is None
         assert fund_item["tax_treatment"] is None
+        assert fund_item["pending"] is None
 
     def test_monthly_plan_and_top_up_entries_appear_as_fund_activity(self, client):
         # The feed lists exactly the sources the fund_contributions headline
