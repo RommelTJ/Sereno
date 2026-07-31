@@ -10,6 +10,7 @@ import type {
   ExpenseUpdateInput,
   IncomeInput,
   IncomeSource,
+  IncomeUpdateInput,
 } from './api.ts'
 import { formatUsd, parseAmount } from './ledger.ts'
 
@@ -230,6 +231,55 @@ export function incomeInput(
     amount,
     ...(sourceLabel ? { source_label: sourceLabel } : {}),
     ...(note ? { note } : {}),
+  }
+}
+
+// The income edit form's source prefill: the option matching the stored
+// source and title exactly, else the first option carrying the source,
+// else the first option — the enum can't say whose paycheck or which
+// transfer, so the stored title breaks the tie.
+export function sourceOptionFor(
+  source: string | null,
+  sourceLabel: string | null,
+): SourceOption {
+  return (
+    SOURCE_OPTIONS.find(
+      (option) =>
+        option.source === source && option.sourceLabel === sourceLabel,
+    ) ??
+    SOURCE_OPTIONS.find((option) => option.source === source) ??
+    SOURCE_OPTIONS[0]
+  )
+}
+
+// The full-replace PUT body for an income row: the edited fields plus the
+// row's tax_treatment and account_id riding along unchanged, so the
+// replace can't clobber what the form doesn't edit. Returns null when the
+// amount doesn't parse — nothing should be sent.
+export function incomeUpdateInput(
+  item: ActivityItem,
+  rawAmount: string,
+  sourceKey: string,
+  budgetMonth: string,
+  txnDate: string,
+  rawSourceLabel: string,
+  rawNote: string,
+): IncomeUpdateInput | null {
+  const base = incomeInput(
+    rawAmount,
+    sourceKey,
+    budgetMonth,
+    txnDate,
+    rawSourceLabel,
+    rawNote,
+  )
+  if (!base) return null
+  return {
+    ...base,
+    ...(item.tax_treatment != null
+      ? { tax_treatment: item.tax_treatment }
+      : {}),
+    ...(item.account_id != null ? { account_id: item.account_id } : {}),
   }
 }
 

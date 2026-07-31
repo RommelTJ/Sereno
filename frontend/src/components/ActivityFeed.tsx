@@ -4,12 +4,14 @@ import type {
   BudgetMonth,
   ExpenseUpdateInput,
   Fund,
+  IncomeUpdateInput,
 } from '../api.ts'
-import { fetchBudgetMonth, updateExpense } from '../api.ts'
+import { fetchBudgetMonth, updateExpense, updateIncome } from '../api.ts'
 import { monthYearLabel, nextMonth, previousMonth } from '../budget.ts'
 import type { ActivityTone } from '../dashboard.ts'
 import { activityRow } from '../dashboard.ts'
 import ExpenseEditForm from './ExpenseEditForm.tsx'
+import IncomeEditForm from './IncomeEditForm.tsx'
 
 const ACTIVITY_TONES: Record<ActivityTone, { tile: string; amount: string }> =
   {
@@ -88,6 +90,13 @@ function ActivityFeed({
     setEditing(null)
   }
 
+  const saveIncome = async (item: ActivityItem, input: IncomeUpdateInput) => {
+    await updateIncome(item.id, input)
+    await refreshLoaded()
+    await onChanged?.()
+    setEditing(null)
+  }
+
   return (
     <>
       <button
@@ -160,6 +169,13 @@ function ActivityFeed({
                     categories={budget.categories}
                     funds={funds}
                     onSave={(input) => saveExpense(item, input)}
+                    onCancel={() => setEditing(null)}
+                  />
+                )}
+                {editing === row.key && item.type === 'income' && (
+                  <IncomeEditForm
+                    item={item}
+                    onSave={(input) => saveIncome(item, input)}
                     onCancel={() => setEditing(null)}
                   />
                 )}
