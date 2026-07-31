@@ -1225,4 +1225,24 @@ describe('Envelope activity filter', () => {
       within(feed).getByText('No ✈️ Travel activity this month.'),
     ).toBeInTheDocument()
   })
+
+  it('shows a chip in the Activity header that clears the filter', async () => {
+    render(<SafeToSpend />)
+
+    const feed = await screen.findByTestId('sts-activity')
+    const groceries = screen.getAllByTestId('envelope-row')[0]
+    fireEvent.click(groceries)
+
+    const chip = within(feed).getByTestId('activity-filter-chip')
+    expect(chip).toHaveTextContent('Filtering: 🛒 Groceries ✕')
+    fireEvent.click(chip)
+
+    // Cleared: the chip goes away, the full feed returns, and the
+    // envelope row reads unselected again.
+    expect(
+      within(feed).queryByTestId('activity-filter-chip'),
+    ).not.toBeInTheDocument()
+    expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)
+    expect(groceries).toHaveAttribute('aria-pressed', 'false')
+  })
 })
