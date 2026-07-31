@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.13.0**
+**v2.14.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -864,6 +864,27 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.14.0 — Fund moves land in the month they belong to. Top-ups were
+always stamped `date.today()`, so funding a coming budget month from a
+fund double-counted spendable money — the release raised the current
+month's headline while the transfer income raised the target month's —
+and a park recorded late charged the wrong month; the headline-neutral
+restatement existed only as curl against `POST /api/fund-entries`.
+`POST /api/funds/{id}/top-up` gains an optional `as_of_date` (default
+today): the entry scopes into its calendar month — the headline, feed,
+and yearly actual already group by `substr(as_of_date, 1, 7)` — a date
+behind the fund's latest entry is a 422 (snapshots resolve
+newest-first, so a mid-chain insert would silently drop out of the
+balance), and due monthly plans are applied through the date before
+the entry lands, so a move dated on a 1st can never swallow that
+month's planned contribution. The top-up form gains the matching
+"As of" date, and each fund row gains Correct balance — an inline form
+posting a hand-entered entry dated today, the NULL-source restatement
+safe-to-spend deliberately ignores — so reconciling a fund against the
+real account and the income-row + fund-drawdown month-funding recipe
+both work from a phone. No migration: `fund_entry` already carries
+every column.
 
 v2.13.0 — Envelopes answer "what did we actually spend?" on tap. There
 was no way to drill down from an envelope to its transactions —
