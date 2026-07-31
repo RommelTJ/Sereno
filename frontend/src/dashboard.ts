@@ -85,7 +85,9 @@ export interface ActivityRow {
 // One activity item as a display row. An expense's emoji comes from its
 // category's envelope in the passed month; every activity item funds that
 // month, so a credit's sub names it; a "treat" — an expense in an
-// over-budget envelope — shows in red.
+// over-budget envelope — shows in red. A pending row's title carries a
+// trailing ⚠️ — the reminder to true up a provisional amount, cleared by
+// unchecking Pending in the edit form once it settles.
 export function activityRow(
   item: ActivityItem,
   budget: BudgetMonth,
@@ -93,6 +95,7 @@ export function activityRow(
 ): ActivityRow {
   const key = `${item.type}-${item.id}`
   const date = shortDate(item.txn_date)
+  const flag = item.pending ? ' ⚠️' : ''
   if (item.type === 'income') {
     // The source label is the row's title; a row from before source_label
     // existed keeps its title-style note as the title, so the note only
@@ -101,7 +104,7 @@ export function activityRow(
     return {
       key,
       icon: '💵',
-      title: item.source_label ?? item.note ?? item.source ?? 'Income',
+      title: `${item.source_label ?? item.note ?? item.source ?? 'Income'}${flag}`,
       sub: `Funds ${monthLabel(budget.month)} · ${date}${note ? ` · ${note}` : ''}`,
       amount: `+${usd(item.amount)}`,
       tone: 'credit',
@@ -137,7 +140,7 @@ export function activityRow(
   return {
     key,
     icon: envelope?.emoji ?? fund?.emoji ?? '🧾',
-    title: item.note ?? item.category ?? 'Expense',
+    title: `${item.note ?? item.category ?? 'Expense'}${flag}`,
     sub: item.category ? `${item.category} · ${date}` : date,
     amount: `−${usd(item.amount)}`,
     tone: envelope != null && envelope.remaining < 0 ? 'treat' : 'debit',
