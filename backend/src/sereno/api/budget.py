@@ -400,6 +400,65 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
     return Expense(**dict(row))
 
 
+@router.put("/expenses/{expense_id}")
+def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
+    """Revises the row in place — a full replace under the create body's
+    validation, budget_month defaulting from the txn month, so an item can
+    be reassigned to the right month (the prepay pattern). Fund funding is
+    corrected with compensating entries (see _reverse_draw_down): a
+    same-fund amount change appends one delta entry, a changed funding
+    source reverses the old draw-down and freshly draws the new. The
+    overdraw guard re-applies either way, checked before anything is
+    written, so a 422 changes nothing."""
+    old = db.execute(
+        "SELECT funded_from, fund_id, amount FROM expense_line WHERE id = ?", (expense_id,)
+    ).fetchone()
+    if old is None:
+        raise HTTPException(status_code=404, detail="expense not found")
+    _require(db, "category", expense.category_id, "category")
+    _require(db, "fund", expense.fund_id, "fund")
+    _require(db, "account", expense.account_id, "account")
+    old_fund = old["fund_id"] if old["funded_from"] == "fund" else None
+    new_fund = expense.fund_id if expense.funded_from == "fund" else None
+    if old_fund is not None and old_fund == new_fund:
+        delta = expense.amount - old["amount"]
+        if delta > _fund_balance(db, old_fund):
+            raise HTTPException(status_code=422, detail="expense exceeds fund balance")
+        if delta != 0:
+            _reverse_draw_down(db, old_fund, -delta)
+    else:
+        if new_fund is not None and expense.amount > _fund_balance(db, new_fund):
+            raise HTTPException(status_code=422, detail="expense exceeds fund balance")
+        if old_fund is not None:
+            _reverse_draw_down(db, old_fund, old["amount"])
+        if new_fund is not None:
+            _reverse_draw_down(db, new_fund, -expense.amount)
+    db.execute(
+        "UPDATE expense_line SET txn_date = ?, budget_month = ?, category_id = ?, amount = ?,"
+        " is_fixed = ?, funded_from = ?, fund_id = ?, account_id = ?, note = ? WHERE id = ?",
+        (
+            expense.txn_date.isoformat(),
+            expense.budget_month or expense.txn_date.strftime("%Y-%m"),
+            expense.category_id,
+            expense.amount,
+            expense.is_fixed,
+            expense.funded_from,
+            expense.fund_id,
+            expense.account_id,
+            expense.note,
+            expense_id,
+        ),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id, txn_date, budget_month, category_id, amount, is_fixed,"
+        " funded_from, fund_id, account_id, note, created_at"
+        " FROM expense_line WHERE id = ?",
+        (expense_id,),
+    ).fetchone()
+    return Expense(**dict(row))
+
+
 @router.delete("/expenses/{expense_id}", status_code=204)
 def delete_expense(expense_id: int, db: Db) -> None:
     """Hard delete: nothing references an expense row, so a provisional or
