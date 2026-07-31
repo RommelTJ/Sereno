@@ -166,6 +166,61 @@ describe("Update this month's balances form", () => {
     expect(screen.queryByLabelText('ETH held')).not.toBeInTheDocument()
   })
 
+  it("prefills $ / ETH from another eth account's newer entry in the month", async () => {
+    // The price is market-wide: Ethereum's own June entry says 3,500, but
+    // ETH Wallet was saved later in the month at 3,600.
+    stubApi({
+      '/api/accounts': [
+        ...ACCOUNTS,
+        { ...ACCOUNTS[0], id: 11, name: 'ETH Wallet' },
+      ],
+      '/api/ledger': [
+        {
+          ...LEDGER[0],
+          balances: [
+            ...LEDGER[0].balances,
+            balance(11, '2026-06-15', 18_000, 5, 3_600),
+          ],
+        },
+        LEDGER[1],
+      ],
+      '/api/quick-links': [],
+    })
+    render(<Ledger />)
+
+    expect(await screen.findByLabelText('$ / ETH')).toHaveValue('3,600')
+    expect(screen.getByLabelText('ETH held')).toHaveValue('20')
+  })
+
+  it("prefills $ / ETH from another eth account's newer month", async () => {
+    // ETH Wallet's own newest entry is May at 3,400; Ethereum's June entry
+    // carries the newer price. Quantity still comes from the wallet's own.
+    stubApi({
+      '/api/accounts': [
+        ...ACCOUNTS,
+        { ...ACCOUNTS[0], id: 11, name: 'ETH Wallet' },
+      ],
+      '/api/ledger': [
+        LEDGER[0],
+        {
+          ...LEDGER[1],
+          balances: [
+            ...LEDGER[1].balances,
+            balance(11, '2026-05-01', 17_000, 5, 3_400),
+          ],
+        },
+      ],
+      '/api/quick-links': [],
+    })
+    render(<Ledger />)
+
+    fireEvent.change(await screen.findByLabelText('Account'), {
+      target: { value: '11' },
+    })
+    expect(screen.getByLabelText('$ / ETH')).toHaveValue('3,500')
+    expect(screen.getByLabelText('ETH held')).toHaveValue('5')
+  })
+
   it('recomputes the ETH value readout as quantity and price change', async () => {
     render(<Ledger />)
 

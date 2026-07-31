@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.8.0**
+**v2.9.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -777,6 +777,19 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.9.0 — The ETH price is typed once, not once per account. The
+Ledger form's `$ / ETH` field used to prefill from the selected
+account's own newest entry, so updating two eth-kind accounts on the
+same day meant entering the same market price twice. It now prefills
+from the newest `unit_price` across all eth-kind accounts — newest
+month first, newest as-of date within the month — so saving one eth
+account carries the price to the next, including across page reloads,
+since the price lives in the ledger. Quantity still prefills from the
+selected account's own newest entry, the field stays editable per
+save, and each entry keeps snapshotting its own `unit_price`, so
+backdating a different price still works. Frontend-only: no API,
+schema, or migration changes.
 
 v2.8.0 — Last month's leftover gets a job. Safe-to-spend is
 month-scoped, so when a month closed with money left over there was

@@ -66,17 +66,46 @@ export function latestBalance(
   return undefined
 }
 
-// Prefill the draft from the account's newest ledger entry.
+// The newest $/ETH across every eth-kind account's entries: the price is
+// market-wide, so saving one eth account prefills the next. Months are
+// walked newest first; within a month the newest as_of_date wins, since
+// balances arrive in account order, not recency.
+export function latestEthPrice(
+  months: LedgerMonth[],
+  accounts: Account[],
+): number | undefined {
+  const ethIds = new Set(
+    accounts
+      .filter((account) => account.kind === 'eth')
+      .map((account) => account.id),
+  )
+  for (const month of months) {
+    const priced = month.balances.filter(
+      (entry) => ethIds.has(entry.account_id) && entry.unit_price !== null,
+    )
+    if (priced.length) {
+      const newest = priced.reduce((best, entry) =>
+        entry.as_of_date > best.as_of_date ? entry : best,
+      )
+      return newest.unit_price ?? undefined
+    }
+  }
+  return undefined
+}
+
+// Prefill the draft from the account's newest ledger entry — except the
+// ETH price, which comes from any eth-kind account's newest entry.
 export function draftFor(
   account: Account,
   months: LedgerMonth[],
+  accounts: Account[],
 ): BalanceDraft {
   const balance = latestBalance(months, account.id)
   if (account.kind === 'eth') {
     return {
       value: '',
       qty: formatAmount(balance?.quantity ?? 0),
-      price: formatAmount(balance?.unit_price ?? 0),
+      price: formatAmount(latestEthPrice(months, accounts) ?? 0),
     }
   }
   return { value: formatAmount(balance?.balance_usd ?? 0), qty: '', price: '' }
