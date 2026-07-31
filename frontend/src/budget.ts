@@ -3,9 +3,11 @@
 // headline is never recomputed client-side.
 
 import type {
+  ActivityItem,
   BudgetMonth,
   Envelope,
   ExpenseInput,
+  ExpenseUpdateInput,
   IncomeInput,
   IncomeSource,
 } from './api.ts'
@@ -163,6 +165,46 @@ export function fundsMonthOptions(todayIsoDate: string): MonthOption[] {
       }),
     }
   })
+}
+
+// The months an edit form offers: the txn month and the next two — the
+// same prepay window the create forms use — with the stored budget month
+// prepended when it falls outside, so an old row's month is always
+// representable in the select.
+export function editMonthOptions(
+  storedMonth: string,
+  txnDate: string,
+): MonthOption[] {
+  const options = fundsMonthOptions(txnDate)
+  if (options.some((option) => option.value === storedMonth)) return options
+  const [year, monthNumber] = storedMonth.split('-').map(Number)
+  const label = new Date(year, monthNumber - 1).toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+  })
+  return [{ value: storedMonth, label }, ...options]
+}
+
+// The full-replace PUT body: the picked funding source and edited fields,
+// with the row's is_fixed and account_id riding along unchanged so the
+// replace can't clobber what the form doesn't edit. Returns null when the
+// amount or the picked id doesn't parse — nothing should be sent.
+export function expenseUpdateInput(
+  item: ActivityItem,
+  rawAmount: string,
+  paidFrom: string,
+  txnDate: string,
+  budgetMonth: string,
+  rawNote: string,
+): ExpenseUpdateInput | null {
+  const base = expenseInput(rawAmount, paidFrom, txnDate, rawNote)
+  if (!base) return null
+  return {
+    ...base,
+    budget_month: budgetMonth,
+    ...(item.is_fixed ? { is_fixed: true } : {}),
+    ...(item.account_id != null ? { account_id: item.account_id } : {}),
+  }
 }
 
 // Returns null when the amount doesn't parse — nothing should be posted.

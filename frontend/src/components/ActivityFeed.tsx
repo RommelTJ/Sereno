@@ -1,9 +1,15 @@
 import { useState } from 'react'
-import type { BudgetMonth, Fund } from '../api.ts'
-import { fetchBudgetMonth } from '../api.ts'
+import type {
+  ActivityItem,
+  BudgetMonth,
+  ExpenseUpdateInput,
+  Fund,
+} from '../api.ts'
+import { fetchBudgetMonth, updateExpense } from '../api.ts'
 import { monthYearLabel, nextMonth, previousMonth } from '../budget.ts'
 import type { ActivityTone } from '../dashboard.ts'
 import { activityRow } from '../dashboard.ts'
+import ExpenseEditForm from './ExpenseEditForm.tsx'
 
 const ACTIVITY_TONES: Record<ActivityTone, { tile: string; amount: string }> =
   {
@@ -23,16 +29,22 @@ const ACTIVITY_TONES: Record<ActivityTone, { tile: string; amount: string }> =
 // empty future month just renders the "No activity yet" state.
 // Each section keeps its own BudgetMonth, because a row's envelope emoji
 // resolves from that month's categories.
+// With onChanged set (Safe-to-spend; the Dashboard stays read-only),
+// expense and income rows are tappable and expand an inline pre-filled
+// edit form; fund rows belong to the funds machinery and never are.
 function ActivityFeed({
   current,
   funds,
+  onChanged,
 }: {
   current: BudgetMonth
   funds: Fund[]
+  onChanged?: () => Promise<void>
 }) {
   const [later, setLater] = useState<BudgetMonth[]>([])
   const [earlier, setEarlier] = useState<BudgetMonth[]>([])
   const [loading, setLoading] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)
   const months = [...later, current, ...earlier]
   const forwardTarget = nextMonth(months[0].month)
   const target = previousMonth(months[months.length - 1].month)
@@ -57,6 +69,25 @@ function ActivityFeed({
     }
   }
 
+  // An edit can move an item into or out of any loaded month (the
+  // budget-month reassignment), so every paged-in section refetches
+  // alongside the parent's current-month refresh.
+  const refreshLoaded = async () => {
+    const [nextLater, nextEarlier] = await Promise.all([
+      Promise.all(later.map((month) => fetchBudgetMonth(month.month))),
+      Promise.all(earlier.map((month) => fetchBudgetMonth(month.month))),
+    ])
+    setLater(nextLater)
+    setEarlier(nextEarlier)
+  }
+
+  const saveExpense = async (item: ActivityItem, input: ExpenseUpdateInput) => {
+    await updateExpense(item.id, input)
+    await refreshLoaded()
+    await onChanged?.()
+    setEditing(null)
+  }
+
   return (
     <>
       <button
@@ -79,12 +110,9 @@ function ActivityFeed({
           )}
           {budget.activity.map((item) => {
             const row = activityRow(item, budget, funds)
-            return (
-              <div
-                key={row.key}
-                data-testid="activity-row"
-                className="flex items-center justify-between border-b border-hairline-2 py-[13px]"
-              >
+            const editable = onChanged != null && item.type !== 'fund'
+            const content = (
+              <>
                 <div className="flex items-center gap-3">
                   <div
                     className={`flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-[15px] ${ACTIVITY_TONES[row.tone].tile}`}
@@ -101,6 +129,40 @@ function ActivityFeed({
                 >
                   {row.amount}
                 </p>
+              </>
+            )
+            if (!editable) {
+              return (
+                <div
+                  key={row.key}
+                  data-testid="activity-row"
+                  className="flex items-center justify-between border-b border-hairline-2 py-[13px]"
+                >
+                  {content}
+                </div>
+              )
+            }
+            return (
+              <div key={row.key}>
+                <button
+                  type="button"
+                  data-testid="activity-row"
+                  onClick={() =>
+                    setEditing(editing === row.key ? null : row.key)
+                  }
+                  className="flex w-full cursor-pointer items-center justify-between border-b border-hairline-2 py-[13px] text-left"
+                >
+                  {content}
+                </button>
+                {editing === row.key && item.type === 'expense' && (
+                  <ExpenseEditForm
+                    item={item}
+                    categories={budget.categories}
+                    funds={funds}
+                    onSave={(input) => saveExpense(item, input)}
+                    onCancel={() => setEditing(null)}
+                  />
+                )}
               </div>
             )
           })}

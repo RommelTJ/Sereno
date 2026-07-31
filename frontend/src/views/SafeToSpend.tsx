@@ -62,6 +62,19 @@ function SafeToSpend() {
     setBudget(await fetchBudgetMonth())
   }
 
+  // An item edit or delete can touch anything: the hero and envelopes, a
+  // fund's balance (fund-funded corrections), and last month's leftover
+  // line (a reassigned budget month) — so everything refetches.
+  const refresh = async () => {
+    const [nextBudget, nextFunds] = await Promise.all([
+      fetchBudgetMonth(),
+      fetchFunds(),
+    ])
+    setBudget(nextBudget)
+    setFunds(nextFunds)
+    setPrevious(await fetchBudgetMonth(previousMonth(nextBudget.month)))
+  }
+
   return (
     <div
       data-testid="view-safe-to-spend"
@@ -96,7 +109,11 @@ function SafeToSpend() {
               <div className="border-b border-hairline pt-4 pb-2.5">
                 <p className="text-sm font-bold">Activity</p>
               </div>
-              <ActivityFeed current={budget} funds={funds} />
+              <ActivityFeed
+                current={budget}
+                funds={funds}
+                onChanged={refresh}
+              />
             </section>
           </div>
         </>
