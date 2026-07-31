@@ -1245,4 +1245,40 @@ describe('Envelope activity filter', () => {
     expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)
     expect(groceries).toHaveAttribute('aria-pressed', 'false')
   })
+
+  it('toggles the filter off when the selected envelope is tapped again', async () => {
+    render(<SafeToSpend />)
+
+    const feed = await screen.findByTestId('sts-activity')
+    const groceries = screen.getAllByTestId('envelope-row')[0]
+    fireEvent.click(groceries)
+    fireEvent.click(groceries)
+
+    expect(groceries).toHaveAttribute('aria-pressed', 'false')
+    expect(
+      within(feed).queryByTestId('activity-filter-chip'),
+    ).not.toBeInTheDocument()
+    expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)
+  })
+
+  it('replaces the filter when a different envelope is tapped', async () => {
+    render(<SafeToSpend />)
+
+    const feed = await screen.findByTestId('sts-activity')
+    const rows = screen.getAllByTestId('envelope-row')
+    fireEvent.click(rows[0])
+    fireEvent.click(rows[2])
+
+    // Entertainment replaces Groceries — one filter at a time.
+    expect(rows[0]).toHaveAttribute('aria-pressed', 'false')
+    expect(rows[2]).toHaveAttribute('aria-pressed', 'true')
+    const visible = within(feed).getAllByTestId('activity-row')
+    expect(visible).toHaveLength(1)
+    expect(
+      within(visible[0]).getByText('Entertainment · Jun 26'),
+    ).toBeInTheDocument()
+    expect(within(feed).getByTestId('activity-filter-chip')).toHaveTextContent(
+      'Filtering: 🤪 Entertainment ✕',
+    )
+  })
 })
