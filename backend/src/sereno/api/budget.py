@@ -72,7 +72,9 @@ class CategoryPlan(BaseModel):
 
 class ExpenseCreate(BaseModel):
     """budget_month defaults to the txn's month; pass a later month to prepay
-    (June pay funds July). fund_id goes with funded_from='fund', never alone."""
+    (June pay funds July). fund_id goes with funded_from='fund', never alone.
+    pending marks a provisional amount to true up after it settles — a feed
+    reminder that never excludes the row from the math."""
 
     txn_date: date
     budget_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
@@ -83,6 +85,7 @@ class ExpenseCreate(BaseModel):
     fund_id: int | None = None
     account_id: int | None = None
     note: str | None = None
+    pending: bool = False
 
     @model_validator(mode="after")
     def fund_id_iff_fund_spending(self) -> Self:
@@ -102,6 +105,7 @@ class Expense(BaseModel):
     fund_id: int | None
     account_id: int | None
     note: str | None
+    pending: bool
     created_at: datetime
 
 
@@ -109,7 +113,8 @@ class IncomeCreate(BaseModel):
     """budget_month is the month this inflow funds; it defaults to the txn's
     month — the prepay pattern passes the next month (June pay funds July).
     source_label is the row's display title ("Spouse paycheck") — the context
-    the source enum can't carry — leaving note to be a true note."""
+    the source enum can't carry — leaving note to be a true note. pending
+    marks a provisional amount to true up after it settles."""
 
     txn_date: date
     budget_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
@@ -119,6 +124,7 @@ class IncomeCreate(BaseModel):
     account_id: int | None = None
     source_label: str | None = None
     note: str | None = None
+    pending: bool = False
 
 
 class Income(BaseModel):
@@ -131,6 +137,7 @@ class Income(BaseModel):
     account_id: int | None
     source_label: str | None
     note: str | None
+    pending: bool
     created_at: datetime
 
 
@@ -376,8 +383,8 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
         _draw_down_fund(db, expense)
     cursor = db.execute(
         "INSERT INTO expense_line (txn_date, budget_month, category_id, amount,"
-        " is_fixed, funded_from, fund_id, account_id, note)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " is_fixed, funded_from, fund_id, account_id, note, pending)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             expense.txn_date.isoformat(),
             expense.budget_month or expense.txn_date.strftime("%Y-%m"),
@@ -388,12 +395,13 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
             expense.fund_id,
             expense.account_id,
             expense.note,
+            expense.pending,
         ),
     )
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, category_id, amount, is_fixed,"
-        " funded_from, fund_id, account_id, note, created_at"
+        " funded_from, fund_id, account_id, note, pending, created_at"
         " FROM expense_line WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
@@ -435,7 +443,8 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
             _reverse_draw_down(db, new_fund, -expense.amount)
     db.execute(
         "UPDATE expense_line SET txn_date = ?, budget_month = ?, category_id = ?, amount = ?,"
-        " is_fixed = ?, funded_from = ?, fund_id = ?, account_id = ?, note = ? WHERE id = ?",
+        " is_fixed = ?, funded_from = ?, fund_id = ?, account_id = ?, note = ?, pending = ?"
+        " WHERE id = ?",
         (
             expense.txn_date.isoformat(),
             expense.budget_month or expense.txn_date.strftime("%Y-%m"),
@@ -446,13 +455,14 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
             expense.fund_id,
             expense.account_id,
             expense.note,
+            expense.pending,
             expense_id,
         ),
     )
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, category_id, amount, is_fixed,"
-        " funded_from, fund_id, account_id, note, created_at"
+        " funded_from, fund_id, account_id, note, pending, created_at"
         " FROM expense_line WHERE id = ?",
         (expense_id,),
     ).fetchone()
@@ -480,7 +490,8 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
     _require(db, "account", income.account_id, "account")
     cursor = db.execute(
         "INSERT INTO income_event (txn_date, budget_month, source, amount,"
-        " tax_treatment, account_id, source_label, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        " tax_treatment, account_id, source_label, note, pending)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             income.txn_date.isoformat(),
             income.budget_month or income.txn_date.strftime("%Y-%m"),
@@ -490,12 +501,13 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
             income.account_id,
             income.source_label,
             income.note,
+            income.pending,
         ),
     )
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, source, amount, tax_treatment,"
-        " account_id, source_label, note, created_at FROM income_event WHERE id = ?",
+        " account_id, source_label, note, pending, created_at FROM income_event WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
     return Income(**dict(row))
@@ -511,7 +523,8 @@ def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
     _require(db, "account", income.account_id, "account")
     db.execute(
         "UPDATE income_event SET txn_date = ?, budget_month = ?, source = ?, amount = ?,"
-        " tax_treatment = ?, account_id = ?, source_label = ?, note = ? WHERE id = ?",
+        " tax_treatment = ?, account_id = ?, source_label = ?, note = ?, pending = ?"
+        " WHERE id = ?",
         (
             income.txn_date.isoformat(),
             income.budget_month or income.txn_date.strftime("%Y-%m"),
@@ -521,13 +534,14 @@ def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
             income.account_id,
             income.source_label,
             income.note,
+            income.pending,
             income_id,
         ),
     )
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, source, amount, tax_treatment,"
-        " account_id, source_label, note, created_at FROM income_event WHERE id = ?",
+        " account_id, source_label, note, pending, created_at FROM income_event WHERE id = ?",
         (income_id,),
     ).fetchone()
     return Income(**dict(row))
