@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.12.0**
+**v2.13.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -839,6 +839,20 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.13.0 — Envelopes answer "what did we actually spend?" on tap. There
+was no way to drill down from an envelope to its transactions —
+answering the question meant scanning the whole Activity feed. Every
+envelope row on Safe-to-spend is now a tap target: tapping one filters
+the feed to that envelope's own expenses (income, fund entries, and
+fund-funded lines belong to no envelope, so they drop out — across
+paged-in months too), the selected row tints, and a "Filtering: 🛒
+Groceries ✕" chip in the Activity header clears it — as does re-tapping
+the envelope, while tapping a different one replaces the filter. A
+filtered month with nothing left says so instead of claiming no
+activity exists. Frontend-only: the feed already carried category_id
+on every expense row, so filtering is a client-side trim of what
+`GET /api/budget-month` returns.
 
 v2.12.0 — Over-budget envelopes stop hiding what was spent. An envelope
 past its plan showed only the overage ("$46 over"), so answering "what
