@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type {
   ActivityItem,
   BudgetMonth,
+  Envelope,
   ExpenseUpdateInput,
   Fund,
   IncomeUpdateInput,
@@ -13,7 +14,12 @@ import {
   updateExpense,
   updateIncome,
 } from '../api.ts'
-import { monthYearLabel, nextMonth, previousMonth } from '../budget.ts'
+import {
+  envelopeView,
+  monthYearLabel,
+  nextMonth,
+  previousMonth,
+} from '../budget.ts'
 import type { ActivityTone } from '../dashboard.ts'
 import { activityRow } from '../dashboard.ts'
 import ExpenseEditForm from './ExpenseEditForm.tsx'
@@ -40,14 +46,19 @@ const ACTIVITY_TONES: Record<ActivityTone, { tile: string; amount: string }> =
 // With onChanged set (Safe-to-spend; the Dashboard stays read-only),
 // expense and income rows are tappable and expand an inline pre-filled
 // edit form; fund rows belong to the funds machinery and never are.
+// With filter set (a tapped envelope), every loaded section keeps only
+// that envelope's own expenses — income, fund entries, and fund-funded
+// lines belong to no envelope, so they drop out.
 function ActivityFeed({
   current,
   funds,
   onChanged,
+  filter,
 }: {
   current: BudgetMonth
   funds: Fund[]
   onChanged?: () => Promise<void>
+  filter?: Envelope | null
 }) {
   const [later, setLater] = useState<BudgetMonth[]>([])
   const [earlier, setEarlier] = useState<BudgetMonth[]>([])
@@ -76,6 +87,16 @@ function ActivityFeed({
       setLoading(false)
     }
   }
+
+  // A section's visible rows under the active filter. Only expenses carry
+  // a category_id, so income, fund entries, and fund-funded lines (their
+  // category_id is null — the fund says what the spend was for) drop out.
+  const visibleActivity = (budget: BudgetMonth) =>
+    filter
+      ? budget.activity.filter(
+          (item) => item.type === 'expense' && item.category_id === filter.id,
+        )
+      : budget.activity
 
   // An edit can move an item into or out of any loaded month (the
   // budget-month reassignment), so every paged-in section refetches
@@ -127,12 +148,14 @@ function ActivityFeed({
           <p className="pt-3.5 text-[11px] font-semibold tracking-[1.2px] text-muted-2 uppercase">
             {monthYearLabel(budget.month)}
           </p>
-          {budget.activity.length === 0 && (
+          {visibleActivity(budget).length === 0 && (
             <p className="py-4 text-[12.5px] text-muted">
-              No activity yet — spending and funding items land here.
+              {filter
+                ? `No ${envelopeView(filter).label} activity this month.`
+                : 'No activity yet — spending and funding items land here.'}
             </p>
           )}
-          {budget.activity.map((item) => {
+          {visibleActivity(budget).map((item) => {
             const row = activityRow(item, budget, funds)
             const editable = onChanged != null && item.type !== 'fund'
             // min-w-0 down the left side lets a long title wrap inside the

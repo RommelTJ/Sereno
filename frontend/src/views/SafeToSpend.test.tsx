@@ -1195,3 +1195,90 @@ describe('Item delete', () => {
     expect(deleteCalls(fetchMock)).toHaveLength(0)
   })
 })
+
+describe('Envelope activity filter', () => {
+  it('filters the feed to the tapped envelope', async () => {
+    render(<SafeToSpend />)
+
+    const feed = await screen.findByTestId('sts-activity')
+    const groceries = screen.getAllByTestId('envelope-row')[0]
+    fireEvent.click(groceries)
+
+    // The tapped row reads as selected, and the feed keeps only the
+    // envelope's own expenses — the Entertainment expense, the fund entry,
+    // and the income row all drop out.
+    expect(groceries).toHaveAttribute('aria-pressed', 'true')
+    const rows = within(feed).getAllByTestId('activity-row')
+    expect(rows).toHaveLength(1)
+    expect(within(rows[0]).getByText('Groceries · Jun 10')).toBeInTheDocument()
+  })
+
+  it('shows a filter-aware empty state for an envelope with no activity', async () => {
+    render(<SafeToSpend />)
+
+    const feed = await screen.findByTestId('sts-activity')
+    // Travel has a row in the envelopes card but no expenses in the feed.
+    fireEvent.click(screen.getAllByTestId('envelope-row')[3])
+
+    expect(within(feed).queryAllByTestId('activity-row')).toHaveLength(0)
+    expect(
+      within(feed).getByText('No ✈️ Travel activity this month.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a chip in the Activity header that clears the filter', async () => {
+    render(<SafeToSpend />)
+
+    const feed = await screen.findByTestId('sts-activity')
+    const groceries = screen.getAllByTestId('envelope-row')[0]
+    fireEvent.click(groceries)
+
+    const chip = within(feed).getByTestId('activity-filter-chip')
+    expect(chip).toHaveTextContent('Filtering: 🛒 Groceries ✕')
+    fireEvent.click(chip)
+
+    // Cleared: the chip goes away, the full feed returns, and the
+    // envelope row reads unselected again.
+    expect(
+      within(feed).queryByTestId('activity-filter-chip'),
+    ).not.toBeInTheDocument()
+    expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)
+    expect(groceries).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('toggles the filter off when the selected envelope is tapped again', async () => {
+    render(<SafeToSpend />)
+
+    const feed = await screen.findByTestId('sts-activity')
+    const groceries = screen.getAllByTestId('envelope-row')[0]
+    fireEvent.click(groceries)
+    fireEvent.click(groceries)
+
+    expect(groceries).toHaveAttribute('aria-pressed', 'false')
+    expect(
+      within(feed).queryByTestId('activity-filter-chip'),
+    ).not.toBeInTheDocument()
+    expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)
+  })
+
+  it('replaces the filter when a different envelope is tapped', async () => {
+    render(<SafeToSpend />)
+
+    const feed = await screen.findByTestId('sts-activity')
+    const rows = screen.getAllByTestId('envelope-row')
+    fireEvent.click(rows[0])
+    fireEvent.click(rows[2])
+
+    // Entertainment replaces Groceries — one filter at a time.
+    expect(rows[0]).toHaveAttribute('aria-pressed', 'false')
+    expect(rows[2]).toHaveAttribute('aria-pressed', 'true')
+    const visible = within(feed).getAllByTestId('activity-row')
+    expect(visible).toHaveLength(1)
+    expect(
+      within(visible[0]).getByText('Entertainment · Jun 26'),
+    ).toBeInTheDocument()
+    expect(within(feed).getByTestId('activity-filter-chip')).toHaveTextContent(
+      'Filtering: 🤪 Entertainment ✕',
+    )
+  })
+})
