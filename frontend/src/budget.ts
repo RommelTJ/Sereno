@@ -197,8 +197,9 @@ export function expenseUpdateInput(
   txnDate: string,
   budgetMonth: string,
   rawNote: string,
+  pending = false,
 ): ExpenseUpdateInput | null {
-  const base = expenseInput(rawAmount, paidFrom, txnDate, rawNote)
+  const base = expenseInput(rawAmount, paidFrom, txnDate, rawNote, pending)
   if (!base) return null
   return {
     ...base,
@@ -210,7 +211,8 @@ export function expenseUpdateInput(
 
 // Returns null when the amount doesn't parse — nothing should be posted.
 // A whitespace-only source title or note is omitted from the payload,
-// never sent empty.
+// never sent empty, and so is an unchecked pending — the server defaults
+// it false, which also clears the flag on the full-replace PUT.
 export function incomeInput(
   rawAmount: string,
   sourceKey: string,
@@ -218,6 +220,7 @@ export function incomeInput(
   txnDate: string,
   rawSourceLabel: string,
   rawNote: string,
+  pending = false,
 ): IncomeInput | null {
   const amount = parseAmount(rawAmount)
   const option = SOURCE_OPTIONS.find((source) => source.value === sourceKey)
@@ -231,6 +234,7 @@ export function incomeInput(
     amount,
     ...(sourceLabel ? { source_label: sourceLabel } : {}),
     ...(note ? { note } : {}),
+    ...(pending ? { pending: true } : {}),
   }
 }
 
@@ -264,6 +268,7 @@ export function incomeUpdateInput(
   txnDate: string,
   rawSourceLabel: string,
   rawNote: string,
+  pending = false,
 ): IncomeUpdateInput | null {
   const base = incomeInput(
     rawAmount,
@@ -272,6 +277,7 @@ export function incomeUpdateInput(
     txnDate,
     rawSourceLabel,
     rawNote,
+    pending,
   )
   if (!base) return null
   return {
@@ -288,12 +294,13 @@ export function incomeUpdateInput(
 // spending, no category). budget_month is left to the server default (the
 // txn's month). Returns null when the amount or the picked id doesn't
 // parse — nothing should be posted. A whitespace-only note is omitted
-// from the payload, never sent empty.
+// from the payload, never sent empty, and so is an unchecked pending.
 export function expenseInput(
   rawAmount: string,
   paidFrom: string,
   txnDate: string,
   rawNote: string,
+  pending = false,
 ): ExpenseInput | null {
   const amount = parseAmount(rawAmount)
   if (!amount) return null
@@ -302,6 +309,7 @@ export function expenseInput(
     txn_date: txnDate,
     amount,
     ...(note ? { note } : {}),
+    ...(pending ? { pending: true } : {}),
   }
   const [kind, rawId] = paidFrom.split(':')
   const id = Number(rawId)

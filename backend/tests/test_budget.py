@@ -523,6 +523,7 @@ class TestPostExpenses:
             "fund_id": None,
             "account_id": account_id,
             "note": "Weekly shop",
+            "pending": False,
         }
         rows = query("SELECT budget_month, amount FROM expense_line")
         assert rows == [{"budget_month": "2026-06", "amount": 254.82}]
@@ -534,6 +535,24 @@ class TestPostExpenses:
         )
         assert response.status_code == 201
         assert response.json()["budget_month"] == "2026-07"
+
+    def test_pending_defaults_to_false(self, client):
+        response = client.post("/api/expenses", json={"txn_date": "2026-06-10", "amount": 96})
+        assert response.status_code == 201
+        assert response.json()["pending"] is False
+
+    def test_a_pending_expense_still_counts_in_safe_to_spend(self, client):
+        # The money has already left and the known amount is a floor — the
+        # flag is a reminder to true up, never an exclusion.
+        response = client.post(
+            "/api/expenses",
+            json={"txn_date": "2026-06-10", "amount": 96, "pending": True},
+        )
+        assert response.status_code == 201
+        assert response.json()["pending"] is True
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["total_spent"] == 96
+        assert body["safe_to_spend"] == -96
 
     def test_fund_spending_records_the_fund(self, client):
         bike_id = insert_fund("Bike fund")
@@ -691,6 +710,22 @@ class TestUpdateExpense:
         response = client.put(f"/api/expenses/{expense_id}", json=payload)
         assert response.status_code == 200
         assert response.json()["budget_month"] == "2026-06"
+
+    def test_the_edit_can_set_pending(self, client):
+        expense_id = self.insert_expense(client)
+        payload = {"txn_date": "2026-06-10", "amount": 96, "pending": True}
+        response = client.put(f"/api/expenses/{expense_id}", json=payload)
+        assert response.status_code == 200
+        assert response.json()["pending"] is True
+
+    def test_an_omitted_pending_clears_the_flag(self, client):
+        # The edit is a full replace: settling a pending charge means
+        # saving the trued-up amount without the flag, and the ⚠️ drops.
+        expense_id = self.insert_expense(client, pending=True)
+        payload = {"txn_date": "2026-06-10", "amount": 118.4}
+        response = client.put(f"/api/expenses/{expense_id}", json=payload)
+        assert response.status_code == 200
+        assert response.json()["pending"] is False
 
     def test_a_reassigned_month_moves_the_item_between_feeds(self, client):
         expense_id = self.insert_expense(client)
@@ -940,6 +975,7 @@ class TestPostIncome:
             "account_id": account_id,
             "source_label": "You paycheck",
             "note": "Includes the spot bonus",
+            "pending": False,
         }
         rows = query("SELECT budget_month, source, amount, source_label, note FROM income_event")
         assert rows == [
@@ -959,6 +995,22 @@ class TestPostIncome:
         )
         assert response.status_code == 201
         assert response.json()["source_label"] is None
+
+    def test_pending_defaults_to_false(self, client):
+        response = client.post(
+            "/api/income",
+            json={"txn_date": "2026-06-15", "source": "interest", "amount": 12.34},
+        )
+        assert response.status_code == 201
+        assert response.json()["pending"] is False
+
+    def test_marks_an_income_event_pending(self, client):
+        response = client.post(
+            "/api/income",
+            json={"txn_date": "2026-06-15", "source": "staking", "amount": 120, "pending": True},
+        )
+        assert response.status_code == 201
+        assert response.json()["pending"] is True
 
     def test_budget_month_defaults_to_the_txn_month(self, client):
         response = client.post(
@@ -1047,6 +1099,20 @@ class TestUpdateIncome:
         body = client.put(f"/api/income/{income_id}", json=payload).json()
         assert body["source_label"] is None
         assert body["note"] is None
+
+    def test_the_edit_can_set_pending(self, client):
+        income_id = self.insert_income(client)
+        payload = {"txn_date": "2026-06-27", "source": "paycheck", "amount": 2800, "pending": True}
+        response = client.put(f"/api/income/{income_id}", json=payload)
+        assert response.status_code == 200
+        assert response.json()["pending"] is True
+
+    def test_an_omitted_pending_clears_the_flag(self, client):
+        income_id = self.insert_income(client, pending=True)
+        payload = {"txn_date": "2026-06-27", "source": "paycheck", "amount": 2800}
+        response = client.put(f"/api/income/{income_id}", json=payload)
+        assert response.status_code == 200
+        assert response.json()["pending"] is False
 
     def test_unknown_income_returns_404(self, client):
         payload = {"txn_date": "2026-06-27", "source": "paycheck", "amount": 2800}
@@ -1322,6 +1388,20 @@ class TestGetBudgetMonth:
         assert income["fund_id"] is None
         assert income["is_fixed"] is None
 
+    def test_activity_carries_the_pending_flag(self, client):
+        # The feed is the edit form's only read and the ⚠️ renders from
+        # the row itself, so expense and income rows carry the stored flag.
+        self.spend(client, 96, txn_date="2026-06-20", pending=True)
+        self.spend(client, 40, txn_date="2026-06-18")
+        payload = {"txn_date": "2026-06-24", "source": "paycheck", "amount": 2800, "pending": True}
+        assert client.post("/api/income", json=payload).status_code == 201
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [(item["type"], item["pending"]) for item in body["activity"]] == [
+            ("income", True),
+            ("expense", True),
+            ("expense", False),
+        ]
+
     def test_fund_activity_carries_null_edit_fields(self, client):
         # Fund rows belong to the funds machinery — no edit affordance, so
         # every edit-form field is null.
@@ -1337,6 +1417,7 @@ class TestGetBudgetMonth:
         assert fund_item["is_fixed"] is None
         assert fund_item["budget_month"] is None
         assert fund_item["tax_treatment"] is None
+        assert fund_item["pending"] is None
 
     def test_monthly_plan_and_top_up_entries_appear_as_fund_activity(self, client):
         # The feed lists exactly the sources the fund_contributions headline

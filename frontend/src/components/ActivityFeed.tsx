@@ -135,21 +135,26 @@ function ActivityFeed({
           {budget.activity.map((item) => {
             const row = activityRow(item, budget, funds)
             const editable = onChanged != null && item.type !== 'fund'
+            // min-w-0 down the left side lets a long title wrap inside the
+            // row instead of pushing it wide; the icon tile and the amount
+            // never shrink or break.
             const content = (
               <>
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <div
-                    className={`flex h-[34px] w-[34px] items-center justify-center rounded-[10px] text-[15px] ${ACTIVITY_TONES[row.tone].tile}`}
+                    className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-[15px] ${ACTIVITY_TONES[row.tone].tile}`}
                   >
                     {row.icon}
                   </div>
-                  <div>
-                    <p className="text-[13.5px] font-semibold">{row.title}</p>
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-semibold break-words">
+                      {row.title}
+                    </p>
                     <p className="text-[11.5px] text-muted-2">{row.sub}</p>
                   </div>
                 </div>
                 <p
-                  className={`num text-sm font-bold ${ACTIVITY_TONES[row.tone].amount}`}
+                  className={`num shrink-0 text-sm font-bold ${ACTIVITY_TONES[row.tone].amount}`}
                 >
                   {row.amount}
                 </p>
@@ -160,7 +165,7 @@ function ActivityFeed({
                 <div
                   key={row.key}
                   data-testid="activity-row"
-                  className="flex items-center justify-between border-b border-hairline-2 py-[13px]"
+                  className="flex items-center justify-between gap-3 border-b border-hairline-2 py-[13px]"
                 >
                   {content}
                 </div>
@@ -174,7 +179,7 @@ function ActivityFeed({
                   onClick={() =>
                     setEditing(editing === row.key ? null : row.key)
                   }
-                  className="flex w-full cursor-pointer items-center justify-between border-b border-hairline-2 py-[13px] text-left"
+                  className="flex w-full cursor-pointer items-center justify-between gap-3 border-b border-hairline-2 py-[13px] text-left"
                 >
                   {content}
                 </button>

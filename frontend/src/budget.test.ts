@@ -5,7 +5,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   editMonthOptions,
+  expenseInput,
   expenseUpdateInput,
+  incomeInput,
   incomeUpdateInput,
   leftoverLine,
   nextMonth,
@@ -125,6 +127,47 @@ describe('expenseUpdateInput', () => {
       expenseUpdateInput(item, 'abc', 'cat:1', '2026-06-10', '2026-06', ''),
     ).toBeNull()
   })
+
+  it('carries a checked pending flag', () => {
+    expect(
+      expenseUpdateInput(item, '96', 'cat:1', '2026-06-10', '2026-06', '', true),
+    ).toMatchObject({ pending: true })
+  })
+
+  it('omits pending when unchecked, clearing it on the full replace', () => {
+    // Unchecking the box is how a settled charge drops its ⚠️: the PUT
+    // body omits pending and the server's full replace defaults it false.
+    const pendingItem = { ...item, pending: true }
+    expect(
+      expenseUpdateInput(
+        pendingItem,
+        '96',
+        'cat:1',
+        '2026-06-10',
+        '2026-06',
+        '',
+        false,
+      ),
+    ).not.toHaveProperty('pending')
+  })
+})
+
+describe('expenseInput', () => {
+  it('carries a checked pending flag', () => {
+    expect(expenseInput('42.75', 'cat:3', '2026-06-26', '', true)).toEqual({
+      txn_date: '2026-06-26',
+      amount: 42.75,
+      funded_from: 'discretionary',
+      category_id: 3,
+      pending: true,
+    })
+  })
+
+  it('omits pending when unchecked', () => {
+    expect(expenseInput('42.75', 'cat:3', '2026-06-26', '')).not.toHaveProperty(
+      'pending',
+    )
+  })
 })
 
 describe('sourceOptionFor', () => {
@@ -196,5 +239,50 @@ describe('incomeUpdateInput', () => {
         '',
       ),
     ).toBeNull()
+  })
+
+  it('carries a checked pending flag', () => {
+    expect(
+      incomeUpdateInput(
+        item,
+        '2500',
+        'spouse-paycheck',
+        '2026-06',
+        '2026-05-27',
+        '',
+        '',
+        true,
+      ),
+    ).toMatchObject({ pending: true })
+  })
+
+  it('omits pending when unchecked, clearing it on the full replace', () => {
+    const pendingItem = { ...item, pending: true }
+    expect(
+      incomeUpdateInput(
+        pendingItem,
+        '2500',
+        'spouse-paycheck',
+        '2026-06',
+        '2026-05-27',
+        '',
+        '',
+        false,
+      ),
+    ).not.toHaveProperty('pending')
+  })
+})
+
+describe('incomeInput', () => {
+  it('carries a checked pending flag', () => {
+    expect(
+      incomeInput('120', 'spouse-paycheck', '2026-06', '2026-06-15', '', '', true),
+    ).toMatchObject({ pending: true })
+  })
+
+  it('omits pending when unchecked', () => {
+    expect(
+      incomeInput('120', 'spouse-paycheck', '2026-06', '2026-06-15', '', ''),
+    ).not.toHaveProperty('pending')
   })
 })

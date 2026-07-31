@@ -95,8 +95,9 @@ export interface Envelope {
 // Rows carry every column their edit form pre-fills — the feed is the
 // only read, so a tap costs no GET-by-id round trip. Expense rows carry
 // category_id/funded_from/fund_id/account_id/is_fixed/budget_month,
-// income rows budget_month/tax_treatment/account_id; fund rows (no edit
-// affordance) carry all-null extras.
+// income rows budget_month/tax_treatment/account_id, both the pending
+// flag behind the feed's ⚠️; fund rows (no edit affordance) carry
+// all-null extras.
 export interface ActivityItem {
   type: 'expense' | 'income' | 'fund'
   id: number
@@ -113,6 +114,7 @@ export interface ActivityItem {
   is_fixed: boolean | null
   budget_month: string | null
   tax_treatment: 'ORDINARY' | 'LTCG' | 'TAX_FREE' | null
+  pending: boolean | null
 }
 
 // rollover_assigned sums the month's rollover fund entries — last month's
@@ -382,11 +384,14 @@ export type IncomeSource =
 // server-side. The union pairs each funding source with its id: an
 // envelope pick is discretionary spending against its category, a fund
 // pick posts the fund_id and no category — the fund itself says what the
-// spend was for. A blank note is omitted, not sent empty.
+// spend was for. A blank note is omitted, not sent empty, and so is an
+// unchecked pending — the server defaults it false, which is how the
+// full-replace PUT clears a settled charge's flag.
 export type ExpenseInput = {
   txn_date: string
   amount: number
   note?: string
+  pending?: boolean
 } & (
   | { funded_from: 'discretionary'; category_id: number }
   | { funded_from: 'fund'; fund_id: number }
@@ -402,6 +407,7 @@ export interface IncomeInput {
   amount: number
   source_label?: string
   note?: string
+  pending?: boolean
 }
 
 // PUT /api/expenses/{id} and /api/income/{id} are full replaces of the

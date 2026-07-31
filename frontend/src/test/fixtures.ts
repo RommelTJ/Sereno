@@ -134,6 +134,7 @@ export const BUDGET_MONTH: BudgetMonth = {
       is_fixed: false,
       budget_month: '2026-06',
       tax_treatment: null,
+      pending: false,
     },
     {
       type: 'expense',
@@ -151,6 +152,7 @@ export const BUDGET_MONTH: BudgetMonth = {
       is_fixed: false,
       budget_month: '2026-06',
       tax_treatment: null,
+      pending: false,
     },
     // A fund entry: the fund's name rides in the category slot, the entry
     // source passes through, and the table has no title or note column —
@@ -171,6 +173,7 @@ export const BUDGET_MONTH: BudgetMonth = {
       is_fixed: null,
       budget_month: null,
       tax_treatment: null,
+      pending: null,
     },
     // An income row's title lives in source_label (migration 0008 moved
     // the old title-style notes there), leaving note as a true note.
@@ -190,6 +193,7 @@ export const BUDGET_MONTH: BudgetMonth = {
       is_fixed: null,
       budget_month: '2026-06',
       tax_treatment: null,
+      pending: false,
     },
   ],
 }

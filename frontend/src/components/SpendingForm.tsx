@@ -30,16 +30,18 @@ function SpendingForm({ categories, funds, onAdd }: SpendingFormProps) {
     categories[0] ? `cat:${categories[0].id}` : '',
   )
   const [note, setNote] = useState('')
+  const [pending, setPending] = useState(false)
   const [adding, setAdding] = useState(false)
 
   const handleAdd = async () => {
-    const input = expenseInput(amount, paidFrom, todayIso(), note)
+    const input = expenseInput(amount, paidFrom, todayIso(), note, pending)
     if (!input) return
     setAdding(true)
     try {
       await onAdd(input)
       setAmount('')
       setNote('')
+      setPending(false)
     } finally {
       setAdding(false)
     }
@@ -104,6 +106,19 @@ function SpendingForm({ categories, funds, onAdd }: SpendingFormProps) {
           value={note}
           onChange={(event) => setNote(event.target.value)}
         />
+      </label>
+      <label
+        htmlFor="spend-pending"
+        className="mt-[11px] flex items-center gap-2 py-1"
+      >
+        <input
+          id="spend-pending"
+          type="checkbox"
+          className="h-4 w-4 accent-sidebar"
+          checked={pending}
+          onChange={(event) => setPending(event.target.checked)}
+        />
+        <FieldLabel text="Pending" />
       </label>
       <button
         type="button"

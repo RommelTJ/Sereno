@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.10.0**
+**v2.11.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -221,7 +221,12 @@ The budget slice:
 - `POST /api/expenses` — appends a spending line. `budget_month` defaults to
   the transaction's month; pass a later month to prepay. An optional `note`
   ("Anniversary dinner") titles the row in the activity feeds, with the
-  category moving to the subtitle. `funded_from` is
+  category moving to the subtitle. An optional `pending` flag (default
+  false) marks a provisional amount — Lyft consolidates a day's rides
+  into one charge, bars add tips after settlement — rendered as a ⚠️
+  beside the row's title until the settled amount is trued up; pending
+  lines still count in every total, since the money has already left
+  and the known amount is a floor. `funded_from` is
   `discretionary` or `fund` (then `fund_id` is required, and `category_id`
   is normally omitted — the fund itself says what the spend was for, and
   the envelope math never counts fund-funded lines). Fund spending
@@ -236,12 +241,16 @@ The budget slice:
   is the row's display title — the context the `source` enum can't carry —
   and `note` is a true note beside it; migration 0008 moved the old
   title-style notes into `source_label`, so existing rows kept their titles.
+  `pending` marks a provisional inflow the same way — flagged with ⚠️ in
+  the feed while still counting toward the month's funding.
 - `PUT /api/expenses/{id}` / `DELETE /api/expenses/{id}` — corrects or
   removes a spending line: pending charges settle (Lyft consolidates a
   day's rides into one charge, bars add tips) and typos happen, and
   nothing references an expense row, so the edit revises in place and the
   delete is a hard delete. The edit is a full replace under the create
-  body's validation, `budget_month` included, so an item can be
+  body's validation, `budget_month` and `pending` included — an edit
+  that omits `pending` clears the flag, which is how a settled charge
+  drops its ⚠️ — so an item can be
   reassigned to the right month (the prepay pattern). A fund-funded row
   never touches its paired `'spend'` entry — each fund entry snapshots a
   balance, so removing a mid-chain row would not restore it; instead a
@@ -273,7 +282,8 @@ The budget slice:
   headline. Having no `budget_month` column, fund entries scope by
   calendar month, the way the headline already does. Every activity row
   carries the fields its edit form pre-fills (category, fund, account,
-  fixed flag, budget month, tax treatment), so a tap costs no GET-by-id
+  fixed flag, budget month, tax treatment, and the pending flag behind
+  the feed's ⚠️), so a tap costs no GET-by-id
   round trip; fund rows carry them null — they have no edit affordance.
   Fund-funded expenses stay out of `total_spent` and the envelope bars —
   they were paid from parked money, and the fund's drawdown already
@@ -525,7 +535,9 @@ The forecast slice (the third Plan engine):
   ("Spouse paycheck") with any note joining the subtitle, expense rows
   titled by their note when one exists (the category moves to the
   subtitle), credits in green, debits in ink, expenses
-  whose envelope is over budget in red, and fund entries on an amber tile
+  whose envelope is over budget in red, pending rows wearing a trailing
+  ⚠️ until their provisional amount is trued up, and fund entries on an
+  amber tile
   with the fund's own emoji (💰 once the fund is archived), signed by
   their effect on the headline — a contribution parks money, a release
   frees it. A "← May 2026"-style button at the bottom pages the previous
@@ -578,15 +590,17 @@ The forecast slice (the third Plan engine):
   labeled `emoji + name`: an envelope pick posts discretionary spending
   against that category, a fund pick posts the fund with no category, so
   a category-plus-fund line can't be entered; choosing a fund reveals the
-  matching Cash-Plus-withdrawal reminder — and an optional note that
-  titles the row in the activity feeds) posts to `POST /api/expenses`,
+  matching Cash-Plus-withdrawal reminder — an optional note that
+  titles the row in the activity feeds, and a Pending checkbox for a
+  provisional amount) posts to `POST /api/expenses`,
   and "Add an
   income item" (amount, funds month — the current or next two, so a
   paycheck can prepay next month — source, an editable Source title
   prefilled from the selected source — the row's bold title, posted as
-  `source_label`; switching the source re-prefills it — and an optional
-  note) posts to `POST /api/income`. A blank title or note is omitted
-  from the payload, never sent empty.
+  `source_label`; switching the source re-prefills it — an optional
+  note, and the same Pending checkbox) posts to `POST /api/income`. A
+  blank title or note is omitted from the payload, never sent empty,
+  and so is an unticked Pending.
   Every submit refetches the budget month, so the hero and envelopes always
   show the API's figures rather than client-side math — and adding a
   spending item refetches the funds list too, so a fund-funded spend's
@@ -611,8 +625,10 @@ The forecast slice (the third Plan engine):
   edit form pre-filled from the row itself (amount, the same Paid-from
   optgroups as the create form, budget month — the stored month plus the
   txn month and the next two, so a prepay can be reassigned — date,
-  title, and note), the way provisional transactions get trued up: Lyft
-  consolidates a day's rides, a bar adds the tip after settlement. Save
+  title, note, and the Pending checkbox), the way provisional
+  transactions get trued up: Lyft
+  consolidates a day's rides, a bar adds the tip after settlement, and
+  unticking Pending on save drops the row's ⚠️. Save
   revises the item via the PUT endpoints — fund-funded corrections land
   as compensating entries server-side, so the fund's balance follows —
   and Delete arms on the first tap ("Tap again to delete") before
@@ -814,6 +830,21 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.11.0 — Provisional transactions carry their reminder. Some amounts
+land wrong on purpose — Lyft consolidates a day's rides into one
+charge, bars add tips after settlement — and until now nothing marked
+the entry as needing a second look. Migration 0011 adds a `pending`
+boolean to `expense_line` and `income_event`; the create and edit
+forms gain a Pending checkbox, and a pending row's title wears a
+trailing ⚠️ in both activity feeds until the amount is trued up —
+unticking the box in the edit form and saving clears it, since the
+PUT endpoints are full replaces and pending defaults false. The flag
+is a reminder, never an exclusion: pending items still count in
+safe-to-spend and every other total, because the money has already
+moved and the known amount is a floor. Long row titles now wrap
+inside the row instead of pushing it wide, so the suffix never breaks
+the feed's layout.
 
 v2.10.0 — Entry mistakes stop requiring SQL. Expenses and income were
 append-only (`POST` only), so truing up a provisional transaction —
