@@ -6,6 +6,7 @@ import {
   incomeUpdateInput,
   sourceOptionFor,
 } from '../budget.ts'
+import DeleteButton from './DeleteButton.tsx'
 import { FieldLabel } from './SpendingForm.tsx'
 
 const inputClasses =
@@ -14,6 +15,7 @@ const inputClasses =
 interface IncomeEditFormProps {
   item: ActivityItem
   onSave: (input: IncomeUpdateInput) => Promise<void>
+  onDelete: () => Promise<void>
   onCancel: () => void
 }
 
@@ -22,7 +24,12 @@ interface IncomeEditFormProps {
 // select re-prefills the title on switch, exactly like the create form —
 // the title belongs to the selected source. tax_treatment and account_id
 // ride along unchanged via incomeUpdateInput.
-function IncomeEditForm({ item, onSave, onCancel }: IncomeEditFormProps) {
+function IncomeEditForm({
+  item,
+  onSave,
+  onDelete,
+  onCancel,
+}: IncomeEditFormProps) {
   const storedMonth = item.budget_month ?? item.txn_date.slice(0, 7)
   const storedOption = sourceOptionFor(item.source, item.source_label)
   const [amount, setAmount] = useState(String(item.amount))
@@ -57,6 +64,15 @@ function IncomeEditForm({ item, onSave, onCancel }: IncomeEditFormProps) {
     setSaving(true)
     try {
       await onSave(input)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setSaving(true)
+    try {
+      await onDelete()
     } finally {
       setSaving(false)
     }
@@ -154,6 +170,7 @@ function IncomeEditForm({ item, onSave, onCancel }: IncomeEditFormProps) {
         >
           Cancel
         </button>
+        <DeleteButton disabled={saving} onDelete={() => void handleDelete()} />
       </div>
     </div>
   )

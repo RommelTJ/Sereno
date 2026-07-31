@@ -6,7 +6,13 @@ import type {
   Fund,
   IncomeUpdateInput,
 } from '../api.ts'
-import { fetchBudgetMonth, updateExpense, updateIncome } from '../api.ts'
+import {
+  deleteExpense,
+  deleteIncome,
+  fetchBudgetMonth,
+  updateExpense,
+  updateIncome,
+} from '../api.ts'
 import { monthYearLabel, nextMonth, previousMonth } from '../budget.ts'
 import type { ActivityTone } from '../dashboard.ts'
 import { activityRow } from '../dashboard.ts'
@@ -97,6 +103,15 @@ function ActivityFeed({
     setEditing(null)
   }
 
+  const removeItem = async (item: ActivityItem) => {
+    await (item.type === 'expense'
+      ? deleteExpense(item.id)
+      : deleteIncome(item.id))
+    await refreshLoaded()
+    await onChanged?.()
+    setEditing(null)
+  }
+
   return (
     <>
       <button
@@ -169,6 +184,7 @@ function ActivityFeed({
                     categories={budget.categories}
                     funds={funds}
                     onSave={(input) => saveExpense(item, input)}
+                    onDelete={() => removeItem(item)}
                     onCancel={() => setEditing(null)}
                   />
                 )}
@@ -176,6 +192,7 @@ function ActivityFeed({
                   <IncomeEditForm
                     item={item}
                     onSave={(input) => saveIncome(item, input)}
+                    onDelete={() => removeItem(item)}
                     onCancel={() => setEditing(null)}
                   />
                 )}

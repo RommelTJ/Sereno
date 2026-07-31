@@ -6,6 +6,7 @@ import type {
   Fund,
 } from '../api.ts'
 import { editMonthOptions, expenseUpdateInput } from '../budget.ts'
+import DeleteButton from './DeleteButton.tsx'
 import { FieldLabel } from './SpendingForm.tsx'
 
 const inputClasses =
@@ -16,6 +17,7 @@ interface ExpenseEditFormProps {
   categories: Envelope[]
   funds: Fund[]
   onSave: (input: ExpenseUpdateInput) => Promise<void>
+  onDelete: () => Promise<void>
   onCancel: () => void
 }
 
@@ -28,6 +30,7 @@ function ExpenseEditForm({
   categories,
   funds,
   onSave,
+  onDelete,
   onCancel,
 }: ExpenseEditFormProps) {
   const storedMonth = item.budget_month ?? item.txn_date.slice(0, 7)
@@ -65,6 +68,15 @@ function ExpenseEditForm({
     setSaving(true)
     try {
       await onSave(input)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setSaving(true)
+    try {
+      await onDelete()
     } finally {
       setSaving(false)
     }
@@ -167,6 +179,7 @@ function ExpenseEditForm({
         >
           Cancel
         </button>
+        <DeleteButton disabled={saving} onDelete={() => void handleDelete()} />
       </div>
     </div>
   )
