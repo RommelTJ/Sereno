@@ -52,11 +52,14 @@ def insert_fund_entry(fund_id, as_of_date, balance, contribution=0, source=None)
 
 def first_of_month(months_back=0):
     """The 1st of the month months_back before today, ISO — catch-up tests
-    date entries relative to the wall clock so they can't drift stale."""
+    date entries relative to the wall clock so they can't drift stale. A
+    negative months_back reaches forward, for future-dated top-ups."""
     today = date.today()
     year, month = today.year, today.month - months_back
     while month < 1:
         year, month = year - 1, month + 12
+    while month > 12:
+        year, month = year + 1, month - 12
     return date(year, month, 1).isoformat()
 
 
@@ -570,6 +573,45 @@ class TestTopUpFund:
         client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 500})
         (fund,) = client.get("/api/funds").json()
         assert fund["balance"] == 10500
+
+    def test_a_dated_top_up_lands_on_the_provided_date(self, client):
+        # The date is the whole point of the field: the entry scopes into
+        # the calendar month it belongs to — the budget month groups fund
+        # entries by substr(as_of_date, 1, 7) — while the balance still
+        # builds on the latest entry.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(2), 10000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": 250, "as_of_date": first_of_month(1)},
+        )
+        assert response.status_code == 201
+        assert response.json()["balance"] == 10250
+        assert fetch_fund_entries_with_source(fund_id)[-1] == (
+            first_of_month(1),
+            10250,
+            250,
+            "top_up",
+        )
+
+    def test_a_future_dated_top_up_is_accepted(self, client):
+        # Funding a coming month from a fund: the release is dated into
+        # that month, so its calendar month gains the money, and the fund's
+        # balance moves now — the entry is the newest by date either way.
+        fund_id = insert_fund("Vacation fund", target_amount=8000)
+        insert_fund_entry(fund_id, first_of_month(), 5000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": -500, "as_of_date": first_of_month(-1)},
+        )
+        assert response.status_code == 201
+        assert response.json()["balance"] == 4500
+        assert fetch_fund_entries_with_source(fund_id)[-1] == (
+            first_of_month(-1),
+            4500,
+            -500,
+            "top_up",
+        )
 
     def test_the_returned_note_recalculates(self, client):
         fund_id = insert_fund("Bike fund", kind="goal", target_amount=10000)
