@@ -154,7 +154,8 @@ class ActivityItem(BaseModel):
     """Rows carry every column their edit form pre-fills — the feed is the
     only read, so a tap costs no GET-by-id round trip. Expense rows carry
     the first six extras, income rows budget_month / tax_treatment /
-    account_id; fund rows (no edit affordance) carry all-null extras."""
+    account_id, both the pending flag behind the feed's ⚠️; fund rows (no
+    edit affordance) carry all-null extras."""
 
     type: Literal["expense", "income", "fund"]
     id: int
@@ -171,6 +172,7 @@ class ActivityItem(BaseModel):
     is_fixed: bool | None
     budget_month: str | None
     tax_treatment: str | None
+    pending: bool | None
 
 
 class BudgetMonth(BaseModel):
@@ -609,7 +611,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
     expenses = db.execute(
         "SELECT e.id, e.txn_date, e.amount, COALESCE(c.name, f.name) AS category,"
         " e.note, e.created_at, e.category_id, e.funded_from, e.fund_id,"
-        " e.account_id, e.is_fixed, e.budget_month"
+        " e.account_id, e.is_fixed, e.budget_month, e.pending"
         " FROM expense_line e LEFT JOIN category c ON c.id = e.category_id"
         " LEFT JOIN fund f ON f.id = e.fund_id"
         " WHERE e.budget_month = ?",
@@ -617,7 +619,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
     )
     incomes = db.execute(
         "SELECT id, txn_date, amount, source, source_label, note, created_at,"
-        " budget_month, tax_treatment, account_id"
+        " budget_month, tax_treatment, account_id, pending"
         " FROM income_event WHERE budget_month = ?",
         (target,),
     )
@@ -652,7 +654,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
             | {"type": "fund", "source_label": None, "note": None}
             | no_expense_fields
             | no_income_fields
-            | {"account_id": None, "budget_month": None}
+            | {"account_id": None, "budget_month": None, "pending": None}
             for row in fund_entries
         ],
         key=lambda row: (row["txn_date"], row["created_at"], row["id"]),
