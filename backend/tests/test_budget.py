@@ -651,6 +651,198 @@ class TestPostExpenses:
         assert response.status_code == 422
 
 
+class TestUpdateExpense:
+    def insert_expense(self, client, **overrides):
+        payload = {"txn_date": "2026-06-10", "amount": 96} | overrides
+        response = client.post("/api/expenses", json=payload)
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    def test_revises_every_column_in_place(self, client):
+        groceries_id = insert_category("Groceries")
+        account_id = insert_account("Chase checking")
+        expense_id = self.insert_expense(client, note="Lyft — provisional")
+        payload = {
+            "txn_date": "2026-06-12",
+            "budget_month": "2026-07",
+            "category_id": groceries_id,
+            "amount": 118.4,
+            "is_fixed": True,
+            "account_id": account_id,
+            "note": "Lyft — day's rides consolidated",
+        }
+        response = client.put(f"/api/expenses/{expense_id}", json=payload)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["id"] == expense_id
+        assert body["txn_date"] == "2026-06-12"
+        assert body["budget_month"] == "2026-07"
+        assert body["category_id"] == groceries_id
+        assert body["amount"] == 118.4
+        assert body["is_fixed"] is True
+        assert body["account_id"] == account_id
+        assert body["note"] == "Lyft — day's rides consolidated"
+        rows = query("SELECT budget_month, amount FROM expense_line")
+        assert rows == [{"budget_month": "2026-07", "amount": 118.4}]
+
+    def test_budget_month_defaults_to_the_txn_month(self, client):
+        expense_id = self.insert_expense(client, budget_month="2026-07")
+        payload = {"txn_date": "2026-06-10", "amount": 96}
+        response = client.put(f"/api/expenses/{expense_id}", json=payload)
+        assert response.status_code == 200
+        assert response.json()["budget_month"] == "2026-06"
+
+    def test_a_reassigned_month_moves_the_item_between_feeds(self, client):
+        expense_id = self.insert_expense(client)
+        payload = {"txn_date": "2026-06-10", "budget_month": "2026-07", "amount": 96}
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 200
+        june = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert june["activity"] == []
+        july = client.get("/api/budget-month", params={"month": "2026-07"}).json()
+        assert [item["id"] for item in july["activity"]] == [expense_id]
+
+    def test_a_same_fund_amount_increase_appends_a_delta_entry(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        payload = {
+            "txn_date": "2026-06-10",
+            "amount": 1500,
+            "funded_from": "fund",
+            "fund_id": bike_id,
+        }
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 200
+        entries = fetch_fund_entries(bike_id)
+        assert [entry["balance"] for entry in entries] == [5000, 3800, 3500]
+        delta = entries[-1]
+        assert delta["contribution"] == -300
+        assert delta["source"] == "spend"
+        assert delta["as_of_date"] == date.today().isoformat()
+
+    def test_a_same_fund_amount_decrease_releases_the_difference(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        payload = {
+            "txn_date": "2026-06-10",
+            "amount": 1000,
+            "funded_from": "fund",
+            "fund_id": bike_id,
+        }
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 200
+        entries = fetch_fund_entries(bike_id)
+        assert [entry["balance"] for entry in entries] == [5000, 3800, 4000]
+        assert entries[-1]["contribution"] == 200
+
+    def test_an_unchanged_amount_appends_no_fund_entry(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        payload = {
+            "txn_date": "2026-06-10",
+            "amount": 1200,
+            "funded_from": "fund",
+            "fund_id": bike_id,
+            "note": "True-up note only",
+        }
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 200
+        assert [entry["balance"] for entry in fetch_fund_entries(bike_id)] == [5000, 3800]
+        assert query("SELECT note FROM expense_line") == [{"note": "True-up note only"}]
+
+    def test_an_increase_beyond_the_fund_balance_is_rejected(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        payload = {
+            "txn_date": "2026-06-10",
+            "amount": 5100,
+            "funded_from": "fund",
+            "fund_id": bike_id,
+        }
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 422
+        assert [entry["balance"] for entry in fetch_fund_entries(bike_id)] == [5000, 3800]
+        assert query("SELECT amount FROM expense_line") == [{"amount": 1200}]
+
+    def test_a_fund_to_discretionary_edit_reverses_the_draw_down(self, client):
+        travel_id = insert_category("Travel")
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        payload = {
+            "txn_date": "2026-06-10",
+            "amount": 1200,
+            "funded_from": "discretionary",
+            "category_id": travel_id,
+        }
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 200
+        entries = fetch_fund_entries(bike_id)
+        assert [entry["balance"] for entry in entries] == [5000, 3800, 5000]
+        assert entries[-1]["contribution"] == 1200
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["total_spent"] == 1200
+
+    def test_a_discretionary_to_fund_edit_draws_the_fund_down(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=96)
+        payload = {
+            "txn_date": "2026-06-10",
+            "amount": 96,
+            "funded_from": "fund",
+            "fund_id": bike_id,
+        }
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 200
+        entries = fetch_fund_entries(bike_id)
+        assert [entry["balance"] for entry in entries] == [5000, 4904]
+        assert entries[-1]["contribution"] == -96
+        assert entries[-1]["source"] == "spend"
+        assert entries[-1]["as_of_date"] == date.today().isoformat()
+
+    def test_a_discretionary_to_fund_edit_respects_the_overdraw_guard(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 50)
+        expense_id = self.insert_expense(client, amount=96)
+        payload = {
+            "txn_date": "2026-06-10",
+            "amount": 96,
+            "funded_from": "fund",
+            "fund_id": bike_id,
+        }
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 422
+        assert [entry["balance"] for entry in fetch_fund_entries(bike_id)] == [50]
+        assert query("SELECT funded_from FROM expense_line") == [{"funded_from": "discretionary"}]
+
+    def test_a_fund_to_fund_edit_moves_the_draw_down(self, client):
+        bike_id = insert_fund("Bike fund")
+        car_id = insert_fund("Car fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        insert_fund_entry(car_id, "2026-06-01", 2000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        payload = {
+            "txn_date": "2026-06-10",
+            "amount": 1200,
+            "funded_from": "fund",
+            "fund_id": car_id,
+        }
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 200
+        assert [entry["balance"] for entry in fetch_fund_entries(bike_id)] == [5000, 3800, 5000]
+        assert [entry["balance"] for entry in fetch_fund_entries(car_id)] == [2000, 800]
+
+    def test_fund_spending_requires_a_fund_id(self, client):
+        expense_id = self.insert_expense(client)
+        payload = {"txn_date": "2026-06-10", "amount": 96, "funded_from": "fund"}
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 422
+
+    def test_unknown_expense_returns_404(self, client):
+        payload = {"txn_date": "2026-06-10", "amount": 96}
+        assert client.put("/api/expenses/99", json=payload).status_code == 404
+
+    def test_unknown_category_returns_404(self, client):
+        expense_id = self.insert_expense(client)
+        payload = {"txn_date": "2026-06-10", "amount": 96, "category_id": 99}
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 404
+
+
 class TestDeleteExpense:
     def insert_expense(self, client, **overrides):
         payload = {"txn_date": "2026-06-10", "amount": 96} | overrides
