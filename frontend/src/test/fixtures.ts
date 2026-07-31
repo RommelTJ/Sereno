@@ -127,6 +127,13 @@ export const BUDGET_MONTH: BudgetMonth = {
       source: null,
       source_label: null,
       note: 'Poke — treat yourself',
+      category_id: 3,
+      funded_from: 'discretionary',
+      fund_id: null,
+      account_id: null,
+      is_fixed: false,
+      budget_month: '2026-06',
+      tax_treatment: null,
     },
     {
       type: 'expense',
@@ -137,9 +144,17 @@ export const BUDGET_MONTH: BudgetMonth = {
       source: null,
       source_label: null,
       note: null,
+      category_id: 1,
+      funded_from: 'discretionary',
+      fund_id: null,
+      account_id: null,
+      is_fixed: false,
+      budget_month: '2026-06',
+      tax_treatment: null,
     },
     // A fund entry: the fund's name rides in the category slot, the entry
-    // source passes through, and the table has no title or note column.
+    // source passes through, and the table has no title or note column —
+    // nor an edit affordance, so its edit-form fields are all null.
     {
       type: 'fund',
       id: 9,
@@ -149,6 +164,13 @@ export const BUDGET_MONTH: BudgetMonth = {
       source: 'monthly_plan',
       source_label: null,
       note: null,
+      category_id: null,
+      funded_from: null,
+      fund_id: null,
+      account_id: null,
+      is_fixed: null,
+      budget_month: null,
+      tax_treatment: null,
     },
     // An income row's title lives in source_label (migration 0008 moved
     // the old title-style notes there), leaving note as a true note.
@@ -161,6 +183,13 @@ export const BUDGET_MONTH: BudgetMonth = {
       source: 'paycheck',
       source_label: 'Spouse paycheck',
       note: null,
+      category_id: null,
+      funded_from: null,
+      fund_id: null,
+      account_id: null,
+      is_fixed: null,
+      budget_month: '2026-06',
+      tax_treatment: null,
     },
   ],
 }

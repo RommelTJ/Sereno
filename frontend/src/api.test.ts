@@ -41,7 +41,7 @@ describe('fetchForecast', () => {
 // stored value for anything it doesn't edit — and deletes carry no body.
 describe('expense edit and delete clients', () => {
   it('updateExpense PUTs the full replace body', async () => {
-    const fetchMock = stubApi({ 'PUT /api/expenses/5': null })
+    const fetchMock = stubApi({ 'PUT /api/expenses/5': {} })
     await updateExpense(5, {
       txn_date: '2026-06-12',
       budget_month: '2026-07',
@@ -66,7 +66,7 @@ describe('expense edit and delete clients', () => {
   })
 
   it('deleteExpense issues a DELETE to the item path', async () => {
-    const fetchMock = stubApi({ 'DELETE /api/expenses/5': null })
+    const fetchMock = stubApi({ 'DELETE /api/expenses/5': {} })
     await deleteExpense(5)
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/expenses/5')
@@ -76,7 +76,7 @@ describe('expense edit and delete clients', () => {
 
 describe('income edit and delete clients', () => {
   it('updateIncome PUTs the full replace body', async () => {
-    const fetchMock = stubApi({ 'PUT /api/income/7': null })
+    const fetchMock = stubApi({ 'PUT /api/income/7': {} })
     await updateIncome(7, {
       txn_date: '2026-06-27',
       budget_month: '2026-07',
@@ -103,7 +103,7 @@ describe('income edit and delete clients', () => {
   })
 
   it('deleteIncome issues a DELETE to the item path', async () => {
-    const fetchMock = stubApi({ 'DELETE /api/income/7': null })
+    const fetchMock = stubApi({ 'DELETE /api/income/7': {} })
     await deleteIncome(7)
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/income/7')
