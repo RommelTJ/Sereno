@@ -545,6 +545,45 @@ describe('topping up a fund', () => {
     ).toBeInTheDocument()
   })
 
+  it('offers an As-of date defaulting to today', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+
+    expect(within(rows[0]).getByLabelText('As of')).toHaveValue(todayIso())
+  })
+
+  it('posts a changed As-of date so the move lands in its own month', async () => {
+    // The existing payload tests lock the mirror case with toEqual: an
+    // untouched date stays out of the body, so the server keeps stamping
+    // today.
+    const toppedUp = { ...FUNDS[0], balance: 10_250 }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/funds/1/top-up': toppedUp,
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
+      target: { value: '250' },
+    })
+    fireEvent.change(within(rows[0]).getByLabelText('As of'), {
+      target: { value: '2026-07-02' },
+    })
+    routes['/api/funds'] = [toppedUp, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('$10,250 / $30,000')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({
+      amount: 250,
+      as_of_date: '2026-07-02',
+    })
+  })
+
   it('posts the rollover source when the leftover option is picked', async () => {
     const toppedUp = { ...FUNDS[0], balance: 10_400 }
     const routes: Record<string, unknown> = {
