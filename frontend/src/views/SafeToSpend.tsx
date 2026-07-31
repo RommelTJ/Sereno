@@ -34,6 +34,12 @@ function SafeToSpend() {
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
   const [previous, setPrevious] = useState<BudgetMonth | null>(null)
   const [funds, setFunds] = useState<Fund[] | null>(null)
+  // The Activity feed's envelope filter, set by tapping an envelope row.
+  // Only the id is stored — the envelope itself derives from the current
+  // month's categories, so a refetch never leaves stale figures behind.
+  const [filterId, setFilterId] = useState<number | null>(null)
+  const filterEnvelope =
+    budget?.categories.find((category) => category.id === filterId) ?? null
 
   useEffect(() => {
     // The leftover line reads last month's closing safe-to-spend, so the
@@ -84,7 +90,12 @@ function SafeToSpend() {
         <>
           <div className="flex flex-col gap-5">
             <Hero safeToSpend={budget.safe_to_spend} />
-            <EnvelopesCard month={budget.month} envelopes={budget.categories} />
+            <EnvelopesCard
+              month={budget.month}
+              envelopes={budget.categories}
+              selectedId={filterId}
+              onSelect={(envelope) => setFilterId(envelope.id)}
+            />
             <FundsCard funds={funds} />
           </div>
           <div className="flex flex-col gap-5">
@@ -113,6 +124,7 @@ function SafeToSpend() {
                 current={budget}
                 funds={funds}
                 onChanged={refresh}
+                filter={filterEnvelope}
               />
             </section>
           </div>
