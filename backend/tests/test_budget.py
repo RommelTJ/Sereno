@@ -651,6 +651,74 @@ class TestPostExpenses:
         assert response.status_code == 422
 
 
+class TestDeleteExpense:
+    def insert_expense(self, client, **overrides):
+        payload = {"txn_date": "2026-06-10", "amount": 96} | overrides
+        response = client.post("/api/expenses", json=payload)
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    def fund_month(self, client, amount):
+        payload = {
+            "txn_date": "2026-06-05",
+            "budget_month": "2026-06",
+            "source": "paycheck",
+            "amount": amount,
+        }
+        assert client.post("/api/income", json=payload).status_code == 201
+
+    def test_deletes_the_row(self, client):
+        expense_id = self.insert_expense(client)
+        assert client.delete(f"/api/expenses/{expense_id}").status_code == 204
+        assert query("SELECT id FROM expense_line") == []
+
+    def test_a_discretionary_delete_appends_no_fund_entry(self, client):
+        expense_id = self.insert_expense(client)
+        assert client.delete(f"/api/expenses/{expense_id}").status_code == 204
+        assert query("SELECT id FROM fund_entry") == []
+
+    def test_deleting_a_discretionary_expense_raises_the_headline(self, client):
+        self.fund_month(client, 5200)
+        expense_id = self.insert_expense(client, amount=100)
+        before = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert before["safe_to_spend"] == 5100
+        assert client.delete(f"/api/expenses/{expense_id}").status_code == 204
+        after = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert after["safe_to_spend"] == 5200
+
+    def test_a_fund_funded_delete_reverses_the_draw_down(self, client):
+        # The paired 'spend' entry is never removed — each fund entry
+        # snapshots the balance, so pulling a mid-chain row would not
+        # restore it. A compensating entry is appended instead, dated
+        # today: snapshots resolve newest-first, so a backdated correction
+        # carrying a current balance would corrupt the chain.
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        assert client.delete(f"/api/expenses/{expense_id}").status_code == 204
+        entries = fetch_fund_entries(bike_id)
+        assert [entry["balance"] for entry in entries] == [5000, 3800, 5000]
+        reversal = entries[-1]
+        assert reversal["contribution"] == 1200
+        assert reversal["source"] == "spend"
+        assert reversal["as_of_date"] == date.today().isoformat()
+
+    def test_the_reversal_stays_out_of_the_headline_and_feed(self, client):
+        # 'spend'-source entries never counted against safe-to-spend, so
+        # the delete must not move the headline or land in the feed.
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        self.fund_month(client, 5200)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        assert client.delete(f"/api/expenses/{expense_id}").status_code == 204
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["safe_to_spend"] == 5200
+        assert [item["type"] for item in body["activity"]] == ["income"]
+
+    def test_unknown_expense_returns_404(self, client):
+        assert client.delete("/api/expenses/99").status_code == 404
+
+
 class TestPostIncome:
     def test_appends_an_income_event(self, client):
         account_id = insert_account("Chase checking")
