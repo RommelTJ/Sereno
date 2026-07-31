@@ -94,7 +94,9 @@ function SafeToSpend() {
               month={budget.month}
               envelopes={budget.categories}
               selectedId={filterId}
-              onSelect={(envelope) => setFilterId(envelope.id)}
+              onSelect={(envelope) =>
+                setFilterId((id) => (id === envelope.id ? null : envelope.id))
+              }
             />
             <FundsCard funds={funds} />
           </div>
