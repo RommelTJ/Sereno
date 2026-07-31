@@ -920,3 +920,82 @@ describe('Income item editing', () => {
     )
   })
 })
+
+describe('Item delete', () => {
+  const feedRows = async () => {
+    const feed = await screen.findByTestId('sts-activity')
+    return within(feed).getAllByTestId('activity-row')
+  }
+  const deleteCalls = (fetchMock: ReturnType<typeof stubApi>) =>
+    fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE')
+
+  it('arms on the first tap and deletes the expense on the second', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      'DELETE /api/expenses/5': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[0])
+    const form = await screen.findByTestId('expense-edit-form')
+    fireEvent.click(within(form).getByRole('button', { name: 'Delete' }))
+
+    // Armed, not deleted: the destructive tap must be a deliberate pair.
+    expect(deleteCalls(fetchMock)).toHaveLength(0)
+    const budgetCalls = () =>
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).startsWith('/api/budget-month'),
+      ).length
+    const budgetBefore = budgetCalls()
+    fireEvent.click(
+      within(form).getByRole('button', { name: 'Tap again to delete' }),
+    )
+
+    await waitFor(() => expect(deleteCalls(fetchMock)).toHaveLength(1))
+    expect(String(deleteCalls(fetchMock)[0][0])).toBe('/api/expenses/5')
+    await waitFor(() => expect(budgetCalls()).toBeGreaterThan(budgetBefore))
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId('expense-edit-form'),
+      ).not.toBeInTheDocument(),
+    )
+  })
+
+  it('deletes an income row the same way', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      'DELETE /api/income/2': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+    const form = await screen.findByTestId('income-edit-form')
+    fireEvent.click(within(form).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(
+      within(form).getByRole('button', { name: 'Tap again to delete' }),
+    )
+
+    await waitFor(() => expect(deleteCalls(fetchMock)).toHaveLength(1))
+    expect(String(deleteCalls(fetchMock)[0][0])).toBe('/api/income/2')
+  })
+
+  it('reopening the form disarms an armed delete', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[0])
+    const form = await screen.findByTestId('expense-edit-form')
+    fireEvent.click(within(form).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByTestId('expense-edit-form')).not.toBeInTheDocument()
+    fireEvent.click((await feedRows())[0])
+    const reopened = await screen.findByTestId('expense-edit-form')
+    expect(
+      within(reopened).getByRole('button', { name: 'Delete' }),
+    ).toBeInTheDocument()
+    expect(deleteCalls(fetchMock)).toHaveLength(0)
+  })
+})
