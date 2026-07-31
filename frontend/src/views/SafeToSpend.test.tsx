@@ -325,6 +325,48 @@ describe('Add a spending item', () => {
       funded_from: 'discretionary',
     })
   })
+
+  it('posts pending when the checkbox is ticked, then resets it', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/expenses': { id: 104 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('spending-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '62' },
+    })
+    fireEvent.click(within(form).getByLabelText('Pending'))
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add spending row' }),
+    )
+
+    await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
+    expect(expenseBody(fetchMock)).toMatchObject({ pending: true })
+    expect(within(form).getByLabelText('Pending')).not.toBeChecked()
+  })
+
+  it('omits pending when the checkbox is left unticked', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/expenses': { id: 105 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('spending-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '62' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add spending row' }),
+    )
+
+    await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
+    expect(expenseBody(fetchMock)).not.toHaveProperty('pending')
+  })
 })
 
 describe('Add an income item', () => {
@@ -472,6 +514,48 @@ describe('Add an income item', () => {
       source: 'paycheck',
       amount: 100,
     })
+  })
+
+  it('posts pending when the checkbox is ticked, then resets it', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 6 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('income-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '120' },
+    })
+    fireEvent.click(within(form).getByLabelText('Pending'))
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() => expect(postBody(fetchMock, '/api/income')).toBeDefined())
+    expect(postBody(fetchMock, '/api/income')).toMatchObject({ pending: true })
+    expect(within(form).getByLabelText('Pending')).not.toBeChecked()
+  })
+
+  it('omits pending when the checkbox is left unticked', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 7 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('income-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '120' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() => expect(postBody(fetchMock, '/api/income')).toBeDefined())
+    expect(postBody(fetchMock, '/api/income')).not.toHaveProperty('pending')
   })
 
   it('maps every source option onto the API source values', async () => {
