@@ -613,6 +613,31 @@ class TestTopUpFund:
             "top_up",
         )
 
+    def test_a_date_before_the_latest_entry_is_a_422(self, client):
+        # Fund entries snapshot absolute balances resolved newest-first,
+        # so an entry slotted behind the latest one would corrupt the
+        # chain — the displayed balance would silently exclude it, the
+        # same reason expense corrections are dated today. Nothing is
+        # appended.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up",
+            json={"amount": 250, "as_of_date": first_of_month(1)},
+        )
+        assert response.status_code == 422
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
+
+    def test_a_plain_top_up_behind_a_future_dated_entry_is_a_422(self, client):
+        # The guard applies to the defaulted date too: once a future-dated
+        # release exists, an undated top-up would slot mid-chain and the
+        # future entry's snapshot would keep reading as the balance.
+        fund_id = insert_fund("Vacation fund", target_amount=8000)
+        insert_fund_entry(fund_id, first_of_month(-1), 5000)
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 250})
+        assert response.status_code == 422
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
+
     def test_the_returned_note_recalculates(self, client):
         fund_id = insert_fund("Bike fund", kind="goal", target_amount=10000)
         insert_fund_entry(fund_id, first_of_month(), 9000)
