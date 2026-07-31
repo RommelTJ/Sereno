@@ -22,8 +22,9 @@ export interface EnvelopeView {
   barPct: number
 }
 
-// Over-budget envelopes show the overage ("$46 over") on a full red bar;
-// a category with no plan yet keeps an empty bar instead of dividing by zero.
+// Over-budget envelopes keep spent and budgeted visible alongside the
+// overage ("$546 of $500 · $46 over") on a full red bar; a category with
+// no plan yet keeps an empty bar instead of dividing by zero.
 export function envelopeView(envelope: Envelope): EnvelopeView {
   const over = envelope.spent > envelope.planned
   const barPct =
@@ -38,7 +39,8 @@ export function envelopeView(envelope: Envelope): EnvelopeView {
       ? `${envelope.emoji} ${envelope.name}`
       : envelope.name,
     right: over
-      ? `${formatUsd(envelope.spent - envelope.planned)} over`
+      ? `${formatUsd(envelope.spent)} of ${formatUsd(envelope.planned)}` +
+        ` · ${formatUsd(envelope.spent - envelope.planned)} over`
       : `${formatUsd(envelope.spent)} · ${formatUsd(envelope.remaining)} left`,
     over,
     barPct,

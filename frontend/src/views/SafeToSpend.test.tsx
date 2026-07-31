@@ -73,7 +73,7 @@ describe('Envelopes card', () => {
     render(<SafeToSpend />)
 
     const rows = await screen.findAllByTestId('envelope-row')
-    const overage = within(rows[2]).getByText('$46 over')
+    const overage = within(rows[2]).getByText('$546 of $500 · $46 over')
     expect(overage).toHaveClass('text-red')
     const bar = within(rows[2]).getByTestId('envelope-bar')
     expect(bar).toHaveClass('bg-red')

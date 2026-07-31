@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.11.0**
+**v2.12.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -578,8 +578,8 @@ The forecast slice (the third Plan engine):
   `GET /api/budget-month` (stored funding baseline − total spent) with the
   "total cash − bills due − money in funds" formula pill, above the monthly
   envelopes card: one progress bar per category, "spent · left" while under
-  budget, "$X over" in red once over — overspending is allowed and simply
-  trims the headline. Under the envelopes, the "Money in funds" card makes
+  budget, "$spent of $budgeted · $X over" in red once over — overspending
+  is allowed and simply trims the headline. Under the envelopes, the "Money in funds" card makes
   the formula's money-in-funds term visible where spending decisions
   happen: the total parked in its header and one row per active fund with
   its emoji-led name, available balance, and "$X / mo" plan — blank for a
@@ -830,6 +830,14 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.12.0 — Over-budget envelopes stop hiding what was spent. An envelope
+past its plan showed only the overage ("$46 over"), so answering "what
+did we actually spend?" meant filtering the Activity feed by hand. The
+row's right-hand label now keeps both figures visible — "$546 of $500 ·
+$46 over" — bringing the over-budget state to parity with the
+"spent · left" under-budget label. Frontend-only: the label is built in
+`envelopeView` from figures `GET /api/budget-month` already returns.
 
 v2.11.0 — Provisional transactions carry their reminder. Some amounts
 land wrong on purpose — Lyft consolidates a day's rides into one
