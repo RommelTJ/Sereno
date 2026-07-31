@@ -669,6 +669,124 @@ describe('topping up a fund', () => {
   })
 })
 
+describe('correcting a fund balance', () => {
+  // The restatement is the headline-neutral lever: a hand-entered fund
+  // entry (NULL source) moves the tracker while safe-to-spend never
+  // hears about it — reconciling against the real account, and the
+  // neutral half of income-row + drawdown month-funding.
+  it('opens prefilled with the current balance', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+
+    expect(within(rows[0]).getByLabelText('New balance')).toHaveValue('10000')
+  })
+
+  it('posts a restatement dated today and refetches', async () => {
+    const corrected = { ...FUNDS[0], balance: 9_500 }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/fund-entries': { id: 99 },
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+    fireEvent.change(within(rows[0]).getByLabelText('New balance'), {
+      target: { value: '9500' },
+    })
+    routes['/api/funds'] = [corrected, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('$9,500 / $30,000')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/fund-entries')).toEqual({
+      fund_id: 1,
+      as_of_date: todayIso(),
+      balance: 9500,
+    })
+    expect(
+      within(rows[0]).queryByLabelText('New balance'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('posts a zero balance — blank and 0 are different corrections', async () => {
+    const corrected = { ...FUNDS[0], balance: 0 }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/fund-entries': { id: 99 },
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+    fireEvent.change(within(rows[0]).getByLabelText('New balance'), {
+      target: { value: '0' },
+    })
+    routes['/api/funds'] = [corrected, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('$0 / $30,000')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/fund-entries')).toEqual({
+      fund_id: 1,
+      as_of_date: todayIso(),
+      balance: 0,
+    })
+  })
+
+  it('does not post an unchanged balance', async () => {
+    const fetchMock = stubApi({ '/api/funds': FUNDS })
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(postBody(fetchMock, '/api/fund-entries')).toBeUndefined()
+  })
+
+  it('does not post a blank balance', async () => {
+    const fetchMock = stubApi({ '/api/funds': FUNDS })
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+    fireEvent.change(within(rows[0]).getByLabelText('New balance'), {
+      target: { value: '' },
+    })
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(postBody(fetchMock, '/api/fund-entries')).toBeUndefined()
+  })
+
+  it('closes an open top-up form when it opens', async () => {
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+
+    fireEvent.click(
+      within(rows[0]).getByRole('button', { name: 'Correct balance' }),
+    )
+
+    expect(
+      within(rows[0]).queryByLabelText('$ amount'),
+    ).not.toBeInTheDocument()
+    expect(within(rows[0]).getByLabelText('New balance')).toBeInTheDocument()
+  })
+})
+
 describe('responsive layout', () => {
   it('stacks the new-fund form grids into one column on narrow screens', async () => {
     render(<Funds />)
