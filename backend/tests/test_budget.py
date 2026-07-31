@@ -730,6 +730,112 @@ class TestPostIncome:
         assert response.status_code == 404
 
 
+class TestUpdateIncome:
+    def insert_income(self, client, **overrides):
+        payload = {
+            "txn_date": "2026-06-27",
+            "budget_month": "2026-07",
+            "source": "paycheck",
+            "amount": 2800,
+            "source_label": "You paycheck",
+            "note": "Original",
+        } | overrides
+        response = client.post("/api/income", json=payload)
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    def test_revises_every_column_in_place(self, client):
+        account_id = insert_account("Chase checking")
+        income_id = self.insert_income(client)
+        payload = {
+            "txn_date": "2026-06-28",
+            "budget_month": "2026-08",
+            "source": "transfer_in",
+            "amount": 3100.5,
+            "tax_treatment": "ORDINARY",
+            "account_id": account_id,
+            "source_label": "Brokerage withdrawal",
+            "note": "Tip settled",
+        }
+        response = client.put(f"/api/income/{income_id}", json=payload)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["id"] == income_id
+        assert body["txn_date"] == "2026-06-28"
+        assert body["budget_month"] == "2026-08"
+        assert body["source"] == "transfer_in"
+        assert body["amount"] == 3100.5
+        assert body["tax_treatment"] == "ORDINARY"
+        assert body["account_id"] == account_id
+        assert body["source_label"] == "Brokerage withdrawal"
+        assert body["note"] == "Tip settled"
+        rows = query("SELECT budget_month, amount FROM income_event")
+        assert rows == [{"budget_month": "2026-08", "amount": 3100.5}]
+
+    def test_budget_month_defaults_to_the_txn_month(self, client):
+        income_id = self.insert_income(client)
+        payload = {"txn_date": "2026-06-27", "source": "paycheck", "amount": 2800}
+        response = client.put(f"/api/income/{income_id}", json=payload)
+        assert response.status_code == 200
+        assert response.json()["budget_month"] == "2026-06"
+
+    def test_omitted_optional_fields_clear_the_stored_ones(self, client):
+        # The edit is a full replace, like the create body: a form that
+        # blanks the title or note really clears it.
+        income_id = self.insert_income(client)
+        payload = {"txn_date": "2026-06-27", "source": "paycheck", "amount": 2800}
+        body = client.put(f"/api/income/{income_id}", json=payload).json()
+        assert body["source_label"] is None
+        assert body["note"] is None
+
+    def test_unknown_income_returns_404(self, client):
+        payload = {"txn_date": "2026-06-27", "source": "paycheck", "amount": 2800}
+        response = client.put("/api/income/99", json=payload)
+        assert response.status_code == 404
+
+    def test_unknown_account_returns_404(self, client):
+        income_id = self.insert_income(client)
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "paycheck",
+            "amount": 2800,
+            "account_id": 99,
+        }
+        assert client.put(f"/api/income/{income_id}", json=payload).status_code == 404
+
+    def test_rejects_a_non_positive_amount(self, client):
+        income_id = self.insert_income(client)
+        payload = {"txn_date": "2026-06-27", "source": "paycheck", "amount": 0}
+        assert client.put(f"/api/income/{income_id}", json=payload).status_code == 422
+
+
+class TestDeleteIncome:
+    def test_deletes_the_row(self, client):
+        payload = {"txn_date": "2026-06-27", "source": "paycheck", "amount": 2800}
+        income_id = client.post("/api/income", json=payload).json()["id"]
+        response = client.delete(f"/api/income/{income_id}")
+        assert response.status_code == 204
+        assert query("SELECT id FROM income_event") == []
+
+    def test_the_baseline_drops_after_a_delete(self, client):
+        payload = {
+            "txn_date": "2026-06-05",
+            "budget_month": "2026-06",
+            "source": "paycheck",
+            "amount": 5200,
+        }
+        income_id = client.post("/api/income", json=payload).json()["id"]
+        before = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert before["baseline"] == 5200
+        assert client.delete(f"/api/income/{income_id}").status_code == 204
+        after = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert after["baseline"] == 0
+        assert after["safe_to_spend"] == 0
+
+    def test_unknown_income_returns_404(self, client):
+        assert client.delete("/api/income/99").status_code == 404
+
+
 class TestGetBudgetMonth:
     def spend(self, client, amount, txn_date="2026-06-10", **extra):
         payload = {"txn_date": txn_date, "budget_month": "2026-06", "amount": amount, **extra}
