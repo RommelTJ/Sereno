@@ -578,8 +578,8 @@ The forecast slice (the third Plan engine):
   `GET /api/budget-month` (stored funding baseline − total spent) with the
   "total cash − bills due − money in funds" formula pill, above the monthly
   envelopes card: one progress bar per category, "spent · left" while under
-  budget, "$X over" in red once over — overspending is allowed and simply
-  trims the headline. Under the envelopes, the "Money in funds" card makes
+  budget, "$spent of $budgeted · $X over" in red once over — overspending
+  is allowed and simply trims the headline. Under the envelopes, the "Money in funds" card makes
   the formula's money-in-funds term visible where spending decisions
   happen: the total parked in its header and one row per active fund with
   its emoji-led name, available balance, and "$X / mo" plan — blank for a
