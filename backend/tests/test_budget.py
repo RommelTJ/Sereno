@@ -896,6 +896,82 @@ class TestGetBudgetMonth:
         ]
         assert body["activity"][2]["note"] == "Includes the spot bonus"
 
+    def test_expense_activity_carries_the_edit_form_fields(self, client):
+        # An edit form pre-fills from the feed row itself — no GET-by-id
+        # round trip — so expense rows carry every column the form needs.
+        groceries_id = insert_category("Groceries")
+        account_id = insert_account("Chase checking")
+        self.fund_month(client, 5200)
+        self.spend(
+            client,
+            96,
+            txn_date="2026-06-20",
+            category_id=groceries_id,
+            is_fixed=True,
+            account_id=account_id,
+        )
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        expense = body["activity"][0]
+        assert expense["type"] == "expense"
+        assert expense["category_id"] == groceries_id
+        assert expense["funded_from"] == "discretionary"
+        assert expense["fund_id"] is None
+        assert expense["account_id"] == account_id
+        assert expense["is_fixed"] is True
+        assert expense["budget_month"] == "2026-06"
+        assert expense["tax_treatment"] is None
+
+    def test_fund_funded_expense_activity_carries_its_fund_id(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        self.fund_month(client, 5200)
+        self.spend(client, 1200, txn_date="2026-06-15", funded_from="fund", fund_id=bike_id)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        expense = body["activity"][0]
+        assert expense["type"] == "expense"
+        assert expense["funded_from"] == "fund"
+        assert expense["fund_id"] == bike_id
+        assert expense["category_id"] is None
+        assert expense["is_fixed"] is False
+
+    def test_income_activity_carries_the_edit_form_fields(self, client):
+        account_id = insert_account("Chase checking")
+        payload = {
+            "txn_date": "2026-05-24",
+            "budget_month": "2026-06",
+            "source": "paycheck",
+            "amount": 2800,
+            "tax_treatment": "ORDINARY",
+            "account_id": account_id,
+        }
+        assert client.post("/api/income", json=payload).status_code == 201
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        income = body["activity"][0]
+        assert income["type"] == "income"
+        assert income["budget_month"] == "2026-06"
+        assert income["tax_treatment"] == "ORDINARY"
+        assert income["account_id"] == account_id
+        assert income["category_id"] is None
+        assert income["funded_from"] is None
+        assert income["fund_id"] is None
+        assert income["is_fixed"] is None
+
+    def test_fund_activity_carries_null_edit_fields(self, client):
+        # Fund rows belong to the funds machinery — no edit affordance, so
+        # every edit-form field is null.
+        fund_id = insert_fund("Emergency fund")
+        insert_fund_entry(fund_id, "2026-06-01", 500, contribution=500, source="monthly_plan")
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        fund_item = body["activity"][0]
+        assert fund_item["type"] == "fund"
+        assert fund_item["category_id"] is None
+        assert fund_item["funded_from"] is None
+        assert fund_item["fund_id"] is None
+        assert fund_item["account_id"] is None
+        assert fund_item["is_fixed"] is None
+        assert fund_item["budget_month"] is None
+        assert fund_item["tax_treatment"] is None
+
     def test_monthly_plan_and_top_up_entries_appear_as_fund_activity(self, client):
         # The feed lists exactly the sources the fund_contributions headline
         # subtracts: 'spend' rows would double-count their expense line, and
