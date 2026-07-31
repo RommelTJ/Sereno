@@ -129,8 +129,9 @@ function IncomeForm({
         + Add income row
       </button>
       <p className="mt-3.5 rounded-input bg-[#f3f6f3] px-3 py-3 text-xs text-[#3a473f]">
-        <b>Rollover</b> — what a month leaves over rolls into the next month's
-        funding. Lean months treat you later.
+        <b>Rollover</b> — leftover doesn't move on its own: assign last
+        month's leftover to a fund from Funds &amp; Goals, or log a
+        transfer-in income row to keep it as this month's spending money.
       </p>
     </section>
   )

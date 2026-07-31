@@ -590,6 +590,52 @@ class TestTopUpFund:
             "top_up",
         )
 
+    def test_a_rollover_source_is_recorded_on_the_entry(self, client):
+        # A rollover assigns last month's leftover: the contribution is
+        # recorded identically to a top-up, but the source keeps it out of
+        # the month's safe-to-spend subtraction, feed, and yearly actual.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up", json={"amount": 250, "source": "rollover"}
+        )
+        assert response.status_code == 201
+        assert response.json()["balance"] == 10250
+        assert fetch_fund_entries_with_source(fund_id)[-1] == (
+            date.today().isoformat(),
+            10250,
+            250,
+            "rollover",
+        )
+
+    def test_a_negative_rollover_unassigns(self, client):
+        # The mirror of a top-up release: a mis-assigned rollover comes back
+        # out as a negative rollover contribution, not a top_up one, so the
+        # month's assigned total shrinks without touching the headline.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up", json={"amount": -400, "source": "rollover"}
+        )
+        assert response.status_code == 201
+        assert fetch_fund_entries_with_source(fund_id)[-1] == (
+            date.today().isoformat(),
+            9600,
+            -400,
+            "rollover",
+        )
+
+    def test_an_unknown_source_is_a_422(self, client):
+        # fund_entry has no CHECK constraint on source, so the API gates the
+        # accepted values: only the two one-off kinds may be posted here.
+        fund_id = insert_fund("Emergency fund", target_amount=30000)
+        insert_fund_entry(fund_id, first_of_month(), 10000)
+        response = client.post(
+            f"/api/funds/{fund_id}/top-up", json={"amount": 100, "source": "spend"}
+        )
+        assert response.status_code == 422
+        assert len(fetch_fund_entries_with_source(fund_id)) == 1
+
     def test_a_release_beyond_the_balance_is_a_422(self, client):
         # The mirror of the overdraw guard on fund-funded expenses: a fund
         # is an earmark over real cash, so no more can be released than is

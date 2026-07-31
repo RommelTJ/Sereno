@@ -525,6 +525,80 @@ describe('topping up a fund', () => {
     expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({ amount: -500 })
   })
 
+  it('offers a source choice defaulting to the regular top-up', async () => {
+    render(<Funds />)
+
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+
+    const source = within(rows[0]).getByLabelText('Source')
+    expect(source).toHaveValue('top_up')
+    expect(
+      within(source).getByRole('option', {
+        name: 'Regular top-up (counts against this month)',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      within(source).getByRole('option', {
+        name: "From last month's leftover",
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('posts the rollover source when the leftover option is picked', async () => {
+    const toppedUp = { ...FUNDS[0], balance: 10_400 }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/funds/1/top-up': toppedUp,
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
+      target: { value: '400' },
+    })
+    fireEvent.change(within(rows[0]).getByLabelText('Source'), {
+      target: { value: 'rollover' },
+    })
+    routes['/api/funds'] = [toppedUp, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('$10,400 / $30,000')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({
+      amount: 400,
+      source: 'rollover',
+    })
+  })
+
+  it('posts a negative rollover to un-assign leftover', async () => {
+    const released = { ...FUNDS[0], balance: 9_800 }
+    const routes: Record<string, unknown> = {
+      '/api/funds': FUNDS,
+      'POST /api/funds/1/top-up': released,
+    }
+    const fetchMock = stubApi(routes)
+    render(<Funds />)
+    const rows = await screen.findAllByTestId('fund-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
+      target: { value: '-200' },
+    })
+    fireEvent.change(within(rows[0]).getByLabelText('Source'), {
+      target: { value: 'rollover' },
+    })
+    routes['/api/funds'] = [released, ...FUNDS.slice(1)]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('$9,800 / $30,000')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({
+      amount: -200,
+      source: 'rollover',
+    })
+  })
+
   it('does not post a blank amount', async () => {
     const fetchMock = stubApi({ '/api/funds': FUNDS })
     render(<Funds />)

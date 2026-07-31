@@ -155,9 +155,15 @@ class ActivityItem(BaseModel):
 
 
 class BudgetMonth(BaseModel):
+    """rollover_assigned sums the month's 'rollover' fund entries — last
+    month's leftover being given a job. It never joins the safe-to-spend
+    subtraction: the client computes the unassigned leftover as the
+    previous month's safe_to_spend minus this total."""
+
     month: str
     baseline: float
     fund_contributions: float
+    rollover_assigned: float
     total_spent: float
     safe_to_spend: float
     categories: list[Envelope]
@@ -415,6 +421,12 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         (target,),
     ).fetchone()[0]
 
+    rollover_assigned = db.execute(
+        "SELECT COALESCE(SUM(contribution), 0) FROM fund_entry"
+        " WHERE source = 'rollover' AND substr(as_of_date, 1, 7) = ?",
+        (target,),
+    ).fetchone()[0]
+
     envelopes = [
         Envelope(**dict(row), remaining=row["planned"] - row["spent"])
         for row in db.execute(
@@ -473,6 +485,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         month=target,
         baseline=baseline,
         fund_contributions=fund_contributions,
+        rollover_assigned=rollover_assigned,
         total_spent=total_spent,
         safe_to_spend=baseline - fund_contributions - total_spent,
         categories=envelopes,

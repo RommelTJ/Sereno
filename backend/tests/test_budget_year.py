@@ -151,6 +151,18 @@ class TestBudgetYearMonths:
         months = get_months(client, 2025)
         assert months[4]["actual"] == 800.0
 
+    def test_rollover_entries_stay_out_of_actual(self, client):
+        # The old month already showed its leftover as positive variance;
+        # counting the rollover as new-month outflow would re-count the
+        # same dollars — locked in here rather than left incidental to the
+        # ('monthly_plan', 'top_up') filter.
+        insert_spend_plan("2024-12-01", 90000)
+        fund_id = insert_fund("Travel")
+        insert_fund_entry(fund_id, "2025-05-10", 900, 900, "rollover")
+        insert_expense("2025-05", 1000)
+        months = get_months(client, 2025)
+        assert months[4]["actual"] == 1000.0
+
     def test_cumulative_variance_runs_across_the_year(self, client):
         insert_spend_plan("2024-12-01", 90000)
         insert_expense("2025-01", 7000)  # +500 under plan

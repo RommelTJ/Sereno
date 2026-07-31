@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { todayIso } from '../ledger.ts'
-import { BUDGET_MONTH, FUNDS } from '../test/fixtures.ts'
+import { BUDGET_MONTH, FUNDS, MAY_BUDGET_MONTH } from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import SafeToSpend from './SafeToSpend.tsx'
 
@@ -493,12 +493,18 @@ describe('Add an income item', () => {
   })
 
   it('explains the rollover behavior', async () => {
+    // The note must describe the real model — leftover is assigned to
+    // funds, or explicitly rolled into funding via an income row — not
+    // the automatic roll-forward the system doesn't have.
     render(<SafeToSpend />)
 
     const form = await screen.findByTestId('income-form')
     expect(within(form).getByText('Rollover')).toBeInTheDocument()
     expect(
-      within(form).getByText(/rolls into the next month's funding/),
+      within(form).getByText(/doesn't move on its own/),
+    ).toBeInTheDocument()
+    expect(
+      within(form).getByText(/assign last month's leftover to a fund/),
     ).toBeInTheDocument()
   })
 
@@ -518,13 +524,65 @@ describe('Add an income item', () => {
   })
 })
 
+describe('Leftover line', () => {
+  it("shows last month's leftover with assigned and unassigned totals", async () => {
+    stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+
+    expect(
+      await screen.findByText(
+        'May left $1,000 · $600 assigned · $400 unassigned',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('shows an over-assignment instead of hiding it', async () => {
+    stubApi({
+      '/api/budget-month': { ...BUDGET_MONTH, rollover_assigned: 1_050 },
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+
+    expect(
+      await screen.findByText(
+        'May left $1,000 · $1,050 assigned · over-assigned $50',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('renders no line when last month left nothing unassigned to give', async () => {
+    stubApi({
+      '/api/budget-month': { ...BUDGET_MONTH, rollover_assigned: 0 },
+      '/api/budget-month?month=2026-05': {
+        ...MAY_BUDGET_MONTH,
+        safe_to_spend: 0,
+      },
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+
+    await screen.findByText('$3,670')
+    await waitFor(() =>
+      expect(screen.queryByTestId('leftover-line')).not.toBeInTheDocument(),
+    )
+  })
+})
+
 describe('Activity feed', () => {
   it('renders every item of the month below the income form', async () => {
     render(<SafeToSpend />)
 
     const form = await screen.findByTestId('income-form')
     const feed = screen.getByTestId('sts-activity')
-    expect(form.nextElementSibling).toBe(feed)
+    // The leftover line rides between the funding form and the feed.
+    const line = await screen.findByTestId('leftover-line')
+    expect(form.nextElementSibling).toBe(line)
+    expect(line.nextElementSibling).toBe(feed)
     expect(within(feed).getByText('Activity')).toBeInTheDocument()
     // Uncapped: all four fixture items, the fund entry among them.
     expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)

@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.7.0**
+**v2.8.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -257,8 +257,14 @@ The budget slice:
   released the earmark — and `fund_contributions` is the month's automatic
   monthly-plan funding plus its one-time top-ups: money moved into a fund
   is parked, so it stops being spendable the moment it lands, and a
-  release's negative contribution reads as spendable again. Reading the
-  budget month applies
+  release's negative contribution reads as spendable again.
+  `rollover_assigned` sums the month's `rollover` entries — last
+  month's leftover being given a job. It never joins the safe-to-spend
+  subtraction, and rollover entries stay out of the feed: their
+  visibility surfaces are the Safe-to-spend leftover line (which
+  computes the unassigned remainder as the previous month's
+  `safe_to_spend` minus this total) and the fund's own entry history.
+  Reading the budget month applies
   the monthly-plan catch-up itself, so the headline never misses a
   contribution the funds list hasn't been asked for yet.
 - `GET /api/budget-year` — the yearly plan-vs-actual report (`?year=`,
@@ -335,8 +341,14 @@ The funds slice:
   back. A release may not exceed the fund's balance (a 422, the mirror
   of the overdraw guard on fund-funded expenses) — but a top-up beyond
   the month's remaining safe-to-spend is allowed, like overspending is
-  everywhere else. A zero amount or an archived fund is a 422; an
-  unknown fund is a 404.
+  everywhere else. An optional `source` switches the entry's kind:
+  `'top_up'` (the default) or `'rollover'`, which assigns last month's
+  leftover — the contribution is recorded identically, but the
+  headline, the activity feed, and the budget-year actual all filter
+  on `('monthly_plan', 'top_up')`, so the current month is never
+  charged for money the old month already earned; any other value is
+  a 422. A zero amount or an archived fund is a 422; an unknown fund
+  is a 404.
 - `POST /api/funds/{id}/archive` — soft remove, like envelope
   archiving: flips `fund.active` to 0 so the fund drops out of the
   funds list, the dashboard parked total, and the safe-to-spend
@@ -555,7 +567,18 @@ The forecast slice (the third Plan engine):
   Every submit refetches the budget month, so the hero and envelopes always
   show the API's figures rather than client-side math — and adding a
   spending item refetches the funds list too, so a fund-funded spend's
-  drawdown lands on the "Money in funds" card immediately. Below the
+  drawdown lands on the "Money in funds" card immediately. Between the
+  income form and the Activity card, the leftover line answers the 1st
+  of the month's actual question — has last month's leftover been given
+  a job yet?: "July left $1,000 · $600 assigned · $400 unassigned",
+  last month's closing Safe-to-spend (from a second
+  `GET /api/budget-month` on the previous month) against the current
+  month's `rollover_assigned`, ticking to $0 unassigned as the money is
+  assigned on Funds & Goals. A late-posted expense that shrinks the
+  leftover below what was already assigned reads "over-assigned $X"
+  rather than hiding — that amount came out of the current month's
+  checking buffer — and the line renders only when last month left
+  something or something is assigned. Below the
   forms, the Activity card renders the same uncapped, month-paged feed as
   the Dashboard's Recent activity — back through past months from the
   bottom, forward into future months from the top: a new item lands in
@@ -578,10 +601,14 @@ The forecast slice (the third Plan engine):
   blank = sinking fund — and $/month), then each fund with its emoji-led
   name, meta line, `saved / target` amount, progress bar, the
   server-derived note from `GET /api/funds`, rendered verbatim, a Top up
-  button that opens an inline $ amount input — Save posts the delta to
+  button that opens an inline $ amount input beside a source select —
+  a regular top-up (the default, counts against this month) or "From
+  last month's leftover", posted as `source = 'rollover'` so the new
+  month's headline never pays for it — Save posts the delta to
   `POST /api/funds/{id}/top-up`, moving money between the month's
   safe-to-spend and the fund (a negative amount releases part of the
-  balance back to spendable), and refetches so the balance and note move
+  balance back to spendable; a negative rollover un-assigns), and
+  refetches so the balance and note move
   immediately — an Edit
   button that opens an inline Name input, the same curated emoji select as
   the new-fund form, and a $ / month input, each prefilled with the fund's
@@ -750,6 +777,25 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.8.0 — Last month's leftover gets a job. Safe-to-spend is
+month-scoped, so when a month closed with money left over there was
+no good way to record sweeping it into a fund: a plain top-up charged
+the new month for money the old month already earned, and the manual
+two-row dance inflated gross income and contributions while recording
+nothing. `POST /api/funds/{id}/top-up` gains an optional `source` —
+`'top_up'` (the default, unchanged) or `'rollover'`, recording the
+contribution identically while staying out of the Safe-to-spend
+headline, the reconciling activity feed, and the budget-year actual
+(all three already filtered on `('monthly_plan', 'top_up')`; tests
+now lock the exclusion in) — and `GET /api/budget-month` gains
+`rollover_assigned`, the month's assigned total. The Funds & goals
+top-up form offers the source choice, Safe-to-spend shows the
+leftover line — "July left $1,000 · $600 assigned · $400 unassigned",
+ticking to $0 as the money is assigned, over-assignment shown rather
+than hidden — and the income form's note drops its promise of an
+automatic roll-forward the system never had. No migration:
+`fund_entry` has no CHECK constraint on `source`.
 
 v2.7.0 — The activity feed pages forward. Income can fund a future
 `budget_month` (the prepay pattern: June pay funds July), but the feed

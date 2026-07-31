@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Fund, FundUpdate } from '../api.ts'
+import type { Fund, FundUpdate, TopUpSource } from '../api.ts'
 import {
   archiveFund,
   createFund,
@@ -31,7 +31,11 @@ function FundRow({
   fund: Fund
   onArchive: (fundId: number) => Promise<void>
   onSavePlan: (fundId: number, edit: FundUpdate) => Promise<void>
-  onTopUp: (fundId: number, amount: number) => Promise<void>
+  onTopUp: (
+    fundId: number,
+    amount: number,
+    source: TopUpSource,
+  ) => Promise<void>
 }) {
   const view = fundView(fund)
   const [form, setForm] = useState<RowForm>(null)
@@ -40,6 +44,7 @@ function FundRow({
   const [emoji, setEmoji] = useState('')
   const [monthly, setMonthly] = useState('')
   const [amount, setAmount] = useState('')
+  const [source, setSource] = useState<TopUpSource>('top_up')
 
   const startEditing = () => {
     setName(fund.name)
@@ -50,6 +55,9 @@ function FundRow({
 
   const startToppingUp = () => {
     setAmount('')
+    // The source belongs to the move being entered, not to the row: a
+    // rollover pick never sticks around for the next top-up.
+    setSource('top_up')
     setForm('topup')
   }
 
@@ -69,7 +77,7 @@ function FundRow({
     if (!delta) return
     setSaving(true)
     try {
-      await onTopUp(fund.id, delta)
+      await onTopUp(fund.id, delta, source)
       setForm(null)
     } finally {
       setSaving(false)
@@ -150,7 +158,7 @@ function FundRow({
         </div>
       )}
       {form === 'topup' && (
-        <div className="mt-2 flex items-end gap-2">
+        <div className="mt-2 flex flex-wrap items-end gap-2">
           <label htmlFor={`fund-topup-${fund.id}`} className="block">
             <FieldLabel text="$ amount" />
             <input
@@ -160,6 +168,24 @@ function FundRow({
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
             />
+          </label>
+          <label htmlFor={`fund-topup-source-${fund.id}`} className="block">
+            <FieldLabel text="Source" />
+            <select
+              id={`fund-topup-source-${fund.id}`}
+              className="mt-1 rounded-input border border-input-border bg-card px-3 py-2 text-sm"
+              value={source}
+              onChange={(event) =>
+                setSource(
+                  event.target.value === 'rollover' ? 'rollover' : 'top_up',
+                )
+              }
+            >
+              <option value="top_up">
+                Regular top-up (counts against this month)
+              </option>
+              <option value="rollover">From last month's leftover</option>
+            </select>
           </label>
           <button
             type="button"
@@ -205,8 +231,17 @@ function Funds() {
     setFunds(await fetchFunds())
   }
 
-  const topUp = async (fundId: number, amount: number) => {
-    await topUpFund(fundId, { amount })
+  const topUp = async (
+    fundId: number,
+    amount: number,
+    source: TopUpSource,
+  ) => {
+    // The default source is omitted, never sent — only a rollover marks
+    // the payload.
+    await topUpFund(fundId, {
+      amount,
+      ...(source === 'rollover' ? { source } : {}),
+    })
     setFunds(await fetchFunds())
   }
 

@@ -6,7 +6,7 @@ balance_entry) and a note derived from its own numbers — never hand-typed.
 
 import sqlite3
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import (
@@ -80,9 +80,17 @@ class FundTopUp(BaseModel):
     one-off sibling of the automatic monthly contribution. A positive amount
     parks money; a negative amount is a partial release. The server computes
     the new balance from the latest entry, so nobody types an absolute
-    figure, and a zero amount moves nothing and is rejected."""
+    figure, and a zero amount moves nothing and is rejected.
+
+    source='rollover' assigns last month's leftover instead: the
+    contribution is recorded identically, but the headline, the activity
+    feed, and the yearly actual all filter on ('monthly_plan', 'top_up'),
+    so the current month is never charged for money the old month already
+    earned. fund_entry has no CHECK constraint on source, so the Literal
+    gates the accepted values here."""
 
     amount: float
+    source: Literal["top_up", "rollover"] = "top_up"
 
     @field_validator("amount")
     @classmethod
@@ -250,8 +258,14 @@ def top_up_fund(fund_id: int, top_up: FundTopUp, db: Db) -> Fund:
         raise HTTPException(status_code=422, detail="release exceeds fund balance")
     db.execute(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
-        " VALUES (?, ?, ?, ?, 'top_up')",
-        (fund_id, date.today().isoformat(), balance + top_up.amount, top_up.amount),
+        " VALUES (?, ?, ?, ?, ?)",
+        (
+            fund_id,
+            date.today().isoformat(),
+            balance + top_up.amount,
+            top_up.amount,
+            top_up.source,
+        ),
     )
     db.commit()
     row = db.execute(_FUND_QUERY + " WHERE id = ?", (fund_id,)).fetchone()
