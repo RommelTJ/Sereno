@@ -330,10 +330,15 @@ The funds slice:
   with a `monthly_plan` receives any missing contribution entries
   (`source = 'monthly_plan'`, one per 1st-of-month since its latest planned
   or hand-entered row) before the list is computed, idempotently — the
-  append-only, derive-on-read pattern. The plan suspends at the target:
-  each due month funds from the fund's balance as of that 1st, the
-  crossing month's contribution is capped at the remaining amount so the
-  fund lands exactly on target, and months spent at target are forgiven
+  append-only, derive-on-read pattern — and concurrency-safely: parallel
+  first-of-month reads race the same catch-up on separate connections,
+  and a partial unique index (one `monthly_plan` entry per fund per
+  date) makes the losing insert a silent no-op, so the month is funded
+  exactly once however many requests trigger it. The plan suspends at
+  the target: each due month funds from the fund's balance as of that
+  1st, the crossing month's contribution is capped at the remaining
+  amount so the fund lands exactly on target, and months spent at
+  target are forgiven
   rather than owed — a drawdown resumes funding from its own month
   forward at the normal pace. An open-ended fund (no target) has no
   finish line, and a goal's target date is a deadline, never a kill
