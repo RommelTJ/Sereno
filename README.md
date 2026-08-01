@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.14.0**
+**v2.14.1**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -869,6 +869,24 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.14.1 — Racing first-of-month reads stop double-funding the month.
+The monthly-plan catch-up runs on every funds and budget read, and the
+dashboard fires `GET /api/budget-month` and `GET /api/funds` in
+parallel on mount; on the first load of a new month, each request's
+own connection could read the funds' anchors before either committed,
+so both concluded the month was due and each inserted a full set of
+`monthly_plan` entries — every funding line twice in the feed, the
+month's contributions total doubled, every fund's balance one
+contribution high (observed in production on 2026-08-01). Migration
+0012 adds a partial unique index — one `monthly_plan` entry per fund
+per date; NULL, `top_up`, and `spend` same-date duplicates stay legal,
+since restating a balance twice or spending from a fund twice in a day
+is real usage — and the catch-up's insert becomes `INSERT OR IGNORE`,
+so a losing racer is a silent no-op under any interleaving. Deploying
+0012 onto a database still holding duplicated rows fails loudly at
+startup by design: the unique index cannot build over them, so the
+data cleanup (tracked separately) must land first.
 
 v2.14.0 — Fund moves land in the month they belong to. Top-ups were
 always stamped `date.today()`, so funding a coming budget month from a
