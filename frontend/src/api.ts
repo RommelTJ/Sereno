@@ -3,6 +3,13 @@
 
 import type { Zone } from './guardrails.ts'
 
+// GET /api/health: the version is the backend package's own — derived
+// from its pyproject.toml — so it reports what is actually deployed.
+export interface Health {
+  status: string
+  version: string
+}
+
 export interface Account {
   id: number
   name: string
@@ -588,6 +595,7 @@ async function deleteJson(path: string): Promise<void> {
   }
 }
 
+export const fetchHealth = () => getJson<Health>('/api/health')
 export const fetchAccounts = () => getJson<Account[]>('/api/accounts')
 export const fetchLedger = () => getJson<LedgerMonth[]>('/api/ledger')
 export const fetchNetWorth = () => getJson<NetWorth>('/api/net-worth')

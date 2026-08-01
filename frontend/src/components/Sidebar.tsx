@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router'
+import { fetchHealth } from '../api.ts'
 import { NAV_GROUPS } from '../nav.ts'
 
 interface SidebarProps {
@@ -11,6 +13,16 @@ function Sidebar({ variant = 'desktop', onNavigate }: SidebarProps) {
     month: 'long',
     year: 'numeric',
   })
+
+  const [version, setVersion] = useState<string | null>(null)
+  useEffect(() => {
+    fetchHealth()
+      .then((health) => setVersion(health.version))
+      .catch(() => {
+        // Local LAN app — the handoff specifies no error states. Show no
+        // version line if the API is unreachable.
+      })
+  }, [])
 
   const layout =
     variant === 'drawer'
@@ -57,6 +69,9 @@ function Sidebar({ variant = 'desktop', onNavigate }: SidebarProps) {
       </div>
       <div className="rounded-input bg-sidebar-active/38 px-3 py-2 text-xs text-sidebar-muted">
         {month}
+        {version && (
+          <p className="mt-0.5 text-[10.5px] text-sidebar-muted-2">v{version}</p>
+        )}
       </div>
     </nav>
   )
