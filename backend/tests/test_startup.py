@@ -30,6 +30,7 @@ def test_startup_applies_migrations(monkeypatch, tmp_path):
         "0009_sort_order.sql",
         "0010_quick_links.sql",
         "0011_pending_flag.sql",
+        "0012_unique_monthly_plan.sql",
     ]
 
 

@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.14.0**
+**v2.14.1**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -330,10 +330,15 @@ The funds slice:
   with a `monthly_plan` receives any missing contribution entries
   (`source = 'monthly_plan'`, one per 1st-of-month since its latest planned
   or hand-entered row) before the list is computed, idempotently — the
-  append-only, derive-on-read pattern. The plan suspends at the target:
-  each due month funds from the fund's balance as of that 1st, the
-  crossing month's contribution is capped at the remaining amount so the
-  fund lands exactly on target, and months spent at target are forgiven
+  append-only, derive-on-read pattern — and concurrency-safely: parallel
+  first-of-month reads race the same catch-up on separate connections,
+  and a partial unique index (one `monthly_plan` entry per fund per
+  date) makes the losing insert a silent no-op, so the month is funded
+  exactly once however many requests trigger it. The plan suspends at
+  the target: each due month funds from the fund's balance as of that
+  1st, the crossing month's contribution is capped at the remaining
+  amount so the fund lands exactly on target, and months spent at
+  target are forgiven
   rather than owed — a drawdown resumes funding from its own month
   forward at the normal pace. An open-ended fund (no target) has no
   finish line, and a goal's target date is a deadline, never a kill
@@ -864,6 +869,24 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v2.14.1 — Racing first-of-month reads stop double-funding the month.
+The monthly-plan catch-up runs on every funds and budget read, and the
+dashboard fires `GET /api/budget-month` and `GET /api/funds` in
+parallel on mount; on the first load of a new month, each request's
+own connection could read the funds' anchors before either committed,
+so both concluded the month was due and each inserted a full set of
+`monthly_plan` entries — every funding line twice in the feed, the
+month's contributions total doubled, every fund's balance one
+contribution high (observed in production on 2026-08-01). Migration
+0012 adds a partial unique index — one `monthly_plan` entry per fund
+per date; NULL, `top_up`, and `spend` same-date duplicates stay legal,
+since restating a balance twice or spending from a fund twice in a day
+is real usage — and the catch-up's insert becomes `INSERT OR IGNORE`,
+so a losing racer is a silent no-op under any interleaving. Deploying
+0012 onto a database still holding duplicated rows fails loudly at
+startup by design: the unique index cannot build over them, so the
+data cleanup (tracked separately) must land first.
 
 v2.14.0 — Fund moves land in the month they belong to. Top-ups were
 always stamped `date.today()`, so funding a coming budget month from a

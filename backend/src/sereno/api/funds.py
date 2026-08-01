@@ -146,7 +146,10 @@ def apply_monthly_plans(db: sqlite3.Connection, today: date) -> None:
     open-ended fund has no finish line — and months spent at target are
     forgiven rather than owed: a drawdown resumes funding from its own
     month forward instead of backfilling rows the date-ordered balance
-    query would never see."""
+    query would never see. Parallel reads race this catch-up on separate
+    connections — both can read the anchors before either commits — so the
+    insert is OR IGNORE against 0012's one-planned-row-per-fund-per-date
+    unique index: a losing racer is a silent no-op."""
     funds = db.execute(
         "SELECT f.id, f.monthly_plan, f.target_amount,"
         " (SELECT e.as_of_date FROM fund_entry e WHERE e.fund_id = f.id"
@@ -171,12 +174,13 @@ def apply_monthly_plans(db: sqlite3.Connection, today: date) -> None:
                 contribution = min(contribution, fund["target_amount"] - balance)
             if contribution <= 0:
                 continue
-            db.execute(
-                "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+            cursor = db.execute(
+                "INSERT OR IGNORE INTO fund_entry"
+                " (fund_id, as_of_date, balance, contribution, source)"
                 " VALUES (?, ?, ?, ?, 'monthly_plan')",
                 (fund["id"], first.isoformat(), balance + contribution, contribution),
             )
-            appended = True
+            appended = appended or cursor.rowcount == 1
     if appended:
         db.commit()
 
