@@ -81,6 +81,13 @@ describe('App shell navigation', () => {
     expect(screen.getByTestId('view-ledger')).toBeInTheDocument()
   })
 
+  it('shows the deployed backend version under the month label', async () => {
+    render(<App />)
+
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    expect(await within(nav).findByText('v1.2.3')).toBeInTheDocument()
+  })
+
   it('marks only the active nav item with aria-current', () => {
     render(<App />)
 
