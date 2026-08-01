@@ -144,6 +144,41 @@ def test_quick_link_table_holds_labeled_urls(conn):
     assert rows == [("Chase", "https://chaseonline.chase.com/MyAccounts.aspx", 1)]
 
 
+def test_unique_monthly_plan_index_rejects_a_racing_duplicate(conn):
+    # Two first-of-month requests racing the monthly catch-up can both
+    # conclude the month is due and both insert its contribution; 0012's
+    # partial unique index makes the second row impossible at the schema
+    # level, where a race can't dodge it.
+    migrate(conn)
+    conn.execute("INSERT INTO fund (name, kind) VALUES ('Emergency fund', 'sinking')")
+    conn.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+        " VALUES (1, '2026-08-01', 10500, 500, 'monthly_plan')"
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+            " VALUES (1, '2026-08-01', 11000, 500, 'monthly_plan')"
+        )
+
+
+def test_unique_monthly_plan_index_leaves_other_sources_unconstrained(conn):
+    # The index is partial on purpose: same-fund same-date duplicates of
+    # every other kind are real usage — two Correct-balance restatements
+    # (NULL source), two top-ups, or two fund-funded spends in a day.
+    migrate(conn)
+    conn.execute("INSERT INTO fund (name, kind) VALUES ('Emergency fund', 'sinking')")
+    for source in (None, "top_up", "spend"):
+        for _ in range(2):
+            conn.execute(
+                "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+                " VALUES (1, '2026-08-01', 10500, 0, ?)",
+                (source,),
+            )
+    (count,) = conn.execute("SELECT COUNT(*) FROM fund_entry").fetchone()
+    assert count == 6
+
+
 def test_fund_emoji_backfills_existing_seed_funds(conn, tmp_path):
     # A database migrated before 0005 existed, already holding the
     # seed-named funds, gets its emojis backfilled by name.
