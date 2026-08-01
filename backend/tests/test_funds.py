@@ -312,6 +312,44 @@ class TestMonthlyPlanCatchUp:
         assert fund["balance"] == 10500
         assert len(fetch_fund_entries_with_source(fund_id)) == 2
 
+    def test_racing_reads_append_one_contribution_per_month(self, client, monkeypatch):
+        # Two parallel first-of-month requests (the dashboard fires
+        # /api/budget-month and /api/funds together on mount) can both
+        # read the fund's anchor before either commits, so both conclude
+        # the month is due. The interleave is reproduced deterministically
+        # in one thread: the loser's run pauses after its anchor read
+        # while the winner runs the whole catch-up and commits, then the
+        # loser proceeds — its insert must be a silent no-op, never a
+        # second contribution.
+        from sereno.api import funds as funds_api
+
+        fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=500)
+        insert_fund_entry(fund_id, first_of_month(1), 10000)
+        real_due_months = funds_api.due_contribution_months
+        winner = connect()
+        loser = connect()
+        raced = False
+
+        def race_once(*, anchor, today):
+            nonlocal raced
+            if not raced:
+                raced = True
+                funds_api.apply_monthly_plans(winner, today)
+            return real_due_months(anchor=anchor, today=today)
+
+        monkeypatch.setattr(funds_api, "due_contribution_months", race_once)
+        try:
+            funds_api.apply_monthly_plans(loser, date.today())
+        finally:
+            winner.close()
+            loser.close()
+        assert fetch_fund_entries_with_source(fund_id) == [
+            (first_of_month(1), 10000, 0, None),
+            (first_of_month(0), 10500, 500, "monthly_plan"),
+        ]
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 10500
+
     def test_every_missed_month_catches_up(self, client):
         fund_id = insert_fund("Emergency fund", target_amount=30000, monthly_plan=100)
         insert_fund_entry(fund_id, first_of_month(3), 1000)
