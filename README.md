@@ -1,6 +1,6 @@
 # Sereno
 
-**v2.14.1**
+**v3.0.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -869,6 +869,23 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.0.0 — The reported version stops lying. `GET /api/health` returned
+`sereno.__version__`, a hardcoded string last bumped at 2.7.0 while
+`pyproject.toml` moved on — every deploy since introduced itself as
+2.7.0, which sent a production investigation down a false "the
+deployment is lagging" path (discovered while diagnosing v2.14.1's
+duplicate-funding bug). `__version__` now derives from the installed
+package's metadata via `importlib.metadata`, built from
+`pyproject.toml` at image build time, so the endpoint reports what is
+actually deployed and a bump can never be forgotten; `uv.lock`'s own
+stale `sereno 2.7.0` entry is refreshed to match. The sidebar shows
+the deployed version in small muted text under the month label,
+fetched once from `/api/health`, so checking what's running no longer
+means curling the API. One dev-mode caveat: compose mounts only `src/`
+and `tests/`, so the dev server reports the version baked at the last
+`docker compose build` — a real deploy rebuilds the image, which is
+the point.
 
 v2.14.1 — Racing first-of-month reads stop double-funding the month.
 The monthly-plan catch-up runs on every funds and budget read, and the
