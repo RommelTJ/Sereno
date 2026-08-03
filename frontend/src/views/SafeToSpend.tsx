@@ -156,7 +156,11 @@ function SafeToSpend() {
               paged={homeMonth != null && budget.month !== homeMonth}
               onAdd={addExpense}
             />
-            <IncomeForm key={`income-${budget.month}`} onAdd={addIncome} />
+            <IncomeForm
+              key={`income-${budget.month}`}
+              month={budget.month}
+              onAdd={addIncome}
+            />
             <section
               data-testid="sts-activity"
               className="rounded-card border border-card-border bg-card px-6 py-2"

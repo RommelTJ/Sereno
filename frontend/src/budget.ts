@@ -129,10 +129,11 @@ export interface MonthOption {
   label: string
 }
 
-// The months a funding item can be tagged to: the current month and the
-// next two — enough for the prepay pattern (June pay funds July).
-export function fundsMonthOptions(todayIsoDate: string): MonthOption[] {
-  const [year, month] = todayIsoDate.split('-').map(Number)
+// The months a funding item can be tagged to: the given month and the
+// next two — enough for the prepay pattern (June pay funds July). Takes
+// a full ISO date or a bare YYYY-MM month; any day part is ignored.
+export function fundsMonthOptions(fromDate: string): MonthOption[] {
+  const [year, month] = fromDate.split('-').map(Number)
   return [0, 1, 2].map((offset) => {
     const date = new Date(year, month - 1 + offset)
     return {

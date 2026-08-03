@@ -7,6 +7,7 @@ import {
   editMonthOptions,
   expenseInput,
   expenseUpdateInput,
+  fundsMonthOptions,
   incomeInput,
   incomeUpdateInput,
   nextMonth,
@@ -44,6 +45,24 @@ describe('editMonthOptions', () => {
       '2026-08',
     ])
     expect(options[0].label).toBe('Apr 2026')
+  })
+})
+
+describe('fundsMonthOptions', () => {
+  it('accepts a bare YYYY-MM month and offers it plus the next two', () => {
+    // The Safe-to-spend view hands the pager's viewed month straight in;
+    // the day part of a full ISO date was never read anyway.
+    expect(fundsMonthOptions('2026-05')).toEqual([
+      { value: '2026-05', label: 'May 2026' },
+      { value: '2026-06', label: 'Jun 2026' },
+      { value: '2026-07', label: 'Jul 2026' },
+    ])
+  })
+
+  it('rolls the window across a year boundary', () => {
+    expect(fundsMonthOptions('2026-11').map((option) => option.value)).toEqual(
+      ['2026-11', '2026-12', '2027-01'],
+    )
   })
 })
 

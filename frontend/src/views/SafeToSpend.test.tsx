@@ -13,20 +13,6 @@ const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
 const expenseBody = (fetchMock: ReturnType<typeof stubApi>) =>
   postBody(fetchMock, '/api/expenses')
 
-// The funds-month options: the current month and the next two, as the
-// funding form should offer them.
-const fundsMonth = (offset: number) => {
-  const now = new Date()
-  const month = new Date(now.getFullYear(), now.getMonth() + offset)
-  return {
-    value: `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`,
-    label: month.toLocaleDateString('en-US', {
-      month: 'short',
-      year: 'numeric',
-    }),
-  }
-}
-
 beforeEach(() => {
   stubApi({ '/api/budget-month': BUDGET_MONTH, '/api/funds': FUNDS })
 })
@@ -381,7 +367,7 @@ describe('Add an income item', () => {
     expect(within(form).getByText('Add an income item')).toBeInTheDocument()
   })
 
-  it('offers the current and next two months as the funds month', async () => {
+  it('offers the viewed month and the next two as the funds month', async () => {
     render(<SafeToSpend />)
 
     const form = await screen.findByTestId('income-form')
@@ -392,7 +378,11 @@ describe('Add an income item', () => {
         value: (option as HTMLOptionElement).value,
         label: option.textContent,
       })),
-    ).toEqual([fundsMonth(0), fundsMonth(1), fundsMonth(2)])
+    ).toEqual([
+      { value: '2026-06', label: 'Jun 2026' },
+      { value: '2026-07', label: 'Jul 2026' },
+      { value: '2026-08', label: 'Aug 2026' },
+    ])
   })
 
   it('posts the income tagged to the selected month and refreshes the hero', async () => {
@@ -409,7 +399,7 @@ describe('Add an income item', () => {
       target: { value: '2,400' },
     })
     fireEvent.change(within(form).getByLabelText('Funds month'), {
-      target: { value: fundsMonth(1).value },
+      target: { value: '2026-07' },
     })
     fireEvent.change(within(form).getByLabelText('Source'), {
       target: { value: 'your-paycheck' },
@@ -426,7 +416,7 @@ describe('Add an income item', () => {
     expect(await screen.findByText('$6,070')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/income')).toEqual({
       txn_date: todayIso(),
-      budget_month: fundsMonth(1).value,
+      budget_month: '2026-07',
       source: 'paycheck',
       amount: 2400,
       source_label: 'You paycheck',
@@ -478,7 +468,7 @@ describe('Add an income item', () => {
     )
     expect(postBody(fetchMock, '/api/income')).toEqual({
       txn_date: todayIso(),
-      budget_month: fundsMonth(0).value,
+      budget_month: '2026-06',
       source: 'paycheck',
       amount: 350,
       source_label: 'Freelance invoice',
@@ -514,7 +504,7 @@ describe('Add an income item', () => {
     )
     expect(postBody(fetchMock, '/api/income')).toEqual({
       txn_date: todayIso(),
-      budget_month: fundsMonth(0).value,
+      budget_month: '2026-06',
       source: 'paycheck',
       amount: 100,
     })
