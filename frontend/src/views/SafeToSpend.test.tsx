@@ -752,6 +752,56 @@ describe('Spending posts to the viewed month', () => {
   })
 })
 
+describe('Income months derived from the viewed month', () => {
+  it('offers the viewed month and the next two after paging', async () => {
+    stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    await screen.findByText('May envelopes')
+
+    const form = screen.getByTestId('income-form')
+    const select = within(form).getByLabelText('Funds month')
+    const options = within(select).getAllByRole('option')
+    expect(
+      options.map((option) => (option as HTMLOptionElement).value),
+    ).toEqual(['2026-05', '2026-06', '2026-07'])
+    // The default is the month on screen — the prepay window slides with
+    // the pager.
+    expect(select).toHaveValue('2026-05')
+  })
+
+  it('tags an income post to the viewed month by default', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 7 },
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    await screen.findByText('May envelopes')
+
+    const form = screen.getByTestId('income-form')
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '500' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/income')).toBeDefined(),
+    )
+    expect(postBody(fetchMock, '/api/income').budget_month).toBe('2026-05')
+  })
+})
+
 describe('Leftover line retirement', () => {
   it('renders no leftover line and never asks for the previous month', async () => {
     const fetchMock = stubApi({
