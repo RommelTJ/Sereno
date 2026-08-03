@@ -177,6 +177,7 @@ describe('Add a spending item', () => {
     expect(await screen.findByText('$3,625')).toBeInTheDocument()
     expect(expenseBody(fetchMock)).toEqual({
       txn_date: todayIso(),
+      budget_month: '2026-06',
       category_id: 2,
       amount: 45,
       funded_from: 'discretionary',
@@ -219,6 +220,7 @@ describe('Add a spending item', () => {
     await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
     expect(expenseBody(fetchMock)).toEqual({
       txn_date: todayIso(),
+      budget_month: '2026-06',
       amount: 1200,
       funded_from: 'fund',
       fund_id: 2,
@@ -290,6 +292,7 @@ describe('Add a spending item', () => {
     await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
     expect(expenseBody(fetchMock)).toEqual({
       txn_date: todayIso(),
+      budget_month: '2026-06',
       category_id: 1,
       amount: 180,
       funded_from: 'discretionary',
@@ -320,6 +323,7 @@ describe('Add a spending item', () => {
     await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
     expect(expenseBody(fetchMock)).toEqual({
       txn_date: todayIso(),
+      budget_month: '2026-06',
       category_id: 1,
       amount: 45,
       funded_from: 'discretionary',

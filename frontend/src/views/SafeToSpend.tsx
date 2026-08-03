@@ -43,6 +43,9 @@ function SafeToSpend() {
   // pager existed.
   const [viewMonth, setViewMonth] = useState<string | null>(null)
   const [paging, setPaging] = useState(false)
+  // The month the view opened to — the server names it on the first load.
+  // Paged means the view stands anywhere else, whichever way it got there.
+  const [homeMonth, setHomeMonth] = useState<string | null>(null)
   // The Activity feed's envelope filter, set by tapping an envelope row.
   // Only the id is stored — the envelope itself derives from the viewed
   // month's categories, so a refetch never leaves stale figures behind.
@@ -53,7 +56,10 @@ function SafeToSpend() {
   useEffect(() => {
     setPaging(true)
     void fetchBudgetMonth(viewMonth ?? undefined)
-      .then(setBudget)
+      .then((next) => {
+        setBudget(next)
+        setHomeMonth((home) => home ?? next.month)
+      })
       .finally(() => setPaging(false))
   }, [viewMonth])
 
@@ -143,11 +149,14 @@ function SafeToSpend() {
           </div>
           <div className="flex flex-col gap-5">
             <SpendingForm
+              key={`spend-${budget.month}`}
               categories={budget.categories}
               funds={funds}
+              month={budget.month}
+              paged={homeMonth != null && budget.month !== homeMonth}
               onAdd={addExpense}
             />
-            <IncomeForm onAdd={addIncome} />
+            <IncomeForm key={`income-${budget.month}`} onAdd={addIncome} />
             <section
               data-testid="sts-activity"
               className="rounded-card border border-card-border bg-card px-6 py-2"

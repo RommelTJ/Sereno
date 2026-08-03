@@ -268,8 +268,9 @@ export function incomeUpdateInput(
 
 // The Paid-from select encodes its choice as 'cat:<id>' (an envelope —
 // discretionary spending against that category) or 'fund:<id>' (fund
-// spending, no category). budget_month is left to the server default (the
-// txn's month). Returns null when the amount or the picked id doesn't
+// spending, no category). budgetMonth tags the spend to the viewed month;
+// left out (the edit path builds its own), the server defaults it to the
+// txn's month. Returns null when the amount or the picked id doesn't
 // parse — nothing should be posted. A whitespace-only note is omitted
 // from the payload, never sent empty, and so is an unchecked pending.
 export function expenseInput(
@@ -278,12 +279,14 @@ export function expenseInput(
   txnDate: string,
   rawNote: string,
   pending = false,
+  budgetMonth?: string,
 ): ExpenseInput | null {
   const amount = parseAmount(rawAmount)
   if (!amount) return null
   const note = rawNote.trim()
   const base = {
     txn_date: txnDate,
+    ...(budgetMonth ? { budget_month: budgetMonth } : {}),
     amount,
     ...(note ? { note } : {}),
     ...(pending ? { pending: true } : {}),

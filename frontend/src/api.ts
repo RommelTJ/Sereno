@@ -396,6 +396,10 @@ export type IncomeSource =
 // full-replace PUT clears a settled charge's flag.
 export type ExpenseInput = {
   txn_date: string
+  // The month the spend counts against — the Safe-to-spend view's viewed
+  // month, so a row entered while paged back lands where it was entered.
+  // Omitted, the server defaults it to the txn's month.
+  budget_month?: string
   amount: number
   note?: string
   pending?: boolean

@@ -129,6 +129,24 @@ describe('expenseInput', () => {
       'pending',
     )
   })
+
+  it('tags the payload to an explicit budget month', () => {
+    expect(
+      expenseInput('12', 'cat:3', '2026-08-03', '', false, '2026-05'),
+    ).toEqual({
+      txn_date: '2026-08-03',
+      budget_month: '2026-05',
+      amount: 12,
+      funded_from: 'discretionary',
+      category_id: 3,
+    })
+  })
+
+  it('leaves the budget month to the server default when not given', () => {
+    expect(expenseInput('12', 'cat:3', '2026-08-03', '')).not.toHaveProperty(
+      'budget_month',
+    )
+  })
 })
 
 describe('sourceOptionFor', () => {
