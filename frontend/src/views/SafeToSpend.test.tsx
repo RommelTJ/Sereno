@@ -657,6 +657,29 @@ describe('Leftover line', () => {
   })
 })
 
+describe('Leftover line retirement', () => {
+  it('renders no leftover line and never asks for the previous month', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+
+    await screen.findByText('$3,670')
+    // Month paging supersedes the line: last month's closing number is one
+    // tap back, in the hero itself.
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => input === '/api/budget-month?month=2026-05',
+      ),
+    ).toBe(false)
+    await waitFor(() =>
+      expect(screen.queryByTestId('leftover-line')).not.toBeInTheDocument(),
+    )
+  })
+})
+
 describe('Activity feed', () => {
   it('renders every item of the month below the income form', async () => {
     render(<SafeToSpend />)
