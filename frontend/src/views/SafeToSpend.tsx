@@ -170,6 +170,7 @@ function SafeToSpend() {
                 funds={funds}
                 onChanged={refresh}
                 filter={filterEnvelope}
+                pager={false}
               />
             </section>
           </div>
