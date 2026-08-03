@@ -6,7 +6,7 @@ import {
   fetchBudgetMonth,
   fetchFunds,
 } from '../api.ts'
-import { envelopeView, leftoverLine, previousMonth } from '../budget.ts'
+import { envelopeView } from '../budget.ts'
 import ActivityFeed from '../components/ActivityFeed.tsx'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
 import IncomeForm from '../components/IncomeForm.tsx'
@@ -32,7 +32,6 @@ function Hero({ safeToSpend }: { safeToSpend: number }) {
 
 function SafeToSpend() {
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
-  const [previous, setPrevious] = useState<BudgetMonth | null>(null)
   const [funds, setFunds] = useState<Fund[] | null>(null)
   // The Activity feed's envelope filter, set by tapping an envelope row.
   // Only the id is stored — the envelope itself derives from the current
@@ -42,12 +41,7 @@ function SafeToSpend() {
     budget?.categories.find((category) => category.id === filterId) ?? null
 
   useEffect(() => {
-    // The leftover line reads last month's closing safe-to-spend, so the
-    // previous month loads once the current one names itself.
-    void fetchBudgetMonth().then((current) => {
-      setBudget(current)
-      return fetchBudgetMonth(previousMonth(current.month)).then(setPrevious)
-    })
+    void fetchBudgetMonth().then(setBudget)
     void fetchFunds().then(setFunds)
   }, [])
 
@@ -68,9 +62,8 @@ function SafeToSpend() {
     setBudget(await fetchBudgetMonth())
   }
 
-  // An item edit or delete can touch anything: the hero and envelopes, a
-  // fund's balance (fund-funded corrections), and last month's leftover
-  // line (a reassigned budget month) — so everything refetches.
+  // An item edit or delete can touch anything: the hero and envelopes, and
+  // a fund's balance (fund-funded corrections) — so everything refetches.
   const refresh = async () => {
     const [nextBudget, nextFunds] = await Promise.all([
       fetchBudgetMonth(),
@@ -78,7 +71,6 @@ function SafeToSpend() {
     ])
     setBudget(nextBudget)
     setFunds(nextFunds)
-    setPrevious(await fetchBudgetMonth(previousMonth(nextBudget.month)))
   }
 
   return (
@@ -107,14 +99,6 @@ function SafeToSpend() {
               onAdd={addExpense}
             />
             <IncomeForm onAdd={addIncome} />
-            {previous && leftoverLine(previous, budget.rollover_assigned) && (
-              <p
-                data-testid="leftover-line"
-                className="px-1 text-[12.5px] font-medium text-muted-2"
-              >
-                {leftoverLine(previous, budget.rollover_assigned)}
-              </p>
-            )}
             <section
               data-testid="sts-activity"
               className="rounded-card border border-card-border bg-card px-6 py-2"

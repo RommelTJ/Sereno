@@ -608,55 +608,6 @@ describe('Add an income item', () => {
   })
 })
 
-describe('Leftover line', () => {
-  it("shows last month's leftover with assigned and unassigned totals", async () => {
-    stubApi({
-      '/api/budget-month': BUDGET_MONTH,
-      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
-      '/api/funds': FUNDS,
-    })
-    render(<SafeToSpend />)
-
-    expect(
-      await screen.findByText(
-        'May left $1,000 · $600 assigned · $400 unassigned',
-      ),
-    ).toBeInTheDocument()
-  })
-
-  it('shows an over-assignment instead of hiding it', async () => {
-    stubApi({
-      '/api/budget-month': { ...BUDGET_MONTH, rollover_assigned: 1_050 },
-      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
-      '/api/funds': FUNDS,
-    })
-    render(<SafeToSpend />)
-
-    expect(
-      await screen.findByText(
-        'May left $1,000 · $1,050 assigned · over-assigned $50',
-      ),
-    ).toBeInTheDocument()
-  })
-
-  it('renders no line when last month left nothing unassigned to give', async () => {
-    stubApi({
-      '/api/budget-month': { ...BUDGET_MONTH, rollover_assigned: 0 },
-      '/api/budget-month?month=2026-05': {
-        ...MAY_BUDGET_MONTH,
-        safe_to_spend: 0,
-      },
-      '/api/funds': FUNDS,
-    })
-    render(<SafeToSpend />)
-
-    await screen.findByText('$3,670')
-    await waitFor(() =>
-      expect(screen.queryByTestId('leftover-line')).not.toBeInTheDocument(),
-    )
-  })
-})
-
 describe('Leftover line retirement', () => {
   it('renders no leftover line and never asks for the previous month', async () => {
     const fetchMock = stubApi({
@@ -686,10 +637,7 @@ describe('Activity feed', () => {
 
     const form = await screen.findByTestId('income-form')
     const feed = screen.getByTestId('sts-activity')
-    // The leftover line rides between the funding form and the feed.
-    const line = await screen.findByTestId('leftover-line')
-    expect(form.nextElementSibling).toBe(line)
-    expect(line.nextElementSibling).toBe(feed)
+    expect(form.nextElementSibling).toBe(feed)
     expect(within(feed).getByText('Activity')).toBeInTheDocument()
     // Uncapped: all four fixture items, the fund entry among them.
     expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)
