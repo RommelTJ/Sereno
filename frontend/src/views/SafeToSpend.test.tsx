@@ -705,6 +705,49 @@ describe('Single-month Activity card', () => {
   })
 })
 
+describe('Spending posts to the viewed month', () => {
+  it('tags a spending post to the month on screen', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/expenses': { id: 99 },
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    await screen.findByText('May envelopes')
+
+    const form = screen.getByTestId('spending-form')
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '12' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add spending row' }),
+    )
+
+    await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
+    expect(expenseBody(fetchMock).budget_month).toBe('2026-05')
+  })
+
+  it('hints the posting month only while paged off the current month', async () => {
+    stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+    // On the month the view opened to, the form needs no reminder.
+    expect(screen.queryByText('Posts to June 2026')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+
+    await screen.findByText('May envelopes')
+    expect(screen.getByText('Posts to May 2026')).toBeInTheDocument()
+  })
+})
+
 describe('Leftover line retirement', () => {
   it('renders no leftover line and never asks for the previous month', async () => {
     const fetchMock = stubApi({
