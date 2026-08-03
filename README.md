@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.0.0**
+**v3.1.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -876,6 +876,25 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.1.0 — The Safe-to-spend view pages whole months. The Activity card's
+back/forward buttons paged only the feed — the hero and envelopes
+stayed pinned to the current month, so there was no way to see how the
+envelopes stood in a past month, and the 1st-of-the-month leftover
+question lived in a small footnote line below the income form. A month
+pager above the hero now steps the entire view one month at a time,
+uncapped in both directions, through the existing
+`GET /api/budget-month?month=` param — hero, envelopes, forms, and a
+single-month Activity card all following the viewed month (the
+Dashboard's feed keeps its own paging untouched) — and the leftover
+line retires: last month's closing Safe-to-spend is the paged-back
+month's own hero, so the label was redundant. Both add-forms post to
+the month on screen: the spending form always sends an explicit
+`budget_month` and wears a "Posts to May 2026" line while the view
+stands off the month it opened to, and the income form's funds-month
+window derives from the viewed month instead of today — so a row
+entered while looking at May lands in May, not silently in the real
+current month. Frontend-only: the API already served any month.
 
 v3.0.0 — The reported version stops lying. `GET /api/health` returned
 `sereno.__version__`, a hardcoded string last bumped at 2.7.0 while
