@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Envelope, ExpenseInput, Fund } from '../api.ts'
-import { expenseInput } from '../budget.ts'
+import { expenseInput, monthYearLabel } from '../budget.ts'
 import { todayIso } from '../ledger.ts'
 
 const inputClasses =
@@ -17,10 +17,20 @@ export function FieldLabel({ text }: { text: string }) {
 interface SpendingFormProps {
   categories: Envelope[]
   funds: Fund[]
+  // The viewed month a post is tagged to; paged says the view is off the
+  // month it opened to, which is when the form spells the month out.
+  month: string
+  paged: boolean
   onAdd: (input: ExpenseInput) => Promise<void>
 }
 
-function SpendingForm({ categories, funds, onAdd }: SpendingFormProps) {
+function SpendingForm({
+  categories,
+  funds,
+  month,
+  paged,
+  onAdd,
+}: SpendingFormProps) {
   const [amount, setAmount] = useState('')
   // One select answers "where does the money come from?": an envelope pick
   // is discretionary spending against that category, a fund pick draws the
@@ -34,7 +44,14 @@ function SpendingForm({ categories, funds, onAdd }: SpendingFormProps) {
   const [adding, setAdding] = useState(false)
 
   const handleAdd = async () => {
-    const input = expenseInput(amount, paidFrom, todayIso(), note, pending)
+    const input = expenseInput(
+      amount,
+      paidFrom,
+      todayIso(),
+      note,
+      pending,
+      month,
+    )
     if (!input) return
     setAdding(true)
     try {
@@ -53,6 +70,11 @@ function SpendingForm({ categories, funds, onAdd }: SpendingFormProps) {
       className="rounded-card border border-card-border bg-card p-[22px]"
     >
       <h2 className="text-sm font-bold">Add a spending item</h2>
+      {paged && (
+        <p className="mt-0.5 text-[11.5px] text-muted-2">
+          Posts to {monthYearLabel(month)}
+        </p>
+      )}
       <div className="mt-3.5 grid grid-cols-1 gap-[11px] sm:grid-cols-2">
         <label htmlFor="spend-amount" className="block">
           <FieldLabel text="Amount" />

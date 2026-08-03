@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.0.0**
+**v3.1.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -294,9 +294,10 @@ The budget slice:
   `rollover_assigned` sums the month's `rollover` entries — last
   month's leftover being given a job. It never joins the safe-to-spend
   subtraction, and rollover entries stay out of the feed: their
-  visibility surfaces are the Safe-to-spend leftover line (which
-  computes the unassigned remainder as the previous month's
-  `safe_to_spend` minus this total) and the fund's own entry history.
+  visibility surfaces are the paged-back previous month's own hero
+  (its closing safe-to-spend is the leftover) and the fund's entry
+  history — the field rides in the response unread by the frontend
+  since the leftover line retired.
   Reading the budget month applies
   the monthly-plan catch-up itself, so the headline never misses a
   contribution the funds list hasn't been asked for yet.
@@ -592,7 +593,15 @@ The forecast slice (the third Plan engine):
   whose balance is being copied in, each opening in a new tab — managed on
   Settings & data and absent entirely while no links exist.
 - **Safe-to-spend** (<http://localhost:5173/safe-to-spend>) — the daily-use
-  view. The dark hero shows the month's Safe-to-spend headline from
+  view. A month pager sits above everything — back/forward arrows around
+  the viewed month's label — and steps the entire view one month at a
+  time, uncapped in both directions, through the same
+  `GET /api/budget-month?month=` param the view already read: the hero,
+  the envelopes, the funds card's context, both add-forms, and the
+  activity feed all follow the viewed month, so how the envelopes stood
+  in any past month is one tap away — and last month's closing
+  Safe-to-spend, the old leftover-line question, is simply the previous
+  month's hero. The dark hero shows the viewed month's headline from
   `GET /api/budget-month` (stored funding baseline − total spent) with the
   "total cash − bills due − money in funds" formula pill, above the monthly
   envelopes card: one progress bar per category, "spent · left" while under
@@ -600,11 +609,12 @@ The forecast slice (the third Plan engine):
   is allowed and simply trims the headline. Every envelope row is a tap
   target: tapping one filters the Activity feed to that envelope's own
   expenses — income, fund entries, and fund-funded lines belong to no
-  envelope, so they drop out, across paged-in months too — with the
+  envelope, so they drop out — with the
   selected row tinted, a "Filtering: 🛒 Groceries ✕" chip in the Activity
   header whose tap clears the filter, a re-tap of the same envelope
   toggling it off, and a tap of a different envelope replacing it, one
-  filter at a time; a filtered month with nothing left says "No 🛒
+  filter at a time — paging months clears it, since an old month may not
+  carry the envelope; a filtered month with nothing left says "No 🛒
   Groceries activity this month." instead of claiming no activity exists.
   Under the envelopes, the "Money in funds" card makes
   the formula's money-in-funds term visible where spending decisions
@@ -619,35 +629,31 @@ The forecast slice (the third Plan engine):
   a category-plus-fund line can't be entered; choosing a fund reveals the
   matching Cash-Plus-withdrawal reminder — an optional note that
   titles the row in the activity feeds, and a Pending checkbox for a
-  provisional amount) posts to `POST /api/expenses`,
+  provisional amount) posts to `POST /api/expenses` with an explicit
+  `budget_month` — the viewed month, so a row entered while paged back
+  lands in the month on screen instead of falling to the server's
+  txn-month default, and a "Posts to May 2026" line under the title
+  says so whenever the view stands off the month it opened to —
   and "Add an
-  income item" (amount, funds month — the current or next two, so a
-  paycheck can prepay next month — source, an editable Source title
+  income item" (amount, funds month — the viewed month or the next two,
+  so a paycheck can prepay next month and the prepay window slides with
+  the pager — source, an editable Source title
   prefilled from the selected source — the row's bold title, posted as
   `source_label`; switching the source re-prefills it — an optional
   note, and the same Pending checkbox) posts to `POST /api/income`. A
   blank title or note is omitted from the payload, never sent empty,
-  and so is an unticked Pending.
-  Every submit refetches the budget month, so the hero and envelopes always
+  and so is an unticked Pending; paging remounts both forms, so their
+  defaults re-derive from the month on screen.
+  Every submit refetches the viewed budget month, so the hero and
+  envelopes always
   show the API's figures rather than client-side math — and adding a
   spending item refetches the funds list too, so a fund-funded spend's
-  drawdown lands on the "Money in funds" card immediately. Between the
-  income form and the Activity card, the leftover line answers the 1st
-  of the month's actual question — has last month's leftover been given
-  a job yet?: "July left $1,000 · $600 assigned · $400 unassigned",
-  last month's closing Safe-to-spend (from a second
-  `GET /api/budget-month` on the previous month) against the current
-  month's `rollover_assigned`, ticking to $0 unassigned as the money is
-  assigned on Funds & Goals. A late-posted expense that shrinks the
-  leftover below what was already assigned reads "over-assigned $X"
-  rather than hiding — that amount came out of the current month's
-  checking buffer — and the line renders only when last month left
-  something or something is assigned. Below the
-  forms, the Activity card renders the same uncapped, month-paged feed as
-  the Dashboard's Recent activity — back through past months from the
-  bottom, forward into future months from the top: a new item lands in
-  the newest section the moment a form submits, and the loaded history
-  stays put. Here — and only here; the Dashboard's feed stays a
+  drawdown lands on the "Money in funds" card immediately. Below the
+  forms, the Activity card renders the viewed month's feed — the same
+  uncapped row rendering as the Dashboard's Recent activity, but one
+  month with no paging buttons of its own: the view's pager owns month
+  navigation, and a new item lands in the feed the moment a form
+  submits. Here — and only here; the Dashboard's feed stays a
   glanceable read — tapping an expense or income row expands an inline
   edit form pre-filled from the row itself (amount, the same Paid-from
   optgroups as the create form, budget month — the stored month plus the
@@ -660,10 +666,11 @@ The forecast slice (the third Plan engine):
   as compensating entries server-side, so the fund's balance follows —
   and Delete arms on the first tap ("Tap again to delete") before
   removing the row, touch-friendly destruction without a native dialog.
-  Every save or delete refetches the hero, envelopes, funds card,
-  leftover line, and each loaded feed month, so a reassigned item moves
-  between sections immediately. Fund rows belong to the funds machinery
-  and offer no edit affordance.
+  Every save or delete refetches the hero, envelopes, funds card, and
+  the viewed month's feed, so an edit's effects land immediately — a
+  row reassigned to another budget month leaves the viewed feed and
+  waits under its own month on the pager. Fund rows belong to the funds
+  machinery and offer no edit affordance.
 - **Budget report** (<http://localhost:5173/report>) — the "does it
   balance out?" view: the monthly discipline is `annual_target / 12`,
   most months land a little under, some go over, and this table is where
@@ -869,6 +876,25 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.1.0 — The Safe-to-spend view pages whole months. The Activity card's
+back/forward buttons paged only the feed — the hero and envelopes
+stayed pinned to the current month, so there was no way to see how the
+envelopes stood in a past month, and the 1st-of-the-month leftover
+question lived in a small footnote line below the income form. A month
+pager above the hero now steps the entire view one month at a time,
+uncapped in both directions, through the existing
+`GET /api/budget-month?month=` param — hero, envelopes, forms, and a
+single-month Activity card all following the viewed month (the
+Dashboard's feed keeps its own paging untouched) — and the leftover
+line retires: last month's closing Safe-to-spend is the paged-back
+month's own hero, so the label was redundant. Both add-forms post to
+the month on screen: the spending form always sends an explicit
+`budget_month` and wears a "Posts to May 2026" line while the view
+stands off the month it opened to, and the income form's funds-month
+window derives from the viewed month instead of today — so a row
+entered while looking at May lands in May, not silently in the real
+current month. Frontend-only: the API already served any month.
 
 v3.0.0 — The reported version stops lying. `GET /api/health` returned
 `sereno.__version__`, a hardcoded string last bumped at 2.7.0 while

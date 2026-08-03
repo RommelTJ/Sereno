@@ -8,13 +8,17 @@ const inputClasses =
   'mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2.5 text-sm'
 
 function IncomeForm({
+  month,
   onAdd,
 }: {
+  // The viewed month: the prepay window slides with the pager — this
+  // month and the next two, defaulting to the month on screen.
+  month: string
   onAdd: (input: IncomeInput) => Promise<void>
 }) {
-  const months = fundsMonthOptions(todayIso())
+  const months = fundsMonthOptions(month)
   const [amount, setAmount] = useState('')
-  const [month, setMonth] = useState(months[0].value)
+  const [fundsMonth, setFundsMonth] = useState(months[0].value)
   const [sourceKey, setSourceKey] = useState(SOURCE_OPTIONS[0].value)
   const [sourceLabel, setSourceLabel] = useState(SOURCE_OPTIONS[0].sourceLabel)
   const [note, setNote] = useState('')
@@ -33,7 +37,7 @@ function IncomeForm({
     const input = incomeInput(
       amount,
       sourceKey,
-      month,
+      fundsMonth,
       todayIso(),
       sourceLabel,
       note,
@@ -76,8 +80,8 @@ function IncomeForm({
           <select
             id="income-month"
             className={inputClasses}
-            value={month}
-            onChange={(event) => setMonth(event.target.value)}
+            value={fundsMonth}
+            onChange={(event) => setFundsMonth(event.target.value)}
           >
             {months.map((option) => (
               <option key={option.value} value={option.value}>

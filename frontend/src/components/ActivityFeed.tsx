@@ -33,14 +33,16 @@ const ACTIVITY_TONES: Record<ActivityTone, { tile: string; amount: string }> =
     fund: { tile: 'bg-amber-soft', amount: 'text-muted' },
   }
 
-// The uncapped, month-paged activity feed shared by the Dashboard and
-// Safe-to-spend. The current month arrives as a prop — refetching it after
-// a form submit replaces the newest section without touching the loaded
-// history — and earlier months accumulate as the button at the bottom
-// pages back through the existing GET /api/budget-month?month= param.
-// The mirrored button at the top prepends future months the same way —
-// income can fund a future budget_month (June pay funds July), and an
-// empty future month just renders the "No activity yet" state.
+// The uncapped activity feed shared by the Dashboard and Safe-to-spend.
+// The current month arrives as a prop — refetching it after a form submit
+// replaces the newest section without touching the loaded history. With
+// pager set (the Dashboard), earlier months accumulate as the button at
+// the bottom pages back through the existing GET /api/budget-month?month=
+// param, and the mirrored button at the top prepends future months the
+// same way — income can fund a future budget_month (June pay funds July),
+// and an empty future month just renders the "No activity yet" state.
+// Without it (Safe-to-spend), the view's own month pager owns navigation
+// and the feed renders only the month it is handed.
 // Each section keeps its own BudgetMonth, because a row's envelope emoji
 // resolves from that month's categories.
 // With onChanged set (Safe-to-spend; the Dashboard stays read-only),
@@ -54,17 +56,19 @@ function ActivityFeed({
   funds,
   onChanged,
   filter,
+  pager = true,
 }: {
   current: BudgetMonth
   funds: Fund[]
   onChanged?: () => Promise<void>
   filter?: Envelope | null
+  pager?: boolean
 }) {
   const [later, setLater] = useState<BudgetMonth[]>([])
   const [earlier, setEarlier] = useState<BudgetMonth[]>([])
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
-  const months = [...later, current, ...earlier]
+  const months = pager ? [...later, current, ...earlier] : [current]
   const forwardTarget = nextMonth(months[0].month)
   const target = previousMonth(months[months.length - 1].month)
 
@@ -135,14 +139,16 @@ function ActivityFeed({
 
   return (
     <>
-      <button
-        type="button"
-        disabled={loading}
-        onClick={() => void loadLater()}
-        className="my-3.5 w-full cursor-pointer rounded-[8px] border border-input-border bg-card py-2 text-[12.5px] font-semibold text-muted disabled:opacity-60"
-      >
-        {monthYearLabel(forwardTarget)} →
-      </button>
+      {pager && (
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => void loadLater()}
+          className="my-3.5 w-full cursor-pointer rounded-[8px] border border-input-border bg-card py-2 text-[12.5px] font-semibold text-muted disabled:opacity-60"
+        >
+          {monthYearLabel(forwardTarget)} →
+        </button>
+      )}
       {months.map((budget) => (
         <section key={budget.month}>
           <p className="pt-3.5 text-[11px] font-semibold tracking-[1.2px] text-muted-2 uppercase">
@@ -229,14 +235,16 @@ function ActivityFeed({
           })}
         </section>
       ))}
-      <button
-        type="button"
-        disabled={loading}
-        onClick={() => void loadEarlier()}
-        className="my-3.5 w-full cursor-pointer rounded-[8px] border border-input-border bg-card py-2 text-[12.5px] font-semibold text-muted disabled:opacity-60"
-      >
-        ← {monthYearLabel(target)}
-      </button>
+      {pager && (
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => void loadEarlier()}
+          className="my-3.5 w-full cursor-pointer rounded-[8px] border border-input-border bg-card py-2 text-[12.5px] font-semibold text-muted disabled:opacity-60"
+        >
+          ← {monthYearLabel(target)}
+        </button>
+      )}
     </>
   )
 }

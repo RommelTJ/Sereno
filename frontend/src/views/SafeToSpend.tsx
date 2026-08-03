@@ -6,7 +6,12 @@ import {
   fetchBudgetMonth,
   fetchFunds,
 } from '../api.ts'
-import { envelopeView, leftoverLine, previousMonth } from '../budget.ts'
+import {
+  envelopeView,
+  monthYearLabel,
+  nextMonth,
+  previousMonth,
+} from '../budget.ts'
 import ActivityFeed from '../components/ActivityFeed.tsx'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
 import IncomeForm from '../components/IncomeForm.tsx'
@@ -32,31 +37,49 @@ function Hero({ safeToSpend }: { safeToSpend: number }) {
 
 function SafeToSpend() {
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
-  const [previous, setPrevious] = useState<BudgetMonth | null>(null)
   const [funds, setFunds] = useState<Fund[] | null>(null)
+  // The viewed month — null is the current month (the initial view), so
+  // the default view's requests stay exactly what they were before the
+  // pager existed.
+  const [viewMonth, setViewMonth] = useState<string | null>(null)
+  const [paging, setPaging] = useState(false)
+  // The month the view opened to — the server names it on the first load.
+  // Paged means the view stands anywhere else, whichever way it got there.
+  const [homeMonth, setHomeMonth] = useState<string | null>(null)
   // The Activity feed's envelope filter, set by tapping an envelope row.
-  // Only the id is stored — the envelope itself derives from the current
+  // Only the id is stored — the envelope itself derives from the viewed
   // month's categories, so a refetch never leaves stale figures behind.
   const [filterId, setFilterId] = useState<number | null>(null)
   const filterEnvelope =
     budget?.categories.find((category) => category.id === filterId) ?? null
 
   useEffect(() => {
-    // The leftover line reads last month's closing safe-to-spend, so the
-    // previous month loads once the current one names itself.
-    void fetchBudgetMonth().then((current) => {
-      setBudget(current)
-      return fetchBudgetMonth(previousMonth(current.month)).then(setPrevious)
-    })
+    setPaging(true)
+    void fetchBudgetMonth(viewMonth ?? undefined)
+      .then((next) => {
+        setBudget(next)
+        setHomeMonth((home) => home ?? next.month)
+      })
+      .finally(() => setPaging(false))
+  }, [viewMonth])
+
+  useEffect(() => {
     void fetchFunds().then(setFunds)
   }, [])
+
+  // Stepping the pager clears the envelope filter — an old month may not
+  // carry the filtered envelope at all.
+  const page = (month: string) => {
+    setFilterId(null)
+    setViewMonth(month)
+  }
 
   const addExpense = async (input: ExpenseInput) => {
     await createExpense(input)
     // A fund-funded spend draws the fund down server-side, so the funds
     // card refreshes alongside the hero and envelopes.
     const [nextBudget, nextFunds] = await Promise.all([
-      fetchBudgetMonth(),
+      fetchBudgetMonth(viewMonth ?? undefined),
       fetchFunds(),
     ])
     setBudget(nextBudget)
@@ -65,20 +88,18 @@ function SafeToSpend() {
 
   const addIncome = async (input: IncomeInput) => {
     await createIncome(input)
-    setBudget(await fetchBudgetMonth())
+    setBudget(await fetchBudgetMonth(viewMonth ?? undefined))
   }
 
-  // An item edit or delete can touch anything: the hero and envelopes, a
-  // fund's balance (fund-funded corrections), and last month's leftover
-  // line (a reassigned budget month) — so everything refetches.
+  // An item edit or delete can touch anything: the hero and envelopes, and
+  // a fund's balance (fund-funded corrections) — so everything refetches.
   const refresh = async () => {
     const [nextBudget, nextFunds] = await Promise.all([
-      fetchBudgetMonth(),
+      fetchBudgetMonth(viewMonth ?? undefined),
       fetchFunds(),
     ])
     setBudget(nextBudget)
     setFunds(nextFunds)
-    setPrevious(await fetchBudgetMonth(previousMonth(nextBudget.month)))
   }
 
   return (
@@ -88,6 +109,32 @@ function SafeToSpend() {
     >
       {budget && funds && (
         <>
+          <div
+            data-testid="month-pager"
+            className="flex items-center justify-between lg:col-span-2"
+          >
+            <button
+              type="button"
+              aria-label="Previous month"
+              disabled={paging}
+              onClick={() => page(previousMonth(budget.month))}
+              className="min-h-[44px] min-w-[44px] cursor-pointer rounded-[8px] border border-input-border bg-card px-4 text-[13px] font-semibold text-muted disabled:opacity-60"
+            >
+              ←
+            </button>
+            <p data-testid="month-pager-label" className="text-sm font-bold">
+              {monthYearLabel(budget.month)}
+            </p>
+            <button
+              type="button"
+              aria-label="Next month"
+              disabled={paging}
+              onClick={() => page(nextMonth(budget.month))}
+              className="min-h-[44px] min-w-[44px] cursor-pointer rounded-[8px] border border-input-border bg-card px-4 text-[13px] font-semibold text-muted disabled:opacity-60"
+            >
+              →
+            </button>
+          </div>
           <div className="flex flex-col gap-5">
             <Hero safeToSpend={budget.safe_to_spend} />
             <EnvelopesCard
@@ -102,19 +149,18 @@ function SafeToSpend() {
           </div>
           <div className="flex flex-col gap-5">
             <SpendingForm
+              key={`spend-${budget.month}`}
               categories={budget.categories}
               funds={funds}
+              month={budget.month}
+              paged={homeMonth != null && budget.month !== homeMonth}
               onAdd={addExpense}
             />
-            <IncomeForm onAdd={addIncome} />
-            {previous && leftoverLine(previous, budget.rollover_assigned) && (
-              <p
-                data-testid="leftover-line"
-                className="px-1 text-[12.5px] font-medium text-muted-2"
-              >
-                {leftoverLine(previous, budget.rollover_assigned)}
-              </p>
-            )}
+            <IncomeForm
+              key={`income-${budget.month}`}
+              month={budget.month}
+              onAdd={addIncome}
+            />
             <section
               data-testid="sts-activity"
               className="rounded-card border border-card-border bg-card px-6 py-2"
@@ -137,6 +183,7 @@ function SafeToSpend() {
                 funds={funds}
                 onChanged={refresh}
                 filter={filterEnvelope}
+                pager={false}
               />
             </section>
           </div>

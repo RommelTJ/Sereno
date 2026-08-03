@@ -4,7 +4,6 @@
 
 import type {
   ActivityItem,
-  BudgetMonth,
   Envelope,
   ExpenseInput,
   ExpenseUpdateInput,
@@ -73,30 +72,6 @@ export function previousMonth(month: string): string {
     : `${year}-${String(monthNumber - 1).padStart(2, '0')}`
 }
 
-// The leftover line: "May left $1,000 · $600 assigned · $400 unassigned" —
-// last month's safe_to_spend against the current month's assigned rollover
-// total, ticking down to $0 unassigned as the money is given a job. More
-// assigned than the month left reads "over-assigned $X" rather than
-// hiding: that amount came out of the current month's checking buffer. A
-// month that left nothing, with nothing assigned, has nothing to say —
-// the line is null.
-export function leftoverLine(
-  previous: BudgetMonth,
-  assigned: number,
-): string | null {
-  const leftover = previous.safe_to_spend
-  if (leftover <= 0 && assigned === 0) return null
-  const unassigned = leftover - assigned
-  const remainder =
-    unassigned >= 0
-      ? `${formatUsd(unassigned)} unassigned`
-      : `over-assigned ${formatUsd(-unassigned)}`
-  return (
-    `${monthLabel(previous.month)} left ${formatUsd(leftover)}` +
-    ` · ${formatUsd(assigned)} assigned · ${remainder}`
-  )
-}
-
 // "2025-12" → "2026-01", pure string math.
 export function nextMonth(month: string): string {
   const [year, monthNumber] = month.split('-').map(Number)
@@ -154,10 +129,11 @@ export interface MonthOption {
   label: string
 }
 
-// The months a funding item can be tagged to: the current month and the
-// next two — enough for the prepay pattern (June pay funds July).
-export function fundsMonthOptions(todayIsoDate: string): MonthOption[] {
-  const [year, month] = todayIsoDate.split('-').map(Number)
+// The months a funding item can be tagged to: the given month and the
+// next two — enough for the prepay pattern (June pay funds July). Takes
+// a full ISO date or a bare YYYY-MM month; any day part is ignored.
+export function fundsMonthOptions(fromDate: string): MonthOption[] {
+  const [year, month] = fromDate.split('-').map(Number)
   return [0, 1, 2].map((offset) => {
     const date = new Date(year, month - 1 + offset)
     return {
@@ -293,8 +269,9 @@ export function incomeUpdateInput(
 
 // The Paid-from select encodes its choice as 'cat:<id>' (an envelope —
 // discretionary spending against that category) or 'fund:<id>' (fund
-// spending, no category). budget_month is left to the server default (the
-// txn's month). Returns null when the amount or the picked id doesn't
+// spending, no category). budgetMonth tags the spend to the viewed month;
+// left out (the edit path builds its own), the server defaults it to the
+// txn's month. Returns null when the amount or the picked id doesn't
 // parse — nothing should be posted. A whitespace-only note is omitted
 // from the payload, never sent empty, and so is an unchecked pending.
 export function expenseInput(
@@ -303,12 +280,14 @@ export function expenseInput(
   txnDate: string,
   rawNote: string,
   pending = false,
+  budgetMonth?: string,
 ): ExpenseInput | null {
   const amount = parseAmount(rawAmount)
   if (!amount) return null
   const note = rawNote.trim()
   const base = {
     txn_date: txnDate,
+    ...(budgetMonth ? { budget_month: budgetMonth } : {}),
     amount,
     ...(note ? { note } : {}),
     ...(pending ? { pending: true } : {}),

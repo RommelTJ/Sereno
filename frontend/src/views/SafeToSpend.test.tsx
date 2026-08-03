@@ -13,20 +13,6 @@ const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
 const expenseBody = (fetchMock: ReturnType<typeof stubApi>) =>
   postBody(fetchMock, '/api/expenses')
 
-// The funds-month options: the current month and the next two, as the
-// funding form should offer them.
-const fundsMonth = (offset: number) => {
-  const now = new Date()
-  const month = new Date(now.getFullYear(), now.getMonth() + offset)
-  return {
-    value: `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`,
-    label: month.toLocaleDateString('en-US', {
-      month: 'short',
-      year: 'numeric',
-    }),
-  }
-}
-
 beforeEach(() => {
   stubApi({ '/api/budget-month': BUDGET_MONTH, '/api/funds': FUNDS })
 })
@@ -177,6 +163,7 @@ describe('Add a spending item', () => {
     expect(await screen.findByText('$3,625')).toBeInTheDocument()
     expect(expenseBody(fetchMock)).toEqual({
       txn_date: todayIso(),
+      budget_month: '2026-06',
       category_id: 2,
       amount: 45,
       funded_from: 'discretionary',
@@ -219,6 +206,7 @@ describe('Add a spending item', () => {
     await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
     expect(expenseBody(fetchMock)).toEqual({
       txn_date: todayIso(),
+      budget_month: '2026-06',
       amount: 1200,
       funded_from: 'fund',
       fund_id: 2,
@@ -290,6 +278,7 @@ describe('Add a spending item', () => {
     await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
     expect(expenseBody(fetchMock)).toEqual({
       txn_date: todayIso(),
+      budget_month: '2026-06',
       category_id: 1,
       amount: 180,
       funded_from: 'discretionary',
@@ -320,6 +309,7 @@ describe('Add a spending item', () => {
     await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
     expect(expenseBody(fetchMock)).toEqual({
       txn_date: todayIso(),
+      budget_month: '2026-06',
       category_id: 1,
       amount: 45,
       funded_from: 'discretionary',
@@ -377,7 +367,7 @@ describe('Add an income item', () => {
     expect(within(form).getByText('Add an income item')).toBeInTheDocument()
   })
 
-  it('offers the current and next two months as the funds month', async () => {
+  it('offers the viewed month and the next two as the funds month', async () => {
     render(<SafeToSpend />)
 
     const form = await screen.findByTestId('income-form')
@@ -388,7 +378,11 @@ describe('Add an income item', () => {
         value: (option as HTMLOptionElement).value,
         label: option.textContent,
       })),
-    ).toEqual([fundsMonth(0), fundsMonth(1), fundsMonth(2)])
+    ).toEqual([
+      { value: '2026-06', label: 'Jun 2026' },
+      { value: '2026-07', label: 'Jul 2026' },
+      { value: '2026-08', label: 'Aug 2026' },
+    ])
   })
 
   it('posts the income tagged to the selected month and refreshes the hero', async () => {
@@ -405,7 +399,7 @@ describe('Add an income item', () => {
       target: { value: '2,400' },
     })
     fireEvent.change(within(form).getByLabelText('Funds month'), {
-      target: { value: fundsMonth(1).value },
+      target: { value: '2026-07' },
     })
     fireEvent.change(within(form).getByLabelText('Source'), {
       target: { value: 'your-paycheck' },
@@ -422,7 +416,7 @@ describe('Add an income item', () => {
     expect(await screen.findByText('$6,070')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/income')).toEqual({
       txn_date: todayIso(),
-      budget_month: fundsMonth(1).value,
+      budget_month: '2026-07',
       source: 'paycheck',
       amount: 2400,
       source_label: 'You paycheck',
@@ -474,7 +468,7 @@ describe('Add an income item', () => {
     )
     expect(postBody(fetchMock, '/api/income')).toEqual({
       txn_date: todayIso(),
-      budget_month: fundsMonth(0).value,
+      budget_month: '2026-06',
       source: 'paycheck',
       amount: 350,
       source_label: 'Freelance invoice',
@@ -510,7 +504,7 @@ describe('Add an income item', () => {
     )
     expect(postBody(fetchMock, '/api/income')).toEqual({
       txn_date: todayIso(),
-      budget_month: fundsMonth(0).value,
+      budget_month: '2026-06',
       source: 'paycheck',
       amount: 100,
     })
@@ -608,49 +602,213 @@ describe('Add an income item', () => {
   })
 })
 
-describe('Leftover line', () => {
-  it("shows last month's leftover with assigned and unassigned totals", async () => {
+describe('Month pager', () => {
+  it('steps the whole view back a month', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+
+    // The selected month drives everything: the hero, the envelopes card,
+    // and the pager's own label.
+    expect(await screen.findByText('May envelopes')).toBeInTheDocument()
+    expect(screen.getByText('$1,000')).toBeInTheDocument()
+    expect(screen.getByTestId('month-pager-label')).toHaveTextContent(
+      'May 2026',
+    )
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => input === '/api/budget-month?month=2026-05',
+      ),
+    ).toBe(true)
+  })
+
+  it('steps the whole view forward a month', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-07': {
+        ...BUDGET_MONTH,
+        month: '2026-07',
+        safe_to_spend: 5_800,
+      },
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }))
+
+    expect(await screen.findByText('July envelopes')).toBeInTheDocument()
+    expect(screen.getByText('$5,800')).toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => input === '/api/budget-month?month=2026-07',
+      ),
+    ).toBe(true)
+  })
+
+  it('clears the envelope filter when paging', async () => {
     stubApi({
       '/api/budget-month': BUDGET_MONTH,
       '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
     render(<SafeToSpend />)
-
+    const rows = await screen.findAllByTestId('envelope-row')
+    fireEvent.click(rows[0])
     expect(
-      await screen.findByText(
-        'May left $1,000 · $600 assigned · $400 unassigned',
-      ),
+      await screen.findByTestId('activity-filter-chip'),
     ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+
+    // An old month may not carry the filtered envelope at all, so paging
+    // starts the month unfiltered.
+    await screen.findByText('May envelopes')
+    expect(
+      screen.queryByTestId('activity-filter-chip'),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('Single-month Activity card', () => {
+  it('offers no month paging of its own — the view pager owns it', async () => {
+    stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    const feed = await screen.findByTestId('sts-activity')
+
+    // One navigation model for the month concept: no feed buttons.
+    expect(
+      within(feed).queryByRole('button', { name: /2026/ }),
+    ).not.toBeInTheDocument()
+
+    // After paging, only the viewed month's section renders.
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    await screen.findByText('May envelopes')
+    expect(within(feed).getByText('May 2026')).toBeInTheDocument()
+    expect(within(feed).queryByText('June 2026')).not.toBeInTheDocument()
+  })
+})
+
+describe('Spending posts to the viewed month', () => {
+  it('tags a spending post to the month on screen', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/expenses': { id: 99 },
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    await screen.findByText('May envelopes')
+
+    const form = screen.getByTestId('spending-form')
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '12' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add spending row' }),
+    )
+
+    await waitFor(() => expect(expenseBody(fetchMock)).toBeDefined())
+    expect(expenseBody(fetchMock).budget_month).toBe('2026-05')
   })
 
-  it('shows an over-assignment instead of hiding it', async () => {
+  it('hints the posting month only while paged off the current month', async () => {
     stubApi({
-      '/api/budget-month': { ...BUDGET_MONTH, rollover_assigned: 1_050 },
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+    // On the month the view opened to, the form needs no reminder.
+    expect(screen.queryByText('Posts to June 2026')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+
+    await screen.findByText('May envelopes')
+    expect(screen.getByText('Posts to May 2026')).toBeInTheDocument()
+  })
+})
+
+describe('Income months derived from the viewed month', () => {
+  it('offers the viewed month and the next two after paging', async () => {
+    stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    await screen.findByText('May envelopes')
+
+    const form = screen.getByTestId('income-form')
+    const select = within(form).getByLabelText('Funds month')
+    const options = within(select).getAllByRole('option')
+    expect(
+      options.map((option) => (option as HTMLOptionElement).value),
+    ).toEqual(['2026-05', '2026-06', '2026-07'])
+    // The default is the month on screen — the prepay window slides with
+    // the pager.
+    expect(select).toHaveValue('2026-05')
+  })
+
+  it('tags an income post to the viewed month by default', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 7 },
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    await screen.findByText('May envelopes')
+
+    const form = screen.getByTestId('income-form')
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '500' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/income')).toBeDefined(),
+    )
+    expect(postBody(fetchMock, '/api/income').budget_month).toBe('2026-05')
+  })
+})
+
+describe('Leftover line retirement', () => {
+  it('renders no leftover line and never asks for the previous month', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
       '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
     render(<SafeToSpend />)
 
-    expect(
-      await screen.findByText(
-        'May left $1,000 · $1,050 assigned · over-assigned $50',
-      ),
-    ).toBeInTheDocument()
-  })
-
-  it('renders no line when last month left nothing unassigned to give', async () => {
-    stubApi({
-      '/api/budget-month': { ...BUDGET_MONTH, rollover_assigned: 0 },
-      '/api/budget-month?month=2026-05': {
-        ...MAY_BUDGET_MONTH,
-        safe_to_spend: 0,
-      },
-      '/api/funds': FUNDS,
-    })
-    render(<SafeToSpend />)
-
     await screen.findByText('$3,670')
+    // Month paging supersedes the line: last month's closing number is one
+    // tap back, in the hero itself.
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => input === '/api/budget-month?month=2026-05',
+      ),
+    ).toBe(false)
     await waitFor(() =>
       expect(screen.queryByTestId('leftover-line')).not.toBeInTheDocument(),
     )
@@ -663,10 +821,7 @@ describe('Activity feed', () => {
 
     const form = await screen.findByTestId('income-form')
     const feed = screen.getByTestId('sts-activity')
-    // The leftover line rides between the funding form and the feed.
-    const line = await screen.findByTestId('leftover-line')
-    expect(form.nextElementSibling).toBe(line)
-    expect(line.nextElementSibling).toBe(feed)
+    expect(form.nextElementSibling).toBe(feed)
     expect(within(feed).getByText('Activity')).toBeInTheDocument()
     // Uncapped: all four fixture items, the fund entry among them.
     expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)
@@ -674,129 +829,6 @@ describe('Activity feed', () => {
     expect(within(feed).getByText('June 2026')).toBeInTheDocument()
   })
 
-  it('refreshes the current month without dropping loaded history', async () => {
-    const routes: Record<string, unknown> = {
-      '/api/budget-month': BUDGET_MONTH,
-      '/api/funds': FUNDS,
-      '/api/expenses': { id: 99 },
-    }
-    stubApi(routes)
-    render(<SafeToSpend />)
-    const feed = await screen.findByTestId('sts-activity')
-
-    routes['/api/budget-month'] = {
-      ...BUDGET_MONTH,
-      month: '2026-05',
-      categories: [
-        {
-          id: 9,
-          name: 'Utilities',
-          emoji: '🔌',
-          planned: 200,
-          spent: 118.21,
-          remaining: 81.79,
-        },
-      ],
-      activity: [
-        {
-          type: 'expense',
-          id: 77,
-          txn_date: '2026-05-12',
-          amount: 118.21,
-          category: 'Utilities',
-          source: null,
-          note: null,
-        },
-      ],
-    }
-    fireEvent.click(within(feed).getByRole('button', { name: '← May 2026' }))
-    expect(
-      await within(feed).findByText('Utilities · May 12'),
-    ).toBeInTheDocument()
-
-    // A form submit refetches the current month; its section must pick up
-    // the new item while the paged May section stays put.
-    routes['/api/budget-month'] = {
-      ...BUDGET_MONTH,
-      activity: [
-        {
-          type: 'expense',
-          id: 99,
-          txn_date: '2026-06-28',
-          amount: 12,
-          category: 'Groceries',
-          source: null,
-          note: 'Late poke',
-        },
-        ...BUDGET_MONTH.activity,
-      ],
-    }
-    const form = screen.getByTestId('spending-form')
-    fireEvent.change(within(form).getByLabelText('Amount'), {
-      target: { value: '12' },
-    })
-    fireEvent.click(
-      within(form).getByRole('button', { name: '+ Add spending row' }),
-    )
-
-    expect(await within(feed).findByText('Late poke')).toBeInTheDocument()
-    expect(within(feed).getByText('Utilities · May 12')).toBeInTheDocument()
-  })
-
-  it('pages the next month onto the feed', async () => {
-    const routes: Record<string, unknown> = {
-      '/api/budget-month': BUDGET_MONTH,
-      '/api/funds': FUNDS,
-    }
-    const fetchMock = stubApi(routes)
-    render(<SafeToSpend />)
-    const feed = await screen.findByTestId('sts-activity')
-
-    routes['/api/budget-month'] = {
-      ...BUDGET_MONTH,
-      month: '2026-07',
-      categories: [
-        {
-          id: 9,
-          name: 'Utilities',
-          emoji: '🔌',
-          planned: 200,
-          spent: 118.21,
-          remaining: 81.79,
-        },
-      ],
-      activity: [
-        {
-          type: 'expense',
-          id: 88,
-          txn_date: '2026-07-03',
-          amount: 118.21,
-          category: 'Utilities',
-          source: null,
-          note: null,
-        },
-      ],
-    }
-    fireEvent.click(within(feed).getByRole('button', { name: 'July 2026 →' }))
-
-    expect(
-      await within(feed).findByText('Utilities · Jul 3'),
-    ).toBeInTheDocument()
-    expect(
-      fetchMock.mock.calls.some(
-        ([input]) => input === '/api/budget-month?month=2026-07',
-      ),
-    ).toBe(true)
-    // The future month prepends: July's section renders above June's.
-    expect(
-      within(feed)
-        .getAllByText(/^(June|July) 2026$/)
-        .map((header) => header.textContent),
-    ).toEqual(['July 2026', 'June 2026'])
-    expect(
-      within(feed).getByRole('button', { name: 'August 2026 →' }),
-    ).toBeInTheDocument()
-  })
 })
 
 describe('Responsive layout', () => {

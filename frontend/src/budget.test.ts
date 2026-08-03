@@ -1,19 +1,19 @@
-// Month arithmetic for the activity feed's paging buttons — nextMonth is
-// the forward mirror of previousMonth, pure string math either way — and
-// the leftover line's view text.
+// Month arithmetic for the month pager's buttons — nextMonth is the
+// forward mirror of previousMonth, pure string math either way — and the
+// create/edit form payload builders.
 
 import { describe, expect, it } from 'vitest'
 import {
   editMonthOptions,
   expenseInput,
   expenseUpdateInput,
+  fundsMonthOptions,
   incomeInput,
   incomeUpdateInput,
-  leftoverLine,
   nextMonth,
   sourceOptionFor,
 } from './budget.ts'
-import { BUDGET_MONTH, MAY_BUDGET_MONTH } from './test/fixtures.ts'
+import { BUDGET_MONTH } from './test/fixtures.ts'
 
 describe('nextMonth', () => {
   it('advances within a year', () => {
@@ -26,44 +26,6 @@ describe('nextMonth', () => {
 
   it('rolls December into January', () => {
     expect(nextMonth('2025-12')).toBe('2026-01')
-  })
-})
-
-describe('leftoverLine', () => {
-  it('reads leftover, assigned, and unassigned', () => {
-    expect(leftoverLine(MAY_BUDGET_MONTH, 600)).toBe(
-      'May left $1,000 · $600 assigned · $400 unassigned',
-    )
-  })
-
-  it('ticks down to zero unassigned when fully assigned', () => {
-    expect(leftoverLine(MAY_BUDGET_MONTH, 1_000)).toBe(
-      'May left $1,000 · $1,000 assigned · $0 unassigned',
-    )
-  })
-
-  it('shows an over-assignment instead of hiding it', () => {
-    // More assigned than the month left means the difference came out of
-    // the current month's checking buffer — the line must say so.
-    expect(leftoverLine(MAY_BUDGET_MONTH, 1_050)).toBe(
-      'May left $1,000 · $1,050 assigned · over-assigned $50',
-    )
-  })
-
-  it('keeps showing when a late expense pushed the leftover negative', () => {
-    const overspent = { ...MAY_BUDGET_MONTH, safe_to_spend: -50 }
-    expect(leftoverLine(overspent, 100)).toBe(
-      'May left -$50 · $100 assigned · over-assigned $150',
-    )
-  })
-
-  it('hides when last month left nothing and nothing is assigned', () => {
-    expect(
-      leftoverLine({ ...MAY_BUDGET_MONTH, safe_to_spend: 0 }, 0),
-    ).toBeNull()
-    expect(
-      leftoverLine({ ...MAY_BUDGET_MONTH, safe_to_spend: -25 }, 0),
-    ).toBeNull()
   })
 })
 
@@ -83,6 +45,24 @@ describe('editMonthOptions', () => {
       '2026-08',
     ])
     expect(options[0].label).toBe('Apr 2026')
+  })
+})
+
+describe('fundsMonthOptions', () => {
+  it('accepts a bare YYYY-MM month and offers it plus the next two', () => {
+    // The Safe-to-spend view hands the pager's viewed month straight in;
+    // the day part of a full ISO date was never read anyway.
+    expect(fundsMonthOptions('2026-05')).toEqual([
+      { value: '2026-05', label: 'May 2026' },
+      { value: '2026-06', label: 'Jun 2026' },
+      { value: '2026-07', label: 'Jul 2026' },
+    ])
+  })
+
+  it('rolls the window across a year boundary', () => {
+    expect(fundsMonthOptions('2026-11').map((option) => option.value)).toEqual(
+      ['2026-11', '2026-12', '2027-01'],
+    )
   })
 })
 
@@ -166,6 +146,24 @@ describe('expenseInput', () => {
   it('omits pending when unchecked', () => {
     expect(expenseInput('42.75', 'cat:3', '2026-06-26', '')).not.toHaveProperty(
       'pending',
+    )
+  })
+
+  it('tags the payload to an explicit budget month', () => {
+    expect(
+      expenseInput('12', 'cat:3', '2026-08-03', '', false, '2026-05'),
+    ).toEqual({
+      txn_date: '2026-08-03',
+      budget_month: '2026-05',
+      amount: 12,
+      funded_from: 'discretionary',
+      category_id: 3,
+    })
+  })
+
+  it('leaves the budget month to the server default when not given', () => {
+    expect(expenseInput('12', 'cat:3', '2026-08-03', '')).not.toHaveProperty(
+      'budget_month',
     )
   })
 })
