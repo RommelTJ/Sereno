@@ -6,7 +6,12 @@ import {
   fetchBudgetMonth,
   fetchFunds,
 } from '../api.ts'
-import { envelopeView } from '../budget.ts'
+import {
+  envelopeView,
+  monthYearLabel,
+  nextMonth,
+  previousMonth,
+} from '../budget.ts'
 import ActivityFeed from '../components/ActivityFeed.tsx'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
 import IncomeForm from '../components/IncomeForm.tsx'
@@ -33,24 +38,42 @@ function Hero({ safeToSpend }: { safeToSpend: number }) {
 function SafeToSpend() {
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
   const [funds, setFunds] = useState<Fund[] | null>(null)
+  // The viewed month — null is the current month (the initial view), so
+  // the default view's requests stay exactly what they were before the
+  // pager existed.
+  const [viewMonth, setViewMonth] = useState<string | null>(null)
+  const [paging, setPaging] = useState(false)
   // The Activity feed's envelope filter, set by tapping an envelope row.
-  // Only the id is stored — the envelope itself derives from the current
+  // Only the id is stored — the envelope itself derives from the viewed
   // month's categories, so a refetch never leaves stale figures behind.
   const [filterId, setFilterId] = useState<number | null>(null)
   const filterEnvelope =
     budget?.categories.find((category) => category.id === filterId) ?? null
 
   useEffect(() => {
-    void fetchBudgetMonth().then(setBudget)
+    setPaging(true)
+    void fetchBudgetMonth(viewMonth ?? undefined)
+      .then(setBudget)
+      .finally(() => setPaging(false))
+  }, [viewMonth])
+
+  useEffect(() => {
     void fetchFunds().then(setFunds)
   }, [])
+
+  // Stepping the pager clears the envelope filter — an old month may not
+  // carry the filtered envelope at all.
+  const page = (month: string) => {
+    setFilterId(null)
+    setViewMonth(month)
+  }
 
   const addExpense = async (input: ExpenseInput) => {
     await createExpense(input)
     // A fund-funded spend draws the fund down server-side, so the funds
     // card refreshes alongside the hero and envelopes.
     const [nextBudget, nextFunds] = await Promise.all([
-      fetchBudgetMonth(),
+      fetchBudgetMonth(viewMonth ?? undefined),
       fetchFunds(),
     ])
     setBudget(nextBudget)
@@ -59,14 +82,14 @@ function SafeToSpend() {
 
   const addIncome = async (input: IncomeInput) => {
     await createIncome(input)
-    setBudget(await fetchBudgetMonth())
+    setBudget(await fetchBudgetMonth(viewMonth ?? undefined))
   }
 
   // An item edit or delete can touch anything: the hero and envelopes, and
   // a fund's balance (fund-funded corrections) — so everything refetches.
   const refresh = async () => {
     const [nextBudget, nextFunds] = await Promise.all([
-      fetchBudgetMonth(),
+      fetchBudgetMonth(viewMonth ?? undefined),
       fetchFunds(),
     ])
     setBudget(nextBudget)
@@ -80,6 +103,32 @@ function SafeToSpend() {
     >
       {budget && funds && (
         <>
+          <div
+            data-testid="month-pager"
+            className="flex items-center justify-between lg:col-span-2"
+          >
+            <button
+              type="button"
+              aria-label="Previous month"
+              disabled={paging}
+              onClick={() => page(previousMonth(budget.month))}
+              className="min-h-[44px] min-w-[44px] cursor-pointer rounded-[8px] border border-input-border bg-card px-4 text-[13px] font-semibold text-muted disabled:opacity-60"
+            >
+              ←
+            </button>
+            <p data-testid="month-pager-label" className="text-sm font-bold">
+              {monthYearLabel(budget.month)}
+            </p>
+            <button
+              type="button"
+              aria-label="Next month"
+              disabled={paging}
+              onClick={() => page(nextMonth(budget.month))}
+              className="min-h-[44px] min-w-[44px] cursor-pointer rounded-[8px] border border-input-border bg-card px-4 text-[13px] font-semibold text-muted disabled:opacity-60"
+            >
+              →
+            </button>
+          </div>
           <div className="flex flex-col gap-5">
             <Hero safeToSpend={budget.safe_to_spend} />
             <EnvelopesCard

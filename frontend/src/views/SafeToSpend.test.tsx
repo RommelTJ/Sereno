@@ -640,7 +640,7 @@ describe('Month pager', () => {
       '/api/budget-month?month=2026-07': {
         ...BUDGET_MONTH,
         month: '2026-07',
-        safe_to_spend: 4_200,
+        safe_to_spend: 5_800,
       },
       '/api/funds': FUNDS,
     })
@@ -650,7 +650,7 @@ describe('Month pager', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }))
 
     expect(await screen.findByText('July envelopes')).toBeInTheDocument()
-    expect(screen.getByText('$4,200')).toBeInTheDocument()
+    expect(screen.getByText('$5,800')).toBeInTheDocument()
     expect(
       fetchMock.mock.calls.some(
         ([input]) => input === '/api/budget-month?month=2026-07',
