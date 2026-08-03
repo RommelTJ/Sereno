@@ -682,6 +682,29 @@ describe('Month pager', () => {
   })
 })
 
+describe('Single-month Activity card', () => {
+  it('offers no month paging of its own — the view pager owns it', async () => {
+    stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    const feed = await screen.findByTestId('sts-activity')
+
+    // One navigation model for the month concept: no feed buttons.
+    expect(
+      within(feed).queryByRole('button', { name: /2026/ }),
+    ).not.toBeInTheDocument()
+
+    // After paging, only the viewed month's section renders.
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    await screen.findByText('May envelopes')
+    expect(within(feed).getByText('May 2026')).toBeInTheDocument()
+    expect(within(feed).queryByText('June 2026')).not.toBeInTheDocument()
+  })
+})
+
 describe('Leftover line retirement', () => {
   it('renders no leftover line and never asks for the previous month', async () => {
     const fetchMock = stubApi({
