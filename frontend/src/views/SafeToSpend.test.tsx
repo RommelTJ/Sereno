@@ -608,6 +608,80 @@ describe('Add an income item', () => {
   })
 })
 
+describe('Month pager', () => {
+  it('steps the whole view back a month', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+
+    // The selected month drives everything: the hero, the envelopes card,
+    // and the pager's own label.
+    expect(await screen.findByText('May envelopes')).toBeInTheDocument()
+    expect(screen.getByText('$1,000')).toBeInTheDocument()
+    expect(screen.getByTestId('month-pager-label')).toHaveTextContent(
+      'May 2026',
+    )
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => input === '/api/budget-month?month=2026-05',
+      ),
+    ).toBe(true)
+  })
+
+  it('steps the whole view forward a month', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-07': {
+        ...BUDGET_MONTH,
+        month: '2026-07',
+        safe_to_spend: 4_200,
+      },
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }))
+
+    expect(await screen.findByText('July envelopes')).toBeInTheDocument()
+    expect(screen.getByText('$4,200')).toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => input === '/api/budget-month?month=2026-07',
+      ),
+    ).toBe(true)
+  })
+
+  it('clears the envelope filter when paging', async () => {
+    stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    const rows = await screen.findAllByTestId('envelope-row')
+    fireEvent.click(rows[0])
+    expect(
+      await screen.findByTestId('activity-filter-chip'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+
+    // An old month may not carry the filtered envelope at all, so paging
+    // starts the month unfiltered.
+    await screen.findByText('May envelopes')
+    expect(
+      screen.queryByTestId('activity-filter-chip'),
+    ).not.toBeInTheDocument()
+  })
+})
+
 describe('Leftover line retirement', () => {
   it('renders no leftover line and never asks for the previous month', async () => {
     const fetchMock = stubApi({
