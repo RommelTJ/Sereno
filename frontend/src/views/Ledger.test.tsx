@@ -150,8 +150,8 @@ describe("Update this month's balances form", () => {
   it('shows quantity and price inputs for the ETH account', async () => {
     render(<Ledger />)
 
-    expect(await screen.findByLabelText('ETH held')).toHaveValue('20')
-    expect(screen.getByLabelText('$ / ETH')).toHaveValue('3,500')
+    expect(await screen.findByLabelText('ETH held')).toHaveValue('20.00000')
+    expect(screen.getByLabelText('$ / ETH')).toHaveValue('3,500.00')
     expect(screen.getByTestId('eth-value')).toHaveTextContent('$70,000.00')
     expect(screen.queryByLabelText('Value')).not.toBeInTheDocument()
   })
@@ -162,7 +162,7 @@ describe("Update this month's balances form", () => {
     fireEvent.change(await screen.findByLabelText('Account'), {
       target: { value: '2' },
     })
-    expect(screen.getByLabelText('Value')).toHaveValue('700,000')
+    expect(screen.getByLabelText('Value')).toHaveValue('700,000.00')
     expect(screen.queryByLabelText('ETH held')).not.toBeInTheDocument()
   })
 
@@ -188,8 +188,8 @@ describe("Update this month's balances form", () => {
     })
     render(<Ledger />)
 
-    expect(await screen.findByLabelText('$ / ETH')).toHaveValue('3,600')
-    expect(screen.getByLabelText('ETH held')).toHaveValue('20')
+    expect(await screen.findByLabelText('$ / ETH')).toHaveValue('3,600.00')
+    expect(screen.getByLabelText('ETH held')).toHaveValue('20.00000')
   })
 
   it("prefills $ / ETH from another eth account's newer month", async () => {
@@ -217,8 +217,8 @@ describe("Update this month's balances form", () => {
     fireEvent.change(await screen.findByLabelText('Account'), {
       target: { value: '11' },
     })
-    expect(screen.getByLabelText('$ / ETH')).toHaveValue('3,500')
-    expect(screen.getByLabelText('ETH held')).toHaveValue('5')
+    expect(screen.getByLabelText('$ / ETH')).toHaveValue('3,500.00')
+    expect(screen.getByLabelText('ETH held')).toHaveValue('5.00000')
   })
 
   it('recomputes the ETH value readout as quantity and price change', async () => {

@@ -5,7 +5,7 @@
 // sign outside the dollar sign: "-$1,234.56".
 
 import { describe, expect, it } from 'vitest'
-import { draftFor, formatAmount, formatUsd } from './ledger.ts'
+import { draftFor, formatAmount, formatQty, formatUsd } from './ledger.ts'
 import { ACCOUNTS, LEDGER, balance } from './test/fixtures.ts'
 
 describe('formatUsd', () => {
@@ -36,6 +36,17 @@ describe('formatAmount', () => {
 
   it('gives whole dollars two decimals', () => {
     expect(formatAmount(2400)).toBe('2,400.00')
+  })
+})
+
+describe('formatQty', () => {
+  it('keeps five decimals as typed', () => {
+    expect(formatQty(3.14159)).toBe('3.14159')
+  })
+
+  it('pads shorter quantities to five decimals', () => {
+    expect(formatQty(12.3456)).toBe('12.34560')
+    expect(formatQty(20)).toBe('20.00000')
   })
 })
 
