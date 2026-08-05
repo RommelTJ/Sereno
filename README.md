@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.1.0**
+**v3.1.1**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -876,6 +876,28 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.1.1 — Ledger money is stored as integer cents, and the fund guards
+stop throwing false 422s. Every money value was a Python float over
+NUMERIC storage, and the append-only ledgers recompute each row as
+previous + delta, so representation error accumulated down the chain: a
+fund topped up 14.82 + 68.57 + 90.89 and spent 74.95 stored
+99.32999999999997 under a displayed $99.33, and the overdraw guards
+compared that raw float against the entered amount — releasing the
+displayed balance, or spending the fund down to zero, was rejected, so
+a fund could never be emptied from the UI (issue #112). Migration 0013
+converts the eight ledger-money columns (fund balances and
+contributions, expense and income amounts, account balances, envelope
+plans, fund targets and monthly plans) to INTEGER cents, healing the
+drift already stored with ROUND(value × 100), and the API converts at
+the boundary — JSON stays dollars, so the frontend is untouched. All
+balance arithmetic and guard comparisons now run in integer cents,
+which makes the drift structurally impossible rather than rounded away
+after the fact. Rates, ETH quantity and price, cost basis, and the
+config tables keep fractional precision — they are projection inputs,
+not ledger money — and an ETH entry's quantity × price now rounds to
+exact cents at write. Deploying runs the migration at startup; back up
+the database file first.
 
 v3.1.0 — The Safe-to-spend view pages whole months. The Activity card's
 back/forward buttons paged only the feed — the hero and envelopes
