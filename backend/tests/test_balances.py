@@ -205,10 +205,11 @@ class TestPostAccounts:
             "SELECT as_of_date, balance_usd, source FROM balance_entry WHERE account_id = ?",
             body["id"],
         )
+        # Raw storage holds integer cents; dollars exist only in the JSON.
         assert entries == [
             {
                 "as_of_date": date.today().isoformat(),
-                "balance_usd": 12000,
+                "balance_usd": 1_200_000,
                 "source": "manual",
             }
         ]
@@ -458,6 +459,23 @@ class TestPostBalanceEntries:
         assert body["quantity"] == 20
         assert body["unit_price"] == 3500
 
+    def test_an_eth_entry_rounds_the_derived_usd_to_exact_cents(self, client):
+        # quantity × price rarely lands on a cent boundary (issue #112);
+        # the derived balance rounds to exact cents at the boundary, so
+        # ledger money is never stored with sub-cent fractions.
+        account_id = insert_account("Ethereum", "eth", tax_treatment="LTCG", is_investable=1)
+        response = client.post(
+            "/api/balance-entries",
+            json={
+                "account_id": account_id,
+                "as_of_date": "2026-06-28",
+                "quantity": 12.0459,
+                "unit_price": 2500.25,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["balance_usd"] == 30117.76
+
     def test_quantity_without_unit_price_is_rejected(self, client):
         account_id = insert_account("Ethereum", "eth")
         response = client.post(
@@ -508,12 +526,12 @@ class TestPostBalanceEntries:
             "SELECT balance_usd FROM balance_entry WHERE account_id = ? ORDER BY as_of_date",
             account_id,
         )
-        assert [row["balance_usd"] for row in history] == [8000, 9000]
+        assert [row["balance_usd"] for row in history] == [800_000, 900_000]
         monthly = query(
             "SELECT balance_usd FROM v_account_monthly WHERE account_id = ? AND month = '2026-06'",
             account_id,
         )
-        assert [row["balance_usd"] for row in monthly] == [9000]
+        assert [row["balance_usd"] for row in monthly] == [900_000]
 
 
 def post_entry(client, account_id, as_of_date, **fields):

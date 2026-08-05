@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sereno.api.config import get_spend_plan
 from sereno.db.connection import get_db
 from sereno.engine.guardrails import Zone, evaluate_guardrails
+from sereno.money import to_dollars
 
 router = APIRouter()
 
@@ -39,7 +40,7 @@ class Guardrails(BaseModel):
 
 def _latest_investable(db: sqlite3.Connection) -> float | None:
     row = db.execute("SELECT investable FROM v_net_worth ORDER BY month DESC LIMIT 1").fetchone()
-    return row["investable"] if row else None
+    return to_dollars(row["investable"]) if row else None
 
 
 @router.get("/guardrails")

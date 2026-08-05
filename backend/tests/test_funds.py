@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from sereno.db.connection import connect
 from sereno.main import app
+from sereno.money import to_cents, to_dollars
 
 
 @pytest.fixture
@@ -14,6 +15,9 @@ def client(monkeypatch, tmp_path):
         yield client
 
 
+# The insert helpers take dollars and store cents, and the fetch helpers
+# read cents back as dollars — the same boundary the API keeps — so test
+# bodies stay in the dollars the JSON contract speaks.
 def insert_fund(
     name,
     kind="sinking",
@@ -28,7 +32,15 @@ def insert_fund(
         cursor = conn.execute(
             "INSERT INTO fund (name, kind, target_amount, target_date, monthly_plan, active, emoji)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (name, kind, target_amount, target_date, monthly_plan, active, emoji),
+            (
+                name,
+                kind,
+                to_cents(target_amount),
+                target_date,
+                to_cents(monthly_plan),
+                active,
+                emoji,
+            ),
         )
         conn.commit()
         return cursor.lastrowid
@@ -42,7 +54,7 @@ def insert_fund_entry(fund_id, as_of_date, balance, contribution=0, source=None)
         cursor = conn.execute(
             "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
             " VALUES (?, ?, ?, ?, ?)",
-            (fund_id, as_of_date, balance, contribution, source),
+            (fund_id, as_of_date, to_cents(balance), to_cents(contribution), source),
         )
         conn.commit()
         return cursor.lastrowid
@@ -71,7 +83,7 @@ def fetch_fund_entries(fund_id):
             " WHERE fund_id = ? ORDER BY id",
             (fund_id,),
         ).fetchall()
-        return [tuple(row) for row in rows]
+        return [(row[0], to_dollars(row[1]), to_dollars(row[2])) for row in rows]
     finally:
         conn.close()
 
@@ -84,7 +96,7 @@ def fetch_fund_entries_with_source(fund_id):
             " WHERE fund_id = ? ORDER BY id",
             (fund_id,),
         ).fetchall()
-        return [tuple(row) for row in rows]
+        return [(row[0], to_dollars(row[1]), to_dollars(row[2]), row[3]) for row in rows]
     finally:
         conn.close()
 
@@ -807,6 +819,34 @@ class TestTopUpFund:
         fund_id = insert_fund("Emergency fund", target_amount=30000)
         insert_fund_entry(fund_id, first_of_month(), 100)
         response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": -100})
+        assert response.status_code == 201
+        assert response.json()["balance"] == 0
+
+    def test_a_full_release_survives_cent_amounts_and_lands_on_zero(self, client):
+        # Issue #112's reproduction: chaining 14.82 + 68.57 + 90.89 − 74.95
+        # one entry at a time drifted in float storage (99.32999999999997
+        # under a displayed $99.33), so releasing the displayed balance was
+        # a false 422 and the fund could never be emptied from the UI.
+        # Integer cents make every step — and the full release — exact.
+        fund_id = insert_fund("Vacation fund")
+        for amount in (14.82, 68.57, 90.89):
+            assert (
+                client.post(f"/api/funds/{fund_id}/top-up", json={"amount": amount}).status_code
+                == 201
+            )
+        response = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": date.today().isoformat(),
+                "amount": 74.95,
+                "funded_from": "fund",
+                "fund_id": fund_id,
+            },
+        )
+        assert response.status_code == 201
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 99.33
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": -99.33})
         assert response.status_code == 201
         assert response.json()["balance"] == 0
 

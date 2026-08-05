@@ -179,6 +179,119 @@ def test_unique_monthly_plan_index_leaves_other_sources_unconstrained(conn):
     assert count == 6
 
 
+_PRE_CENTS_MIGRATIONS = (
+    "0001_initial_schema.sql",
+    "0002_category_plan.sql",
+    "0003_account_emoji.sql",
+    "0004_carry_forward_views.sql",
+    "0005_fund_emoji.sql",
+    "0006_budget_month_fund_spend.sql",
+    "0007_fund_entry_source.sql",
+    "0008_income_source_label.sql",
+    "0009_sort_order.sql",
+    "0010_quick_links.sql",
+    "0011_pending_flag.sql",
+    "0012_unique_monthly_plan.sql",
+)
+
+
+def _seed_drifted_dollars(conn):
+    """A pre-0013 database as issue #112 describes it: every money column a
+    float, the fund_entry chain carrying real representation drift."""
+    conn.execute("INSERT INTO account (name, kind) VALUES ('Chase checking', 'cash')")
+    conn.execute(
+        "INSERT INTO balance_entry (account_id, as_of_date, balance_usd)"
+        " VALUES (1, '2026-06-01', 12500.5)"
+    )
+    conn.execute("INSERT INTO category (name) VALUES ('Groceries')")
+    conn.execute(
+        "INSERT INTO category_plan (category_id, effective_month, planned)"
+        " VALUES (1, '2026-06', 650.0)"
+    )
+    conn.execute(
+        "INSERT INTO fund (name, kind, target_amount, monthly_plan)"
+        " VALUES ('Emergency fund', 'sinking', 10000.0, 250.75)"
+    )
+    conn.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+        " VALUES (1, '2026-06-05', 99.32999999999997, -74.95, 'spend')"
+    )
+    conn.execute(
+        "INSERT INTO expense_line (txn_date, budget_month, category_id, amount)"
+        " VALUES ('2026-06-05', '2026-06', 1, 74.95)"
+    )
+    conn.execute(
+        "INSERT INTO income_event (txn_date, budget_month, source, amount)"
+        " VALUES ('2026-05-27', '2026-06', 'paycheck', 2400.5)"
+    )
+
+
+def test_money_in_cents_converts_ledger_dollars_to_integer_cents(conn, tmp_path):
+    # A database migrated before 0013 stores ledger money as drifted floats;
+    # the migration converts all eight money columns to ROUND(value * 100)
+    # integer cents — healing the drift the append-only chains accumulated —
+    # while quantity, unit price, and cost basis stay fractional dollars.
+    for name in _PRE_CENTS_MIGRATIONS:
+        (tmp_path / name).write_text((MIGRATIONS_DIR / name).read_text())
+    migrate(conn, tmp_path)
+    _seed_drifted_dollars(conn)
+    conn.execute("INSERT INTO account (name, kind) VALUES ('Ethereum', 'eth')")
+    conn.execute(
+        "INSERT INTO balance_entry (account_id, as_of_date, balance_usd,"
+        " quantity, unit_price, cost_basis)"
+        " VALUES (2, '2026-06-01', 30117.278174999998, 12.0459, 2500.25, 21000.5)"
+    )
+    cents_migration = "0013_money_in_cents.sql"
+    (tmp_path / cents_migration).write_text((MIGRATIONS_DIR / cents_migration).read_text())
+    assert migrate(conn, tmp_path) == [cents_migration]
+    converted = {
+        ("balance_entry", "balance_usd"): 1250050,
+        ("category_plan", "planned"): 65000,
+        ("fund", "target_amount"): 1000000,
+        ("fund", "monthly_plan"): 25075,
+        ("fund_entry", "balance"): 9933,
+        ("fund_entry", "contribution"): -7495,
+        ("expense_line", "amount"): 7495,
+        ("income_event", "amount"): 240050,
+    }
+    for (table, column), cents in converted.items():
+        value, storage = conn.execute(
+            f"SELECT {column}, typeof({column}) FROM {table} ORDER BY rowid LIMIT 1"  # noqa: S608
+        ).fetchone()
+        assert (value, storage) == (cents, "integer"), f"{table}.{column}"
+    eth = conn.execute(
+        "SELECT balance_usd, quantity, unit_price, cost_basis FROM balance_entry"
+        " WHERE account_id = 2"
+    ).fetchone()
+    assert tuple(eth) == (3011728, 12.0459, 2500.25, 21000.5)
+
+
+def test_money_in_cents_rebuilds_views_and_keeps_the_monthly_plan_index(conn, tmp_path):
+    # The table rebuild drops and recreates the three money views — which
+    # now sum cents — and must not lose 0012's racing-duplicate guard.
+    for name in _PRE_CENTS_MIGRATIONS:
+        (tmp_path / name).write_text((MIGRATIONS_DIR / name).read_text())
+    migrate(conn, tmp_path)
+    _seed_drifted_dollars(conn)
+    cents_migration = "0013_money_in_cents.sql"
+    (tmp_path / cents_migration).write_text((MIGRATIONS_DIR / cents_migration).read_text())
+    migrate(conn, tmp_path)
+    assert conn.execute("SELECT net_worth FROM v_net_worth").fetchone()[0] == 1250050
+    funded_in, total_spent = conn.execute(
+        "SELECT funded_in, total_spent FROM v_budget_month"
+    ).fetchone()
+    assert (funded_in, total_spent) == (240050, 7495)
+    conn.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+        " VALUES (1, '2026-08-01', 10500, 500, 'monthly_plan')"
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+            " VALUES (1, '2026-08-01', 11000, 500, 'monthly_plan')"
+        )
+
+
 def test_fund_emoji_backfills_existing_seed_funds(conn, tmp_path):
     # A database migrated before 0005 existed, already holding the
     # seed-named funds, gets its emojis backfilled by name.

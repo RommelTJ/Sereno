@@ -20,6 +20,7 @@ from pydantic import (
 
 from sereno.db.connection import get_db
 from sereno.engine.funds import derive_note, due_contribution_months
+from sereno.money import to_cents, to_dollars
 
 router = APIRouter()
 
@@ -39,7 +40,13 @@ class Fund(BaseModel):
 
 
 def _fund(row: sqlite3.Row) -> Fund:
-    fields = dict(row)
+    # The row carries stored cents; the model — and derive_note, which
+    # formats display strings — speak dollars.
+    fields = dict(row) | {
+        "target_amount": to_dollars(row["target_amount"]),
+        "monthly_plan": to_dollars(row["monthly_plan"]),
+        "balance": to_dollars(row["balance"]),
+    }
     return Fund(
         **fields,
         note=derive_note(
@@ -201,9 +208,9 @@ def create_fund(fund: FundCreate, db: Db) -> Fund:
             fund.name,
             fund.emoji,
             "goal" if fund.target_date else "sinking",
-            fund.target_amount,
+            to_cents(fund.target_amount),
             fund.target_date.isoformat() if fund.target_date else None,
-            fund.monthly_plan,
+            to_cents(fund.monthly_plan),
         ),
     )
     # The zero entry anchors the fund's history at creation, the way a new
@@ -234,7 +241,7 @@ def update_fund(fund_id: int, update: FundUpdate, db: Db) -> Fund:
     # coalesce an active fund's funding into a pause.
     fields = update.model_dump(exclude_unset=True)
     if "monthly_plan" in fields:
-        fields["monthly_plan"] = fields["monthly_plan"] or None
+        fields["monthly_plan"] = to_cents(fields["monthly_plan"] or None)
     if fields:
         assignments = ", ".join(f"{column} = ?" for column in fields)
         db.execute(f"UPDATE fund SET {assignments} WHERE id = ?", (*fields.values(), fund_id))
@@ -281,7 +288,10 @@ def top_up_fund(fund_id: int, top_up: FundTopUp, db: Db) -> Fund:
     # entry's own day is still fair game.
     if latest is not None and as_of.isoformat() < latest["as_of_date"]:
         raise HTTPException(status_code=422, detail="date precedes the fund's latest entry")
-    if top_up.amount < 0 and -top_up.amount > balance:
+    # The guard compares integer cents against integer cents, so releasing
+    # exactly the displayed balance can never be off by a float fraction.
+    amount = to_cents(top_up.amount)
+    if amount < 0 and -amount > balance:
         raise HTTPException(status_code=422, detail="release exceeds fund balance")
     db.execute(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
@@ -289,8 +299,8 @@ def top_up_fund(fund_id: int, top_up: FundTopUp, db: Db) -> Fund:
         (
             fund_id,
             as_of.isoformat(),
-            balance + top_up.amount,
-            top_up.amount,
+            balance + amount,
+            amount,
             top_up.source,
         ),
     )
@@ -326,7 +336,12 @@ def create_fund_entry(entry: FundEntryCreate, db: Db) -> FundEntry:
         raise HTTPException(status_code=404, detail="fund not found")
     cursor = db.execute(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution) VALUES (?, ?, ?, ?)",
-        (entry.fund_id, entry.as_of_date.isoformat(), entry.balance, entry.contribution),
+        (
+            entry.fund_id,
+            entry.as_of_date.isoformat(),
+            to_cents(entry.balance),
+            to_cents(entry.contribution),
+        ),
     )
     db.commit()
     row = db.execute(
@@ -334,4 +349,12 @@ def create_fund_entry(entry: FundEntryCreate, db: Db) -> FundEntry:
         " FROM fund_entry WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
-    return FundEntry(**dict(row))
+    return FundEntry(
+        **(
+            dict(row)
+            | {
+                "balance": to_dollars(row["balance"]),
+                "contribution": to_dollars(row["contribution"]),
+            }
+        )
+    )

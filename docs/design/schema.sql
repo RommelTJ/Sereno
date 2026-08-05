@@ -12,6 +12,10 @@
 -- ============================================================================
 
 -- Use TEXT ISO-8601 dates for SQLite portability; switch to DATE on Postgres.
+-- Ledger money (balances, amounts, plans) is stored as INTEGER cents since
+-- migration 0013 — integer sums are exact, so append-only chains can never
+-- drift a fraction of a cent — while rates, quantities, prices, and basis
+-- keep fractional NUMERIC dollars. JSON stays dollars; the API converts.
 PRAGMA foreign_keys = ON;
 
 -- ---------------------------------------------------------------------------
@@ -41,9 +45,9 @@ CREATE TABLE fund (
     id            INTEGER PRIMARY KEY,
     name          TEXT    NOT NULL,                       -- 'Emergency fund', 'Pool fund'
     kind          TEXT    NOT NULL,                       -- goal | sinking
-    target_amount NUMERIC,                                -- NULL = open-ended sinking fund
+    target_amount INTEGER,                                -- cents; NULL = open-ended sinking fund
     target_date   TEXT,                                   -- NULL = no deadline (sinking)
-    monthly_plan  NUMERIC,                                -- intended contribution / month
+    monthly_plan  INTEGER,                                -- intended contribution / month, cents
     active        INTEGER NOT NULL DEFAULT 1
 );
 
@@ -69,10 +73,10 @@ CREATE TABLE balance_entry (
     id          INTEGER PRIMARY KEY,
     account_id  INTEGER NOT NULL REFERENCES account(id),
     as_of_date  TEXT    NOT NULL,                         -- the date you recorded it
-    balance_usd NUMERIC NOT NULL,
+    balance_usd INTEGER NOT NULL,                         -- cents
     quantity    NUMERIC,                                  -- e.g. ETH held (NULL for USD accounts)
-    unit_price  NUMERIC,                                  -- e.g. $/ETH at as_of_date
-    cost_basis  NUMERIC,                                  -- for LTCG buckets; lot detail in tax_lot
+    unit_price  NUMERIC,                                  -- e.g. $/ETH at as_of_date, dollars
+    cost_basis  NUMERIC,                                  -- dollars; for LTCG buckets; lots in tax_lot
     source      TEXT,                                     -- 'manual' | 'zillow' | 'vanguard'
     created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -97,7 +101,7 @@ CREATE TABLE expense_line (
     txn_date      TEXT    NOT NULL,                       -- date on the bank statement
     budget_month  TEXT    NOT NULL,                       -- 'YYYY-MM' the spend is charged to
     category_id   INTEGER REFERENCES category(id),
-    amount        NUMERIC NOT NULL,                       -- positive dollars spent
+    amount        INTEGER NOT NULL,                       -- positive cents spent
     is_fixed      INTEGER NOT NULL DEFAULT 0,
     funded_from   TEXT    NOT NULL DEFAULT 'discretionary', -- 'discretionary' | 'fund'
     fund_id       INTEGER REFERENCES fund(id),            -- set when funded_from='fund'
@@ -116,7 +120,7 @@ CREATE TABLE income_event (
     budget_month  TEXT    NOT NULL,                       -- 'YYYY-MM' this inflow funds
     source        TEXT    NOT NULL,                       -- paycheck | transfer_in | staking
                                                           -- | dividend | interest | soc_sec
-    amount        NUMERIC NOT NULL,
+    amount        INTEGER NOT NULL,                       -- cents
     tax_treatment TEXT,                                   -- ORDINARY | LTCG | TAX_FREE | NULL
     account_id    INTEGER REFERENCES account(id),         -- bucket it was drawn from (if a withdrawal)
     note          TEXT,
@@ -129,8 +133,8 @@ CREATE TABLE fund_entry (
     id           INTEGER PRIMARY KEY,
     fund_id      INTEGER NOT NULL REFERENCES fund(id),
     as_of_date   TEXT    NOT NULL,
-    balance      NUMERIC NOT NULL,
-    contribution NUMERIC NOT NULL DEFAULT 0,
+    balance      INTEGER NOT NULL,                        -- cents
+    contribution INTEGER NOT NULL DEFAULT 0,              -- cents
     source       TEXT,                                    -- 'spend' (fund-funded expense drawdown)
                                                           -- | 'monthly_plan' (auto contribution)
                                                           -- | NULL (hand-entered)

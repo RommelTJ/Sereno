@@ -12,6 +12,7 @@ import sqlite3
 
 from sereno.db.connection import connect, db_path
 from sereno.db.migrations import migrate
+from sereno.money import to_cents
 
 # (name, emoji, kind, tax_treatment, is_liability, is_investable,
 #  withdrawal_priority, access_age, penalty_rate)
@@ -136,6 +137,8 @@ def seed(conn: sqlite3.Connection) -> bool:
     )
     accounts = _ids_by_name(conn, "account")
 
+    # balance_usd is stored in cents (quantity, price, and basis stay
+    # fractional dollars), like every ledger-money column since 0013.
     balance_rows = []
     for month, eth_price, *usd_balances in MONTHLY_BALANCES:
         as_of = f"{month}-01"
@@ -143,7 +146,7 @@ def seed(conn: sqlite3.Connection) -> bool:
             (
                 accounts["Ethereum"],
                 as_of,
-                ETH_QTY * eth_price,
+                round(ETH_QTY * eth_price * 100),
                 ETH_QTY,
                 eth_price,
                 COST_BASIS["Ethereum"],
@@ -153,7 +156,7 @@ def seed(conn: sqlite3.Connection) -> bool:
         for name, balance in zip(USD_ACCOUNTS, usd_balances, strict=True):
             source = "zillow" if name == "Home" else "manual"
             balance_rows.append(
-                (accounts[name], as_of, balance, None, None, COST_BASIS.get(name), source)
+                (accounts[name], as_of, to_cents(balance), None, None, COST_BASIS.get(name), source)
             )
     conn.executemany(
         "INSERT INTO balance_entry (account_id, as_of_date, balance_usd,"
@@ -173,14 +176,17 @@ def seed(conn: sqlite3.Connection) -> bool:
     categories = _ids_by_name(conn, "category")
     conn.executemany(
         "INSERT INTO category_plan (category_id, effective_month, planned) VALUES (?, ?, ?)",
-        [(categories[name], PLAN_EFFECTIVE_MONTH, planned) for name, _, planned in CATEGORIES],
+        [
+            (categories[name], PLAN_EFFECTIVE_MONTH, to_cents(planned))
+            for name, _, planned in CATEGORIES
+        ],
     )
 
     conn.executemany(
         "INSERT INTO fund (name, emoji, kind, target_amount, target_date, monthly_plan)"
         " VALUES (?, ?, ?, ?, ?, ?)",
         [
-            (name, emoji, kind, target, date, monthly)
+            (name, emoji, kind, to_cents(target), date, to_cents(monthly))
             for name, emoji, kind, target, date, monthly, _ in FUNDS
         ],
     )
@@ -188,7 +194,7 @@ def seed(conn: sqlite3.Connection) -> bool:
     conn.executemany(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution) VALUES (?, ?, ?, ?)",
         [
-            (funds[name], FUND_ENTRY_DATE, balance, monthly)
+            (funds[name], FUND_ENTRY_DATE, to_cents(balance), to_cents(monthly))
             for name, _, _, _, _, monthly, balance in FUNDS
         ],
     )
@@ -203,7 +209,7 @@ def seed(conn: sqlite3.Connection) -> bool:
                 txn_date,
                 budget_month,
                 categories[category] if category else None,
-                amount,
+                to_cents(amount),
                 is_fixed,
                 funded_from,
                 funds[fund] if fund else None,
@@ -217,7 +223,10 @@ def seed(conn: sqlite3.Connection) -> bool:
     conn.executemany(
         "INSERT INTO income_event (txn_date, budget_month, source, amount,"
         " tax_treatment, source_label) VALUES (?, ?, ?, ?, 'ORDINARY', ?)",
-        INCOME_EVENTS,
+        [
+            (txn_date, budget_month, source, to_cents(amount), source_label)
+            for txn_date, budget_month, source, amount, source_label in INCOME_EVENTS
+        ],
     )
 
     # The fund-sourced bike purchase draws down Cash Plus alongside the fund.

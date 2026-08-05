@@ -97,8 +97,9 @@ class TestSeedSatisfiesTheViews:
         row = db.execute(
             "SELECT net_worth, investable FROM v_net_worth WHERE month = '2026-06'"
         ).fetchone()
-        assert row["net_worth"] == 1_744_000
-        assert row["investable"] == 1_500_000
+        # The views sum stored cents; the handoff's figures are dollars.
+        assert row["net_worth"] == 174_400_000
+        assert row["investable"] == 150_000_000
 
     def test_budget_month_has_income_and_spend(self, db):
         seed(db)
@@ -127,7 +128,7 @@ class TestSeedSatisfiesTheViews:
         ).fetchall()
         assert rows
         for row in rows:
-            assert row["balance_usd"] == row["quantity"] * row["unit_price"]
+            assert row["balance_usd"] == round(row["quantity"] * row["unit_price"] * 100)
 
 
 def table_counts(db):
