@@ -458,6 +458,23 @@ class TestPostBalanceEntries:
         assert body["quantity"] == 20
         assert body["unit_price"] == 3500
 
+    def test_an_eth_entry_rounds_the_derived_usd_to_exact_cents(self, client):
+        # quantity × price rarely lands on a cent boundary (issue #112);
+        # the derived balance rounds to exact cents at the boundary, so
+        # ledger money is never stored with sub-cent fractions.
+        account_id = insert_account("Ethereum", "eth", tax_treatment="LTCG", is_investable=1)
+        response = client.post(
+            "/api/balance-entries",
+            json={
+                "account_id": account_id,
+                "as_of_date": "2026-06-28",
+                "quantity": 12.0459,
+                "unit_price": 2500.25,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["balance_usd"] == 30117.76
+
     def test_quantity_without_unit_price_is_rejected(self, client):
         account_id = insert_account("Ethereum", "eth")
         response = client.post(

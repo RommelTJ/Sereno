@@ -810,6 +810,34 @@ class TestTopUpFund:
         assert response.status_code == 201
         assert response.json()["balance"] == 0
 
+    def test_a_full_release_survives_cent_amounts_and_lands_on_zero(self, client):
+        # Issue #112's reproduction: chaining 14.82 + 68.57 + 90.89 − 74.95
+        # one entry at a time drifted in float storage (99.32999999999997
+        # under a displayed $99.33), so releasing the displayed balance was
+        # a false 422 and the fund could never be emptied from the UI.
+        # Integer cents make every step — and the full release — exact.
+        fund_id = insert_fund("Vacation fund")
+        for amount in (14.82, 68.57, 90.89):
+            assert (
+                client.post(f"/api/funds/{fund_id}/top-up", json={"amount": amount}).status_code
+                == 201
+            )
+        response = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": date.today().isoformat(),
+                "amount": 74.95,
+                "funded_from": "fund",
+                "fund_id": fund_id,
+            },
+        )
+        assert response.status_code == 201
+        (fund,) = client.get("/api/funds").json()
+        assert fund["balance"] == 99.33
+        response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": -99.33})
+        assert response.status_code == 201
+        assert response.json()["balance"] == 0
+
     def test_a_zero_amount_is_a_422(self, client):
         fund_id = insert_fund("Emergency fund", target_amount=30000)
         response = client.post(f"/api/funds/{fund_id}/top-up", json={"amount": 0})

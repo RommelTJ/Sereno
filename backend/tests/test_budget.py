@@ -621,6 +621,39 @@ class TestPostExpenses:
         assert query("SELECT id FROM expense_line") == []
         assert len(fetch_fund_entries(bike_id)) == 1
 
+    def test_spending_the_displayed_balance_survives_cent_amounts(self, client):
+        # Issue #112: the chained cent amounts drifted in float storage
+        # (99.32999999999997 under a displayed $99.33), so spending the
+        # figure the UI shows was a false 422. Integer cents make the
+        # overdraw guard compare exactly what the UI displays.
+        bike_id = insert_fund("Bike fund")
+        for amount in (14.82, 68.57, 90.89):
+            assert (
+                client.post(f"/api/funds/{bike_id}/top-up", json={"amount": amount}).status_code
+                == 201
+            )
+        spend = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": date.today().isoformat(),
+                "amount": 74.95,
+                "funded_from": "fund",
+                "fund_id": bike_id,
+            },
+        )
+        assert spend.status_code == 201
+        response = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": date.today().isoformat(),
+                "amount": 99.33,
+                "funded_from": "fund",
+                "fund_id": bike_id,
+            },
+        )
+        assert response.status_code == 201
+        assert fetch_fund_entries(bike_id)[-1]["balance"] == 0
+
     def test_fund_spending_requires_a_fund_id(self, client):
         response = client.post(
             "/api/expenses",
