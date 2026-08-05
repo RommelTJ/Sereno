@@ -266,7 +266,7 @@ describe('Recent activity', () => {
     expect(await screen.findByText('Groceries · Jun 10')).toBeInTheDocument()
     expect(screen.getByText('🛒')).toBeInTheDocument()
     expect(screen.getByText('Groceries')).toBeInTheDocument()
-    expect(screen.getByText('−$387').className).toContain('text-ink')
+    expect(screen.getByText('−$387.00').className).toContain('text-ink')
   })
 
   it('renders a treat in red when its category is over budget', async () => {
@@ -308,7 +308,7 @@ describe('Recent activity', () => {
       within(rows[0]).getByText('Emergency fund · Jun 12'),
     ).toBeInTheDocument()
     expect(within(rows[0]).getByText('🚨')).toHaveClass('bg-tile')
-    expect(within(rows[0]).getByText('−$850').className).toContain('text-ink')
+    expect(within(rows[0]).getByText('−$850.00').className).toContain('text-ink')
   })
 
   it('renders a funding row with a green amount and the funded month', async () => {
@@ -318,7 +318,7 @@ describe('Recent activity', () => {
     expect(await screen.findByText('Spouse paycheck')).toBeInTheDocument()
     expect(screen.getByText('Funds June · May 27')).toBeInTheDocument()
     expect(screen.getByText('💵')).toBeInTheDocument()
-    expect(screen.getByText('+$2,400').className).toContain('text-accent')
+    expect(screen.getByText('+$2,400.00').className).toContain('text-accent')
   })
 
   it('titles an income row by its source label with the note in the subtitle', async () => {
@@ -413,7 +413,7 @@ describe('Recent activity', () => {
     // The emoji resolves from the funds list, like an expense's resolves
     // from its envelope; parked money is neither income nor spending.
     expect(within(fundRow).getByText('🚨')).toHaveClass('bg-amber-soft')
-    expect(within(fundRow).getByText('−$500').className).toContain('text-muted')
+    expect(within(fundRow).getByText('−$500.00').className).toContain('text-muted')
   })
 
   it('renders a release with a plus and a fallback icon for an archived fund', async () => {
@@ -439,7 +439,7 @@ describe('Recent activity', () => {
     // the row keeps its name but falls back to the generic icon.
     const rows = await screen.findAllByTestId('activity-row')
     expect(within(rows[0]).getByText('💰')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('+$200').className).toContain('text-muted')
+    expect(within(rows[0]).getByText('+$200.00').className).toContain('text-muted')
   })
 
   it('deep-links the header to add an item on the safe-to-spend view', async () => {

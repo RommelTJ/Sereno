@@ -63,14 +63,6 @@ function shortDate(isoDate: string): string {
   })
 }
 
-// Row amounts keep cents only when they exist: "$2,400", "$28.40".
-function usd(value: number): string {
-  return `$${value.toLocaleString('en-US', {
-    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-    maximumFractionDigits: 2,
-  })}`
-}
-
 export type ActivityTone = 'credit' | 'debit' | 'treat' | 'fund'
 
 export interface ActivityRow {
@@ -106,7 +98,7 @@ export function activityRow(
       icon: '💵',
       title: `${item.source_label ?? item.note ?? item.source ?? 'Income'}${flag}`,
       sub: `Funds ${monthLabel(budget.month)} · ${date}${note ? ` · ${note}` : ''}`,
-      amount: `+${usd(item.amount)}`,
+      amount: `+${formatUsd(item.amount)}`,
       tone: 'credit',
     }
   }
@@ -123,7 +115,9 @@ export function activityRow(
       title: item.category ?? 'Fund',
       sub: `Funding · ${date}`,
       amount:
-        item.amount >= 0 ? `−${usd(item.amount)}` : `+${usd(-item.amount)}`,
+        item.amount >= 0
+          ? `−${formatUsd(item.amount)}`
+          : `+${formatUsd(-item.amount)}`,
       tone: 'fund',
     }
   }
@@ -142,7 +136,7 @@ export function activityRow(
     icon: envelope?.emoji ?? fund?.emoji ?? '🧾',
     title: `${item.note ?? item.category ?? 'Expense'}${flag}`,
     sub: item.category ? `${item.category} · ${date}` : date,
-    amount: `−${usd(item.amount)}`,
+    amount: `−${formatUsd(item.amount)}`,
     tone: envelope != null && envelope.remaining < 0 ? 'treat' : 'debit',
   }
 }
