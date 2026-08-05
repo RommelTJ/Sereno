@@ -10,7 +10,7 @@ import {
 import { stubApi } from '../test/stubs.ts'
 import Guardrails from './Guardrails.tsx'
 
-// The same evaluation at a $60,000/yr what-if: 4.00% breaches the upper
+// The same evaluation at a $60,000.00/yr what-if: 4.00% breaches the upper
 // rail, so the capital-preservation rule fires.
 const GUARDRAILS_AT_60K = {
   ...GUARDRAILS,
@@ -32,14 +32,14 @@ describe('KPI row', () => {
     const rate = await screen.findByTestId('guardrails-rate')
     expect(rate).toHaveTextContent('3.00%')
     expect(rate).toHaveClass('text-accent')
-    expect(screen.getByText('$1,500,000')).toBeInTheDocument()
-    expect(screen.getByText('$45,000')).toBeInTheDocument()
+    expect(screen.getByText('$1,500,000.00')).toBeInTheDocument()
+    expect(screen.getByText('$45,000.00')).toBeInTheDocument()
   })
 
   it('shows the 4% sanity ceiling, not as a binding rule', async () => {
     render(<Guardrails />)
 
-    expect(await screen.findByText(/4% ceiling \$60,000/)).toBeInTheDocument()
+    expect(await screen.findByText(/4% ceiling \$60,000\.00/)).toBeInTheDocument()
   })
 })
 
@@ -68,7 +68,7 @@ describe('recommendation banner', () => {
 
     const banner = await screen.findByTestId('guardrails-banner')
     expect(
-      within(banner).getByText('Hold steady — keep spending $45,000'),
+      within(banner).getByText('Hold steady — keep spending $45,000.00'),
     ).toBeInTheDocument()
     expect(
       within(banner).getByText(
@@ -83,10 +83,10 @@ describe('trigger cards', () => {
     render(<Guardrails />)
 
     const raise = await screen.findByTestId('guardrails-raise-trigger')
-    expect(raise).toHaveTextContent('$1,913,265')
+    expect(raise).toHaveTextContent('$1,913,265.31')
     expect(raise).toHaveTextContent(/raise spend ~10%/)
     const cut = screen.getByTestId('guardrails-cut-trigger')
-    expect(cut).toHaveTextContent('$1,275,510')
+    expect(cut).toHaveTextContent('$1,275,510.20')
     expect(cut).toHaveTextContent(/cut spend ~10%/)
   })
 })

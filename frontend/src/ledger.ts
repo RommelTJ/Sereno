@@ -27,10 +27,14 @@ export interface LedgerRow {
   netWorth: number
 }
 
+// Two decimals always — "$2,400.00" and "$28.40" align in a column,
+// and the displayed cents are the cents actually stored.
 export function formatUsd(value: number): string {
-  const rounded = Math.round(value)
-  const digits = Math.abs(rounded).toLocaleString('en-US')
-  return rounded < 0 ? `-$${digits}` : `$${digits}`
+  const digits = Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return value < 0 ? `-$${digits}` : `$${digits}`
 }
 
 // The row represents the month, so its "YYYY-MM" key formats as

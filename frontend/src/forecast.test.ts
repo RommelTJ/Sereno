@@ -287,7 +287,7 @@ describe('purchaseCostRows', () => {
     expect(rows[0]).toEqual({
       name: 'House',
       year: 2036,
-      amount: '$800,000',
+      amount: '$800,000.00',
       lasts: 'never runs out',
       outcome: '✓ $6.91M @ 100',
       tone: 'ok',
@@ -396,7 +396,7 @@ describe('sensitivityRows', () => {
 
   it('celebrates a level that never runs out with its age-100 balance', () => {
     expect(sensitivityRows(rows, 45_000)[0]).toMatchObject({
-      spend: '$30,000',
+      spend: '$30,000.00',
       lasts: 'never runs out',
       outcome: '✓ $5.51M @ 100',
       tone: 'ok',

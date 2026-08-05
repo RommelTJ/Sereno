@@ -59,36 +59,36 @@ describe('Ledger monthly balance table', () => {
     const rows = await screen.findAllByTestId('ledger-row')
     expect(rows).toHaveLength(2)
     expect(rows[0]).toHaveTextContent('June 2026')
-    expect(within(rows[0]).getByText('$70,000')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('$700,000')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$70,000.00')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$700,000.00')).toBeInTheDocument()
     expect(rows[1]).toHaveTextContent('May 2026')
-    expect(within(rows[1]).getByText('$68,000')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('$690,000')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('$68,000.00')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('$690,000.00')).toBeInTheDocument()
   })
 
   it('renders the two cash accounts as separate columns', async () => {
     render(<Ledger />)
 
     const rows = await screen.findAllByTestId('ledger-row')
-    expect(within(rows[0]).getByText('$9,000')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('$20,000')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('$7,000')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$9,000.00')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$20,000.00')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('$7,000.00')).toBeInTheDocument()
   })
 
   it('shows the mortgage as a negative red figure', async () => {
     render(<Ledger />)
 
     const rows = await screen.findAllByTestId('ledger-row')
-    expect(within(rows[0]).getByText('-$150,000')).toHaveClass('text-red-text')
-    expect(within(rows[1]).getByText('-$150,700')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('-$150,000.00')).toHaveClass('text-red-text')
+    expect(within(rows[1]).getByText('-$150,700.00')).toBeInTheDocument()
   })
 
   it("shows each month's net worth from the API", async () => {
     render(<Ledger />)
 
     const rows = await screen.findAllByTestId('ledger-row')
-    expect(within(rows[0]).getByText('$1,744,000')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('$1,717,300')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$1,744,000.00')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('$1,717,300.00')).toBeInTheDocument()
   })
 
   it('highlights only the newest month row', async () => {
@@ -152,7 +152,7 @@ describe("Update this month's balances form", () => {
 
     expect(await screen.findByLabelText('ETH held')).toHaveValue('20')
     expect(screen.getByLabelText('$ / ETH')).toHaveValue('3,500')
-    expect(screen.getByTestId('eth-value')).toHaveTextContent('$70,000')
+    expect(screen.getByTestId('eth-value')).toHaveTextContent('$70,000.00')
     expect(screen.queryByLabelText('Value')).not.toBeInTheDocument()
   })
 
@@ -227,23 +227,23 @@ describe("Update this month's balances form", () => {
     fireEvent.change(await screen.findByLabelText('ETH held'), {
       target: { value: '21' },
     })
-    expect(screen.getByTestId('eth-value')).toHaveTextContent('$73,500')
+    expect(screen.getByTestId('eth-value')).toHaveTextContent('$73,500.00')
 
     fireEvent.change(screen.getByLabelText('$ / ETH'), {
       target: { value: '4,000' },
     })
-    expect(screen.getByTestId('eth-value')).toHaveTextContent('$84,000')
+    expect(screen.getByTestId('eth-value')).toHaveTextContent('$84,000.00')
   })
 
   it('recomputes the live net worth as the draft value changes', async () => {
     render(<Ledger />)
 
-    // Initial live figure matches the newest month: $1,744,000.
+    // Initial live figure matches the newest month: $1,744.00,000.
     expect(await screen.findByTestId('live-net-worth')).toHaveTextContent(
-      '$1,744,000',
+      '$1,744,000.00',
     )
 
-    // +$10,000 of VFIAX.
+    // +$10,000.00 of VFIAX.
     fireEvent.change(screen.getByLabelText('Account'), {
       target: { value: '2' },
     })
@@ -251,14 +251,14 @@ describe("Update this month's balances form", () => {
       target: { value: '710,000' },
     })
     expect(screen.getByTestId('live-net-worth')).toHaveTextContent(
-      '$1,754,000',
+      '$1,754,000.00',
     )
   })
 
   it('treats a liability draft as negative in the live net worth', async () => {
     render(<Ledger />)
 
-    // Paying the mortgage down from $150,000 to $140,000 adds $10,000.
+    // Paying the mortgage down from $150,000.00 to $140,000.00 adds $10.00,000.
     fireEvent.change(await screen.findByLabelText('Account'), {
       target: { value: '10' },
     })
@@ -266,7 +266,7 @@ describe("Update this month's balances form", () => {
       target: { value: '140,000' },
     })
     expect(screen.getByTestId('live-net-worth')).toHaveTextContent(
-      '$1,754,000',
+      '$1,754,000.00',
     )
   })
 

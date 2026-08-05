@@ -95,7 +95,7 @@ describe('zoneCopy', () => {
   it('hold names the spend being kept', () => {
     expect(zoneCopy('hold', 45_000)).toEqual({
       status: 'Hold steady',
-      message: 'Hold steady — keep spending $45,000',
+      message: 'Hold steady — keep spending $45,000.00',
       sub: "You're inside both guardrails. No change recommended.",
     })
   })

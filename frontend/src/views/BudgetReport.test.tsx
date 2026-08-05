@@ -13,10 +13,10 @@ describe('Budget report table', () => {
     expect(rows).toHaveLength(12)
     const march = rows[2]
     expect(within(march).getByText('Mar')).toBeInTheDocument()
-    expect(within(march).getByText('$7,500')).toBeInTheDocument()
-    expect(within(march).getByText('$7,000')).toBeInTheDocument()
-    // +$500 shows twice: the month's variance and the running cumulative.
-    expect(within(march).getAllByText('+$500')).toHaveLength(2)
+    expect(within(march).getByText('$7,500.00')).toBeInTheDocument()
+    expect(within(march).getByText('$7,000.00')).toBeInTheDocument()
+    // +$500.00 shows twice: the month's variance and the running cumulative.
+    expect(within(march).getAllByText('+$500.00')).toHaveLength(2)
   })
 
   it('colors an over-plan variance red and an under-plan one green', async () => {
@@ -25,9 +25,9 @@ describe('Budget report table', () => {
 
     const rows = await screen.findAllByTestId('report-row')
     const april = rows[3]
-    expect(within(april).getByText('-$700')).toHaveClass('text-red-text')
-    expect(within(april).getByText('-$200')).toHaveClass('text-red-text')
-    expect(within(rows[2]).getAllByText('+$500')[0]).toHaveClass('text-accent')
+    expect(within(april).getByText('-$700.00')).toHaveClass('text-red-text')
+    expect(within(april).getByText('-$200.00')).toHaveClass('text-red-text')
+    expect(within(rows[2]).getAllByText('+$500.00')[0]).toHaveClass('text-accent')
   })
 
   it('leaves months outside the data blank', async () => {
