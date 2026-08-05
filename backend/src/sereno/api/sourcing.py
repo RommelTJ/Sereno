@@ -28,6 +28,7 @@ from sereno.engine.sourcing import (
     Bucket,
     source_withdrawals,
 )
+from sereno.money import to_dollars
 
 router = APIRouter()
 
@@ -121,7 +122,7 @@ def load_buckets(db: sqlite3.Connection) -> list[Bucket]:
         existing = grouped.get(priority)
         grouped[priority] = Bucket(
             name=_PRIORITY_LABELS.get(priority, f"Priority {priority}"),
-            balance=(existing.balance if existing else 0.0) + row["balance_usd"],
+            balance=(existing.balance if existing else 0.0) + to_dollars(row["balance_usd"]),
             basis=(existing.basis if existing else 0.0) + basis,
             treatment="ORDINARY" if row["tax_treatment"] == "ORDINARY" else "LTCG",
             access_age=row["access_age"] if existing is None else existing.access_age,

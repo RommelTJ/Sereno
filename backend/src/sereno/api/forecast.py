@@ -45,6 +45,7 @@ from sereno.engine.forecast import (
     simulate_forecast,
 )
 from sereno.engine.sourcing import Bracket, Bucket
+from sereno.money import to_dollars
 
 router = APIRouter()
 
@@ -178,7 +179,7 @@ def _series(result: ForecastResult, buckets: list[Bucket]) -> list[ForecastPoint
 
 def _sensitivity_levels(db: sqlite3.Connection) -> list[float]:
     row = db.execute(_LATEST_NET_WORTH).fetchone()
-    net_worth = row["net_worth"] if row else 0.0
+    net_worth = to_dollars(row["net_worth"]) if row else 0.0
     return [round(net_worth * pct / 100 / 1_000) * 1_000.0 for pct in SENSITIVITY_PERCENTAGES]
 
 

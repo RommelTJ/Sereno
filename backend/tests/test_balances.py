@@ -205,10 +205,11 @@ class TestPostAccounts:
             "SELECT as_of_date, balance_usd, source FROM balance_entry WHERE account_id = ?",
             body["id"],
         )
+        # Raw storage holds integer cents; dollars exist only in the JSON.
         assert entries == [
             {
                 "as_of_date": date.today().isoformat(),
-                "balance_usd": 12000,
+                "balance_usd": 1_200_000,
                 "source": "manual",
             }
         ]
@@ -525,12 +526,12 @@ class TestPostBalanceEntries:
             "SELECT balance_usd FROM balance_entry WHERE account_id = ? ORDER BY as_of_date",
             account_id,
         )
-        assert [row["balance_usd"] for row in history] == [8000, 9000]
+        assert [row["balance_usd"] for row in history] == [800_000, 900_000]
         monthly = query(
             "SELECT balance_usd FROM v_account_monthly WHERE account_id = ? AND month = '2026-06'",
             account_id,
         )
-        assert [row["balance_usd"] for row in monthly] == [9000]
+        assert [row["balance_usd"] for row in monthly] == [900_000]
 
 
 def post_entry(client, account_id, as_of_date, **fields):

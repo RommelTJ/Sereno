@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field, PositiveFloat, StringConstraints, model_v
 
 from sereno.api.funds import apply_monthly_plans
 from sereno.db.connection import get_db
+from sereno.money import to_cents, to_dollars
 
 router = APIRouter()
 
@@ -222,7 +223,7 @@ def _category(db: sqlite3.Connection, category_id: int, month: str) -> Category:
         " FROM category c WHERE c.id = ?",
         (month, category_id),
     ).fetchone()
-    return Category(**dict(row))
+    return Category(**(dict(row) | {"planned": to_dollars(row["planned"])}))
 
 
 @router.get("/categories")
@@ -235,7 +236,7 @@ def list_categories(db: Db, month: Month = None) -> list[Category]:
         " FROM category c WHERE c.active = 1 ORDER BY c.sort_order, c.id",
         (month or _current_month(),),
     )
-    return [Category(**dict(row)) for row in rows]
+    return [Category(**(dict(row) | {"planned": to_dollars(row["planned"])})) for row in rows]
 
 
 @router.post("/categories", status_code=201)
@@ -254,7 +255,7 @@ def create_category(category: CategoryCreate, db: Db) -> Category:
     category_id = cursor.lastrowid
     db.execute(
         "INSERT INTO category_plan (category_id, effective_month, planned) VALUES (?, ?, ?)",
-        (category_id, category.effective_month or _current_month(), category.planned),
+        (category_id, category.effective_month or _current_month(), to_cents(category.planned)),
     )
     db.commit()
     row = db.execute(
@@ -325,17 +326,21 @@ def create_category_plan(category_id: int, plan: CategoryPlanCreate, db: Db) -> 
     _require(db, "category", category_id, "category")
     cursor = db.execute(
         "INSERT INTO category_plan (category_id, effective_month, planned) VALUES (?, ?, ?)",
-        (category_id, plan.effective_month or _current_month(), plan.planned),
+        (category_id, plan.effective_month or _current_month(), to_cents(plan.planned)),
     )
     db.commit()
     row = db.execute(
         "SELECT id, category_id, effective_month, planned FROM category_plan WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
-    return CategoryPlan(**dict(row))
+    return CategoryPlan(**(dict(row) | {"planned": to_dollars(row["planned"])}))
 
 
-def _fund_balance(db: sqlite3.Connection, fund_id: int | None) -> float:
+def _fund_balance(db: sqlite3.Connection, fund_id: int | None) -> int:
+    """The fund's latest stored balance, in cents like everything below:
+    the draw-down guards compare and recompute in integers, so spending a
+    fund down to exactly its displayed balance can never miss by a float
+    fraction."""
     return db.execute(
         "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
         "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
@@ -347,7 +352,8 @@ def _draw_down_fund(db: sqlite3.Connection, expense: ExpenseCreate) -> None:
     """The other half of a fund-funded spend: append a 'spend' fund_entry so
     the earmark releases as the expense lands — appends, never updates."""
     balance = _fund_balance(db, expense.fund_id)
-    if expense.amount > balance:
+    amount = to_cents(expense.amount)
+    if amount > balance:
         raise HTTPException(status_code=422, detail="expense exceeds fund balance")
     db.execute(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
@@ -355,20 +361,20 @@ def _draw_down_fund(db: sqlite3.Connection, expense: ExpenseCreate) -> None:
         (
             expense.fund_id,
             expense.txn_date.isoformat(),
-            balance - expense.amount,
-            -expense.amount,
+            balance - amount,
+            -amount,
         ),
     )
 
 
-def _reverse_draw_down(db: sqlite3.Connection, fund_id: int, amount: float) -> None:
-    """The compensating half of an expense delete or edit. The paired
-    'spend' entry stays — each entry snapshots the balance, so pulling a
-    mid-chain row would not restore it — and the correction appends,
-    dated today: snapshots resolve newest-first, so a backdated entry
-    carrying the current balance would corrupt the chain. 'spend'-source
-    entries stay out of the headline, the feed, and the budget-year
-    actual, so a correction never moves safe-to-spend."""
+def _reverse_draw_down(db: sqlite3.Connection, fund_id: int, amount: int) -> None:
+    """The compensating half of an expense delete or edit, amount in cents.
+    The paired 'spend' entry stays — each entry snapshots the balance, so
+    pulling a mid-chain row would not restore it — and the correction
+    appends, dated today: snapshots resolve newest-first, so a backdated
+    entry carrying the current balance would corrupt the chain.
+    'spend'-source entries stay out of the headline, the feed, and the
+    budget-year actual, so a correction never moves safe-to-spend."""
     db.execute(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
         " VALUES (?, ?, ?, ?, 'spend')",
@@ -391,7 +397,7 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
             expense.txn_date.isoformat(),
             expense.budget_month or expense.txn_date.strftime("%Y-%m"),
             expense.category_id,
-            expense.amount,
+            to_cents(expense.amount),
             expense.is_fixed,
             expense.funded_from,
             expense.fund_id,
@@ -407,7 +413,7 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
         " FROM expense_line WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
-    return Expense(**dict(row))
+    return Expense(**(dict(row) | {"amount": to_dollars(row["amount"])}))
 
 
 @router.put("/expenses/{expense_id}")
@@ -430,19 +436,20 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
     _require(db, "account", expense.account_id, "account")
     old_fund = old["fund_id"] if old["funded_from"] == "fund" else None
     new_fund = expense.fund_id if expense.funded_from == "fund" else None
+    amount = to_cents(expense.amount)
     if old_fund is not None and old_fund == new_fund:
-        delta = expense.amount - old["amount"]
+        delta = amount - old["amount"]
         if delta > _fund_balance(db, old_fund):
             raise HTTPException(status_code=422, detail="expense exceeds fund balance")
         if delta != 0:
             _reverse_draw_down(db, old_fund, -delta)
     else:
-        if new_fund is not None and expense.amount > _fund_balance(db, new_fund):
+        if new_fund is not None and amount > _fund_balance(db, new_fund):
             raise HTTPException(status_code=422, detail="expense exceeds fund balance")
         if old_fund is not None:
             _reverse_draw_down(db, old_fund, old["amount"])
         if new_fund is not None:
-            _reverse_draw_down(db, new_fund, -expense.amount)
+            _reverse_draw_down(db, new_fund, -amount)
     db.execute(
         "UPDATE expense_line SET txn_date = ?, budget_month = ?, category_id = ?, amount = ?,"
         " is_fixed = ?, funded_from = ?, fund_id = ?, account_id = ?, note = ?, pending = ?"
@@ -451,7 +458,7 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
             expense.txn_date.isoformat(),
             expense.budget_month or expense.txn_date.strftime("%Y-%m"),
             expense.category_id,
-            expense.amount,
+            amount,
             expense.is_fixed,
             expense.funded_from,
             expense.fund_id,
@@ -468,7 +475,7 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
         " FROM expense_line WHERE id = ?",
         (expense_id,),
     ).fetchone()
-    return Expense(**dict(row))
+    return Expense(**(dict(row) | {"amount": to_dollars(row["amount"])}))
 
 
 @router.delete("/expenses/{expense_id}", status_code=204)
@@ -498,7 +505,7 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
             income.txn_date.isoformat(),
             income.budget_month or income.txn_date.strftime("%Y-%m"),
             income.source,
-            income.amount,
+            to_cents(income.amount),
             income.tax_treatment,
             income.account_id,
             income.source_label,
@@ -512,7 +519,7 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
         " account_id, source_label, note, pending, created_at FROM income_event WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
-    return Income(**dict(row))
+    return Income(**(dict(row) | {"amount": to_dollars(row["amount"])}))
 
 
 @router.put("/income/{income_id}")
@@ -531,7 +538,7 @@ def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
             income.txn_date.isoformat(),
             income.budget_month or income.txn_date.strftime("%Y-%m"),
             income.source,
-            income.amount,
+            to_cents(income.amount),
             income.tax_treatment,
             income.account_id,
             income.source_label,
@@ -546,7 +553,7 @@ def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
         " account_id, source_label, note, pending, created_at FROM income_event WHERE id = ?",
         (income_id,),
     ).fetchone()
-    return Income(**dict(row))
+    return Income(**(dict(row) | {"amount": to_dollars(row["amount"])}))
 
 
 @router.delete("/income/{income_id}", status_code=204)
@@ -591,7 +598,13 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
     ).fetchone()[0]
 
     envelopes = [
-        Envelope(**dict(row), remaining=row["planned"] - row["spent"])
+        Envelope(
+            **(
+                dict(row)
+                | {"planned": to_dollars(row["planned"]), "spent": to_dollars(row["spent"])}
+            ),
+            remaining=to_dollars(row["planned"] - row["spent"]),
+        )
         for row in db.execute(
             "SELECT c.id, c.name, c.emoji,"
             " COALESCE((SELECT p.planned FROM category_plan p"
@@ -643,31 +656,44 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         "is_fixed": None,
     }
     no_income_fields = {"tax_treatment": None}
+    # Each row's stored-cents amount converts as it joins the feed.
     merged = sorted(
         [
-            dict(row) | {"type": "expense", "source": None, "source_label": None} | no_income_fields
+            dict(row)
+            | {"type": "expense", "source": None, "source_label": None}
+            | no_income_fields
+            | {"amount": to_dollars(row["amount"])}
             for row in expenses
         ]
-        + [dict(row) | {"type": "income", "category": None} | no_expense_fields for row in incomes]
+        + [
+            dict(row)
+            | {"type": "income", "category": None}
+            | no_expense_fields
+            | {"amount": to_dollars(row["amount"])}
+            for row in incomes
+        ]
         + [
             dict(row)
             | {"type": "fund", "source_label": None, "note": None}
             | no_expense_fields
             | no_income_fields
             | {"account_id": None, "budget_month": None, "pending": None}
+            | {"amount": to_dollars(row["amount"])}
             for row in fund_entries
         ],
         key=lambda row: (row["txn_date"], row["created_at"], row["id"]),
         reverse=True,
     )
 
+    # Stored cents all the way down: the headline subtraction happens in
+    # integers, and dollars appear only at the response boundary.
     return BudgetMonth(
         month=target,
-        baseline=baseline,
-        fund_contributions=fund_contributions,
-        rollover_assigned=rollover_assigned,
-        total_spent=total_spent,
-        safe_to_spend=baseline - fund_contributions - total_spent,
+        baseline=to_dollars(baseline),
+        fund_contributions=to_dollars(fund_contributions),
+        rollover_assigned=to_dollars(rollover_assigned),
+        total_spent=to_dollars(total_spent),
+        safe_to_spend=to_dollars(baseline - fund_contributions - total_spent),
         categories=envelopes,
         activity=[ActivityItem.model_validate(row) for row in merged],
     )
@@ -739,7 +765,7 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
             ),
             None,
         )
-        actual = spent.get(month, 0) + contributed.get(month, 0)
+        actual = to_dollars(spent.get(month, 0) + contributed.get(month, 0))
         variance = planned - actual if planned is not None else None
         if variance is not None:
             cumulative += variance

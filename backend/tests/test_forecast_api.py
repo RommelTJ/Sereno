@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from sereno.db.connection import connect
 from sereno.main import app
+from sereno.money import to_cents
 
 TODAY = date.today()
 
@@ -91,7 +92,7 @@ def insert_balance(account_id, balance_usd, *, cost_basis=None):
     return execute(
         "INSERT INTO balance_entry (account_id, as_of_date, balance_usd, cost_basis)"
         " VALUES (?, ?, ?, ?)",
-        (account_id, TODAY.isoformat(), balance_usd, cost_basis),
+        (account_id, TODAY.isoformat(), to_cents(balance_usd), cost_basis),
     )
 
 

@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from sereno.db.connection import get_db
+from sereno.money import to_cents, to_dollars
 
 router = APIRouter()
 
@@ -165,7 +166,7 @@ def create_account(account: AccountCreate, db: Db) -> Account:
     db.execute(
         "INSERT INTO balance_entry (account_id, as_of_date, balance_usd, source)"
         " VALUES (?, ?, ?, 'manual')",
-        (account_id, date.today().isoformat(), account.initial_value),
+        (account_id, date.today().isoformat(), to_cents(account.initial_value)),
     )
     db.commit()
     return _account(db, account_id)
@@ -245,7 +246,7 @@ def deactivate_account(account_id: int, db: Db) -> Account:
 @router.get("/ledger")
 def ledger(db: Db) -> list[LedgerMonth]:
     net_worth = {
-        row["month"]: row["net_worth"]
+        row["month"]: to_dollars(row["net_worth"])
         for row in db.execute("SELECT month, net_worth FROM v_net_worth")
     }
     months: dict[str, list[LedgerBalance]] = {}
@@ -258,7 +259,7 @@ def ledger(db: Db) -> list[LedgerMonth]:
             LedgerBalance(
                 account_id=row["account_id"],
                 as_of_date=row["as_of_date"],
-                balance_usd=row["balance_usd"],
+                balance_usd=to_dollars(row["balance_usd"]),
                 quantity=row["quantity"],
                 unit_price=row["unit_price"],
             )
@@ -272,7 +273,7 @@ def ledger(db: Db) -> list[LedgerMonth]:
 @router.get("/net-worth")
 def net_worth(db: Db) -> NetWorth:
     points = [
-        NetWorthPoint(month=row["month"], net_worth=row["net_worth"])
+        NetWorthPoint(month=row["month"], net_worth=to_dollars(row["net_worth"]))
         for row in db.execute("SELECT month, net_worth FROM v_net_worth ORDER BY month")
     ]
     if not points:
@@ -288,10 +289,12 @@ def net_worth(db: Db) -> NetWorth:
 def create_balance_entry(entry: BalanceEntryCreate, db: Db) -> BalanceEntry:
     if db.execute("SELECT 1 FROM account WHERE id = ?", (entry.account_id,)).fetchone() is None:
         raise HTTPException(status_code=404, detail="account not found")
-    balance_usd = (
-        entry.quantity * entry.unit_price
+    # quantity × price rarely lands on a cent boundary; rounding here keeps
+    # the stored ledger in whole cents (quantity and price stay fractional).
+    balance_cents = (
+        round(entry.quantity * entry.unit_price * 100)
         if entry.quantity is not None and entry.unit_price is not None
-        else entry.balance_usd
+        else to_cents(entry.balance_usd)
     )
     cursor = db.execute(
         "INSERT INTO balance_entry (account_id, as_of_date, balance_usd, quantity, unit_price)"
@@ -299,7 +302,7 @@ def create_balance_entry(entry: BalanceEntryCreate, db: Db) -> BalanceEntry:
         (
             entry.account_id,
             entry.as_of_date.isoformat(),
-            balance_usd,
+            balance_cents,
             entry.quantity,
             entry.unit_price,
         ),
@@ -310,4 +313,4 @@ def create_balance_entry(entry: BalanceEntryCreate, db: Db) -> BalanceEntry:
         " FROM balance_entry WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
-    return BalanceEntry(**dict(row))
+    return BalanceEntry(**(dict(row) | {"balance_usd": to_dollars(row["balance_usd"])}))

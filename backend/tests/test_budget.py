@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from sereno.db.connection import connect
 from sereno.main import app
+from sereno.money import to_cents, to_dollars
 
 
 @pytest.fixture
@@ -35,17 +36,22 @@ def insert_category(name, emoji=None, is_fixed=0, active=1):
 
 
 def insert_plan(category_id, effective_month, planned):
+    # Dollars in, cents stored — the same boundary the API keeps, so test
+    # bodies stay in the dollars the JSON contract speaks.
     return execute(
         "INSERT INTO category_plan (category_id, effective_month, planned) VALUES (?, ?, ?)",
         category_id,
         effective_month,
-        planned,
+        to_cents(planned),
     )
 
 
 def insert_fund(name, kind="sinking", monthly_plan=None):
     return execute(
-        "INSERT INTO fund (name, kind, monthly_plan) VALUES (?, ?, ?)", name, kind, monthly_plan
+        "INSERT INTO fund (name, kind, monthly_plan) VALUES (?, ?, ?)",
+        name,
+        kind,
+        to_cents(monthly_plan),
     )
 
 
@@ -65,8 +71,8 @@ def insert_fund_entry(fund_id, as_of_date, balance, contribution=0, source=None)
         " VALUES (?, ?, ?, ?, ?)",
         fund_id,
         as_of_date,
-        balance,
-        contribution,
+        to_cents(balance),
+        to_cents(contribution),
         source,
     )
 
@@ -78,11 +84,15 @@ def insert_account(name, kind="cash"):
 
 
 def fetch_fund_entries(fund_id):
-    return query(
-        "SELECT as_of_date, balance, contribution, source FROM fund_entry"
-        " WHERE fund_id = ? ORDER BY id",
-        fund_id,
-    )
+    return [
+        row
+        | {"balance": to_dollars(row["balance"]), "contribution": to_dollars(row["contribution"])}
+        for row in query(
+            "SELECT as_of_date, balance, contribution, source FROM fund_entry"
+            " WHERE fund_id = ? ORDER BY id",
+            fund_id,
+        )
+    ]
 
 
 def query(sql, *params):
@@ -240,11 +250,12 @@ class TestPostCategories:
         assert query("SELECT name, emoji, is_fixed, active FROM category") == [
             {"name": "Groceries", "emoji": "🛒", "is_fixed": 0, "active": 1}
         ]
+        # Raw storage holds integer cents; dollars exist only in the JSON.
         assert query("SELECT category_id, effective_month, planned FROM category_plan") == [
             {
                 "category_id": body["id"],
                 "effective_month": date.today().strftime("%Y-%m"),
-                "planned": 500,
+                "planned": 50000,
             }
         ]
 
@@ -334,8 +345,8 @@ class TestPostCategoryPlan:
             "planned": 550,
         }
         assert query("SELECT effective_month, planned FROM category_plan") == [
-            {"effective_month": "2026-01", "planned": 500},
-            {"effective_month": "2026-06", "planned": 550},
+            {"effective_month": "2026-01", "planned": 50000},
+            {"effective_month": "2026-06", "planned": 55000},
         ]
 
     def test_the_latest_row_wins_and_earlier_months_keep_history(self, client):
@@ -401,8 +412,8 @@ class TestPutCategory:
         response = client.put(f"/api/categories/{groceries_id}", json={"name": "Food"})
         assert response.status_code == 200
         assert query("SELECT category_id, effective_month, planned FROM category_plan") == [
-            {"category_id": groceries_id, "effective_month": "2026-01", "planned": 500},
-            {"category_id": groceries_id, "effective_month": "2026-06", "planned": 550},
+            {"category_id": groceries_id, "effective_month": "2026-01", "planned": 50000},
+            {"category_id": groceries_id, "effective_month": "2026-06", "planned": 55000},
         ]
 
     def test_unknown_category_returns_404(self, client):
@@ -473,10 +484,10 @@ class TestArchiveCategory:
         assert client.post("/api/expenses", json=payload).status_code == 201
         client.post(f"/api/categories/{gas_id}/archive")
         assert query("SELECT category_id, planned FROM category_plan") == [
-            {"category_id": gas_id, "planned": 100}
+            {"category_id": gas_id, "planned": 10000}
         ]
         assert query("SELECT category_id, amount FROM expense_line") == [
-            {"category_id": gas_id, "amount": 40}
+            {"category_id": gas_id, "amount": 4000}
         ]
 
     def test_archiving_twice_is_idempotent(self, client):
@@ -528,7 +539,7 @@ class TestPostExpenses:
             "pending": False,
         }
         rows = query("SELECT budget_month, amount FROM expense_line")
-        assert rows == [{"budget_month": "2026-06", "amount": 254.82}]
+        assert rows == [{"budget_month": "2026-06", "amount": 25482}]
 
     def test_prepay_charges_a_later_budget_month(self, client):
         response = client.post(
@@ -737,7 +748,7 @@ class TestUpdateExpense:
         assert body["account_id"] == account_id
         assert body["note"] == "Lyft — day's rides consolidated"
         rows = query("SELECT budget_month, amount FROM expense_line")
-        assert rows == [{"budget_month": "2026-07", "amount": 118.4}]
+        assert rows == [{"budget_month": "2026-07", "amount": 11840}]
 
     def test_budget_month_defaults_to_the_txn_month(self, client):
         expense_id = self.insert_expense(client, budget_month="2026-07")
@@ -831,7 +842,7 @@ class TestUpdateExpense:
         }
         assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 422
         assert [entry["balance"] for entry in fetch_fund_entries(bike_id)] == [5000, 3800]
-        assert query("SELECT amount FROM expense_line") == [{"amount": 1200}]
+        assert query("SELECT amount FROM expense_line") == [{"amount": 120000}]
 
     def test_a_fund_to_discretionary_edit_reverses_the_draw_down(self, client):
         travel_id = insert_category("Travel")
@@ -1017,7 +1028,7 @@ class TestPostIncome:
             {
                 "budget_month": "2026-06",
                 "source": "paycheck",
-                "amount": 2800,
+                "amount": 280000,
                 "source_label": "You paycheck",
                 "note": "Includes the spot bonus",
             }
@@ -1117,7 +1128,7 @@ class TestUpdateIncome:
         assert body["source_label"] == "Brokerage withdrawal"
         assert body["note"] == "Tip settled"
         rows = query("SELECT budget_month, amount FROM income_event")
-        assert rows == [{"budget_month": "2026-08", "amount": 3100.5}]
+        assert rows == [{"budget_month": "2026-08", "amount": 310050}]
 
     def test_budget_month_defaults_to_the_txn_month(self, client):
         income_id = self.insert_income(client)

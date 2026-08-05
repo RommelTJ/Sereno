@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from sereno.db.connection import connect
 from sereno.main import app
+from sereno.money import to_cents
 
 
 @pytest.fixture
@@ -44,12 +45,14 @@ def insert_spend_plan(effective_date, annual_target):
 
 
 def insert_expense(budget_month, amount, funded_from="discretionary", fund_id=None):
+    # Dollars in, cents stored — the boundary the API keeps, so tests stay
+    # in the dollars the JSON contract speaks.
     return execute(
         "INSERT INTO expense_line (txn_date, budget_month, amount, funded_from, fund_id)"
         " VALUES (?, ?, ?, ?, ?)",
         f"{budget_month}-15",
         budget_month,
-        amount,
+        to_cents(amount),
         funded_from,
         fund_id,
     )
@@ -67,8 +70,8 @@ def insert_fund_entry(fund_id, as_of_date, balance, contribution, source):
         " VALUES (?, ?, ?, ?, ?)",
         fund_id,
         as_of_date,
-        balance,
-        contribution,
+        to_cents(balance),
+        to_cents(contribution),
         source,
     )
 

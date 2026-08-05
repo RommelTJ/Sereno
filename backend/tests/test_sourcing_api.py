@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 
 from sereno.db.connection import connect
 from sereno.main import app
+from sereno.money import to_cents
 
 TODAY = date.today()
 LAST_YEAR = (TODAY - timedelta(days=365)).isoformat()
@@ -74,10 +75,12 @@ def insert_account(name, kind, *, tax_treatment="LTCG", priority=None, access_ag
 
 
 def insert_balance(account_id, balance_usd, *, as_of_date=None, cost_basis=None):
+    # Dollars in, cents stored for balance_usd — cost_basis stays dollars,
+    # like the schema since 0013.
     return execute(
         "INSERT INTO balance_entry (account_id, as_of_date, balance_usd, cost_basis)"
         " VALUES (?, ?, ?, ?)",
-        (account_id, as_of_date or TODAY.isoformat(), balance_usd, cost_basis),
+        (account_id, as_of_date or TODAY.isoformat(), to_cents(balance_usd), cost_basis),
     )
 
 
