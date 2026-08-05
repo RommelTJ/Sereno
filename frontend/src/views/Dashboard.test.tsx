@@ -40,7 +40,7 @@ describe('Net worth hero', () => {
     stubDashboard()
     renderDashboard()
 
-    expect(await screen.findByText('$1,744,000')).toBeInTheDocument()
+    expect(await screen.findByText('$1,744,000.00')).toBeInTheDocument()
   })
 
   it('shows a rising YoY pill with the baseline month', async () => {
@@ -89,7 +89,7 @@ describe('Net worth hero', () => {
     })
     renderDashboard()
 
-    expect(await screen.findByText('$1,744,000')).toBeInTheDocument()
+    expect(await screen.findByText('$1,744,000.00')).toBeInTheDocument()
     expect(screen.queryByText(/[▲▼]/)).not.toBeInTheDocument()
   })
 })
@@ -101,7 +101,7 @@ describe('Safe-to-spend card', () => {
 
     const card = screen.getByRole('link', { name: /safe-to-spend/i })
     expect(card).toHaveAttribute('href', '/safe-to-spend')
-    expect(await within(card).findByText('$3,670')).toBeInTheDocument()
+    expect(await within(card).findByText('$3,670.00')).toBeInTheDocument()
   })
 
   it('fills the progress bar with the safe-to-spend share of the baseline', async () => {
@@ -157,7 +157,7 @@ describe('Longevity card', () => {
     const card = screen.getByRole('link', { name: /longevity/i })
     expect(card).toHaveAttribute('href', '/forecast')
     expect(await within(card).findByText("You don't run out.")).toBeInTheDocument()
-    expect(within(card).getByText('at $45,000/yr')).toBeInTheDocument()
+    expect(within(card).getByText('at $45,000.00/yr')).toBeInTheDocument()
     expect(within(card).getByText('~$5.51M')).toBeInTheDocument()
     expect(within(card).getByText('projected at age 100')).toBeInTheDocument()
   })
@@ -171,7 +171,7 @@ describe('Longevity card', () => {
     const card = screen.getByRole('link', { name: /longevity/i })
     const headline = await within(card).findByText('Lasts to age 71')
     expect(headline).toHaveClass('text-red')
-    expect(within(card).getByText('at $90,000/yr')).toBeInTheDocument()
+    expect(within(card).getByText('at $90,000.00/yr')).toBeInTheDocument()
   })
 
   it('keeps a muted placeholder before the forecast can run', async () => {
@@ -191,7 +191,7 @@ describe('Funds & goals card', () => {
 
     const card = screen.getByRole('link', { name: /funds & goals/i })
     expect(card).toHaveAttribute('href', '/funds')
-    expect(await within(card).findByText('$24,200')).toBeInTheDocument()
+    expect(await within(card).findByText('$24,200.00')).toBeInTheDocument()
     expect(within(card).getByText('parked across 3 funds')).toBeInTheDocument()
   })
 
@@ -212,7 +212,7 @@ describe('Funds & goals card', () => {
 
     const card = screen.getByRole('link', { name: /funds & goals/i })
     expect(await within(card).findByText('Travel fund')).toBeInTheDocument()
-    expect(within(card).getByText('$4,200')).toBeInTheDocument()
+    expect(within(card).getByText('$4,200.00')).toBeInTheDocument()
   })
 })
 
@@ -225,8 +225,8 @@ describe('Budget report card', () => {
     expect(card).toHaveAttribute('href', '/report')
     // The fixture's July is provisional, so the headline stops at June's
     // cumulative and July never counts toward the coverage.
-    expect(await within(card).findByText('$1,850')).toBeInTheDocument()
-    expect(within(card).getByText('$1,850')).toHaveClass('text-accent')
+    expect(await within(card).findByText('$1,850.00')).toBeInTheDocument()
+    expect(within(card).getByText('$1,850.00')).toHaveClass('text-accent')
     expect(within(card).getByText('under plan (4 months)')).toBeInTheDocument()
   })
 
@@ -238,8 +238,8 @@ describe('Budget report card', () => {
     renderDashboard()
 
     const card = await screen.findByRole('link', { name: /budget report/i })
-    expect(await within(card).findByText('$430')).toBeInTheDocument()
-    expect(within(card).getByText('$430')).toHaveClass('text-red')
+    expect(await within(card).findByText('$430.00')).toBeInTheDocument()
+    expect(within(card).getByText('$430.00')).toHaveClass('text-red')
     expect(within(card).getByText('over plan (4 months)')).toBeInTheDocument()
   })
 
@@ -266,7 +266,7 @@ describe('Recent activity', () => {
     expect(await screen.findByText('Groceries · Jun 10')).toBeInTheDocument()
     expect(screen.getByText('🛒')).toBeInTheDocument()
     expect(screen.getByText('Groceries')).toBeInTheDocument()
-    expect(screen.getByText('−$387').className).toContain('text-ink')
+    expect(screen.getByText('−$387.00').className).toContain('text-ink')
   })
 
   it('renders a treat in red when its category is over budget', async () => {
@@ -308,7 +308,7 @@ describe('Recent activity', () => {
       within(rows[0]).getByText('Emergency fund · Jun 12'),
     ).toBeInTheDocument()
     expect(within(rows[0]).getByText('🚨')).toHaveClass('bg-tile')
-    expect(within(rows[0]).getByText('−$850').className).toContain('text-ink')
+    expect(within(rows[0]).getByText('−$850.00').className).toContain('text-ink')
   })
 
   it('renders a funding row with a green amount and the funded month', async () => {
@@ -318,7 +318,7 @@ describe('Recent activity', () => {
     expect(await screen.findByText('Spouse paycheck')).toBeInTheDocument()
     expect(screen.getByText('Funds June · May 27')).toBeInTheDocument()
     expect(screen.getByText('💵')).toBeInTheDocument()
-    expect(screen.getByText('+$2,400').className).toContain('text-accent')
+    expect(screen.getByText('+$2,400.00').className).toContain('text-accent')
   })
 
   it('titles an income row by its source label with the note in the subtitle', async () => {
@@ -413,7 +413,7 @@ describe('Recent activity', () => {
     // The emoji resolves from the funds list, like an expense's resolves
     // from its envelope; parked money is neither income nor spending.
     expect(within(fundRow).getByText('🚨')).toHaveClass('bg-amber-soft')
-    expect(within(fundRow).getByText('−$500').className).toContain('text-muted')
+    expect(within(fundRow).getByText('−$500.00').className).toContain('text-muted')
   })
 
   it('renders a release with a plus and a fallback icon for an archived fund', async () => {
@@ -439,7 +439,7 @@ describe('Recent activity', () => {
     // the row keeps its name but falls back to the generic icon.
     const rows = await screen.findAllByTestId('activity-row')
     expect(within(rows[0]).getByText('💰')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('+$200').className).toContain('text-muted')
+    expect(within(rows[0]).getByText('+$200.00').className).toContain('text-muted')
   })
 
   it('deep-links the header to add an item on the safe-to-spend view', async () => {
@@ -612,7 +612,7 @@ describe('Responsive layout', () => {
   it('stacks both dashboard grids into one column on narrow screens', async () => {
     stubDashboard()
     renderDashboard()
-    await screen.findByText('$1,744,000')
+    await screen.findByText('$1,744,000.00')
 
     const view = screen.getByTestId('view-dashboard')
     expect(view.children[0]).toHaveClass(
@@ -630,10 +630,10 @@ describe('Responsive layout', () => {
     stubDashboard()
     renderDashboard()
 
-    const netWorth = await screen.findByText('$1,744,000')
+    const netWorth = await screen.findByText('$1,744,000.00')
     expect(netWorth).toHaveClass('text-4xl', 'sm:text-[52px]')
     const card = screen.getByRole('link', { name: /safe-to-spend/i })
-    expect(within(card).getByText('$3,670')).toHaveClass(
+    expect(within(card).getByText('$3,670.00')).toHaveClass(
       'text-3xl',
       'sm:text-[44px]',
     )

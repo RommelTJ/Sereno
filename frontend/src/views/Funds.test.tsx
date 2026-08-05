@@ -55,7 +55,7 @@ describe('Funds & goals card', () => {
     render(<Funds />)
 
     expect(await screen.findByText('Total parked')).toBeInTheDocument()
-    expect(screen.getByText('$24,200')).toBeInTheDocument()
+    expect(screen.getByText('$24,200.00')).toBeInTheDocument()
     expect(
       screen.getByText('notes auto-calculate from target, saved & date'),
     ).toBeInTheDocument()
@@ -68,7 +68,7 @@ describe('Funds & goals card', () => {
     expect(rows).toHaveLength(3)
     expect(within(rows[0]).getByText('🚨 Emergency fund')).toBeInTheDocument()
     expect(within(rows[0]).getByText('· sinking · no date')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('$10,000 / $30,000')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$10,000.00 / $30,000.00')).toBeInTheDocument()
     const bar = within(rows[0]).getByTestId('fund-bar')
     expect(bar).toHaveClass('bg-sidebar')
     expect(bar.style.width).toBe(`${(10_000 / 30_000) * 100}%`)
@@ -104,7 +104,7 @@ describe('Funds & goals card', () => {
     render(<Funds />)
 
     const rows = await screen.findAllByTestId('fund-row')
-    expect(within(rows[2]).getByText('$4,200')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('$4,200.00')).toBeInTheDocument()
     expect(within(rows[2]).queryByTestId('fund-bar')).not.toBeInTheDocument()
     expect(
       within(rows[2]).getByText('$300 / mo · open-ended'),
@@ -140,7 +140,7 @@ describe('+ New fund or goal form', () => {
 
     fireEvent.click(within(form).getByRole('button', { name: '+ Add' }))
 
-    expect(await screen.findByText('$1,500 / $5,000')).toBeInTheDocument()
+    expect(await screen.findByText('$1,500.00 / $5,000.00')).toBeInTheDocument()
     expect(screen.getAllByTestId('fund-row')).toHaveLength(4)
     expect(postBody(fetchMock, '/api/funds')).toEqual({
       name: 'Vacation',
@@ -248,7 +248,7 @@ describe('archiving a fund', () => {
       expect(screen.getAllByTestId('fund-row')).toHaveLength(2),
     )
     expect(screen.queryByText('🚨 Emergency fund')).not.toBeInTheDocument()
-    expect(screen.getByText('$14,200')).toBeInTheDocument()
+    expect(screen.getByText('$14,200.00')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/funds/1/archive')).toEqual({})
   })
 })
@@ -497,7 +497,7 @@ describe('topping up a fund', () => {
 
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('$10,250 / $30,000')).toBeInTheDocument()
+    expect(await screen.findByText('$10,250.00 / $30,000.00')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({ amount: 250 })
     expect(
       within(rows[0]).queryByLabelText('$ amount'),
@@ -521,7 +521,7 @@ describe('topping up a fund', () => {
 
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('$9,500 / $30,000')).toBeInTheDocument()
+    expect(await screen.findByText('$9,500.00 / $30,000.00')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({ amount: -500 })
   })
 
@@ -577,7 +577,7 @@ describe('topping up a fund', () => {
 
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('$10,250 / $30,000')).toBeInTheDocument()
+    expect(await screen.findByText('$10,250.00 / $30,000.00')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({
       amount: 250,
       as_of_date: '2026-07-02',
@@ -604,7 +604,7 @@ describe('topping up a fund', () => {
 
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('$10,400 / $30,000')).toBeInTheDocument()
+    expect(await screen.findByText('$10,400.00 / $30,000.00')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({
       amount: 400,
       source: 'rollover',
@@ -631,7 +631,7 @@ describe('topping up a fund', () => {
 
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('$9,800 / $30,000')).toBeInTheDocument()
+    expect(await screen.findByText('$9,800.00 / $30,000.00')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/funds/1/top-up')).toEqual({
       amount: -200,
       source: 'rollover',
@@ -704,7 +704,7 @@ describe('correcting a fund balance', () => {
 
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('$9,500 / $30,000')).toBeInTheDocument()
+    expect(await screen.findByText('$9,500.00 / $30,000.00')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/fund-entries')).toEqual({
       fund_id: 1,
       as_of_date: todayIso(),
@@ -734,7 +734,7 @@ describe('correcting a fund balance', () => {
 
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('$0 / $30,000')).toBeInTheDocument()
+    expect(await screen.findByText('$0.00 / $30,000.00')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/fund-entries')).toEqual({
       fund_id: 1,
       as_of_date: todayIso(),

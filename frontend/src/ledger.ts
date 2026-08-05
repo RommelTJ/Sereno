@@ -27,10 +27,14 @@ export interface LedgerRow {
   netWorth: number
 }
 
+// Two decimals always — "$2,400.00" and "$28.40" align in a column,
+// and the displayed cents are the cents actually stored.
 export function formatUsd(value: number): string {
-  const rounded = Math.round(value)
-  const digits = Math.abs(rounded).toLocaleString('en-US')
-  return rounded < 0 ? `-$${digits}` : `$${digits}`
+  const digits = Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return value < 0 ? `-$${digits}` : `$${digits}`
 }
 
 // The row represents the month, so its "YYYY-MM" key formats as
@@ -104,7 +108,7 @@ export function draftFor(
   if (account.kind === 'eth') {
     return {
       value: '',
-      qty: formatAmount(balance?.quantity ?? 0),
+      qty: formatQty(balance?.quantity ?? 0),
       price: formatAmount(latestEthPrice(months, accounts) ?? 0),
     }
   }
@@ -164,8 +168,22 @@ export function parseAmount(raw: string): number {
   return Number(raw.replace(/[^0-9.]/g, '')) || 0
 }
 
+// The balance form's money seed: exact cents, so a prefilled value
+// reads back exactly as stored.
 export function formatAmount(value: number): string {
-  return value.toLocaleString('en-US')
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+// The ETH quantity seed. A quantity is not money: five decimals, so a
+// fractional holding survives a prefill-and-save intact.
+export function formatQty(value: number): string {
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 5,
+    maximumFractionDigits: 5,
+  })
 }
 
 export function ledgerRows(

@@ -183,7 +183,7 @@ describe('Header net worth', () => {
 
     // The dashboard hero shows the same figure; scope to the header.
     const header = screen.getByRole('banner')
-    expect(await within(header).findByText('$1,744,000')).toBeInTheDocument()
+    expect(await within(header).findByText('$1,744,000.00')).toBeInTheDocument()
   })
 
   it('refreshes the readout after saving balances on the ledger view', async () => {
@@ -209,6 +209,6 @@ describe('Header net worth', () => {
     routes['/api/net-worth'] = { current: 1_754_000, yoy: 0.023, series: [] }
     fireEvent.click(screen.getByRole('button', { name: 'Save balance' }))
 
-    expect(await screen.findByText('$1,754,000')).toBeInTheDocument()
+    expect(await screen.findByText('$1,754,000.00')).toBeInTheDocument()
   })
 })

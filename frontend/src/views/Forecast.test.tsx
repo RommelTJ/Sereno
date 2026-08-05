@@ -79,7 +79,7 @@ describe('verdict hero', () => {
     render(<Forecast />)
 
     const hero = await screen.findByTestId('forecast-verdict')
-    expect(hero).toHaveTextContent(/at \$45,000 \/ year/i)
+    expect(hero).toHaveTextContent(/at \$45,000\.00 \/ year/i)
     expect(hero).toHaveTextContent("You don't run out.")
     expect(hero).toHaveTextContent('$5.51M')
     expect(hero).toHaveTextContent(/at age 100/)
@@ -311,7 +311,7 @@ describe('purchases on the chart', () => {
 
     await screen.findByTestId('forecast-chart')
     expect(screen.getByTestId('forecast-tip-48')).toHaveTextContent(
-      'Purchase $800,000',
+      'Purchase $800,000.00',
     )
   })
 
@@ -323,7 +323,7 @@ describe('purchases on the chart', () => {
     // You can't buy that in that year — but you don't go broke.
     expect(hero).toHaveTextContent("You don't run out.")
     expect(screen.getByTestId('forecast-mark-48')).toHaveClass('text-red-text')
-    expect(screen.getByTestId('forecast-tip-48')).toHaveTextContent('$278,149 short')
+    expect(screen.getByTestId('forecast-tip-48')).toHaveTextContent('$278,149.00 short')
   })
 
   it('caps each column with the forgone growth against the baseline', async () => {
@@ -346,7 +346,7 @@ describe('purchase cost card', () => {
     // No client-side name exists for a purchase the screen didn't
     // add, so the year stands in.
     expect(row).toHaveTextContent('Purchase in 2046')
-    expect(row).toHaveTextContent('$800,000')
+    expect(row).toHaveTextContent('$800,000.00')
     expect(row).toHaveTextContent('never runs out')
     expect(row).toHaveTextContent('✓ $5.51M @ 100')
   })
@@ -387,10 +387,10 @@ describe('balance-by-bucket chart', () => {
     // The year age 68 is reached: 30 years past the start age's year.
     const year = new Date().getFullYear() + 68 - FORECAST.start_age
     expect(tip).toHaveTextContent(`Age 68 · ${year}`)
-    expect(tip).toHaveTextContent('ETH $200,000')
-    expect(tip).toHaveTextContent('Brokerage $800,000')
-    expect(tip).toHaveTextContent('401(k) $600,000')
-    expect(tip).toHaveTextContent('Soc. Sec. $34,800/yr')
+    expect(tip).toHaveTextContent('ETH $200,000.00')
+    expect(tip).toHaveTextContent('Brokerage $800,000.00')
+    expect(tip).toHaveTextContent('401(k) $600,000.00')
+    expect(tip).toHaveTextContent('Soc. Sec. $34,800.00/yr')
   })
 
   it('floors the Social Security sliver and hides it before the start age', async () => {
@@ -420,7 +420,7 @@ describe('sensitivity table', () => {
     render(<Forecast />)
 
     const table = await screen.findByTestId('forecast-sensitivity')
-    expect(within(table).getByText('$30,000')).toBeInTheDocument()
+    expect(within(table).getByText('$30,000.00')).toBeInTheDocument()
     expect(within(table).getByText('✓ $7.20M @ 100')).toBeInTheDocument()
     expect(within(table).getByText('to age 91')).toBeInTheDocument()
     expect(within(table).getByText('tight')).toBeInTheDocument()

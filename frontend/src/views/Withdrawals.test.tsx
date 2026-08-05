@@ -9,9 +9,9 @@ import {
 import { stubApi } from '../test/stubs.ts'
 import Withdrawals from './Withdrawals.tsx'
 
-// The same portfolio asked for $200,000: ETH exhausts its headroom,
+// The same portfolio asked for $200,000.00: ETH exhausts its headroom,
 // the brokerage sells at 15% on the gain, the gated 401(k) leaves
-// $7,000 of the gap unfilled.
+// $7,000.00 of the gap unfilled.
 const SOURCING_SHORT = {
   ...SOURCING,
   target_net: 200_000,
@@ -40,10 +40,10 @@ describe('sequencing waterfall', () => {
 
     const waterfall = await screen.findByTestId('sourcing-waterfall')
     expect(within(waterfall).getByText(/Target net spend/)).toBeInTheDocument()
-    expect(within(waterfall).getAllByText('$45,000')).toHaveLength(2)
-    expect(within(waterfall).getByText('−$3,000')).toBeInTheDocument()
+    expect(within(waterfall).getAllByText('$45,000.00')).toHaveLength(2)
+    expect(within(waterfall).getByText('−$3,000.00')).toBeInTheDocument()
     expect(within(waterfall).getByText(/Gap from portfolio/)).toBeInTheDocument()
-    expect(within(waterfall).getByText('$42,000')).toBeInTheDocument()
+    expect(within(waterfall).getByText('$42,000.00')).toBeInTheDocument()
     expect(within(waterfall).getByText(/Net delivered/)).toBeInTheDocument()
   })
 
@@ -52,16 +52,16 @@ describe('sequencing waterfall', () => {
 
     const step = await screen.findByTestId('sourcing-step-0')
     expect(step).toHaveTextContent('ETH')
-    expect(step).toHaveTextContent('sell $42,000')
-    expect(step).toHaveTextContent(/within \$96,700 headroom/)
+    expect(step).toHaveTextContent('sell $42,000.00')
+    expect(step).toHaveTextContent(/within \$96,700\.00 headroom/)
   })
 
-  it('mutes an untouched bucket to $0 this yr', async () => {
+  it('mutes an untouched bucket to $0.00 this yr', async () => {
     render(<Withdrawals />)
 
     const step = await screen.findByTestId('sourcing-step-1')
     expect(step).toHaveTextContent('Brokerage')
-    expect(step).toHaveTextContent('$0 this yr')
+    expect(step).toHaveTextContent('$0.00 this yr')
   })
 
   it('surfaces the 401(k) age gate note', async () => {
@@ -77,11 +77,11 @@ describe('sequencing waterfall', () => {
     render(<Withdrawals />)
 
     const step = await screen.findByTestId('sourcing-step-1')
-    expect(step).toHaveTextContent('sell $103,093')
-    expect(step).toHaveTextContent(/tax \$3,093/)
-    expect(step).toHaveTextContent(/nets \$100,000/)
+    expect(step).toHaveTextContent('sell $103,092.78')
+    expect(step).toHaveTextContent(/tax \$3,092\.78/)
+    expect(step).toHaveTextContent(/nets \$100,000\.00/)
     const banner = screen.getByTestId('sourcing-shortfall')
-    expect(banner).toHaveTextContent('$7,000')
+    expect(banner).toHaveTextContent('$7,000.00')
   })
 
   it('hides the shortfall banner when the gap is filled', async () => {
@@ -168,12 +168,12 @@ describe('empty state', () => {
 describe('step detail derivation', () => {
   it('prefers the gate note, then the idle label, then the tax cost', () => {
     expect(stepDetail(SOURCING.steps[2], 96_700)).toBe('locked until age 59.5')
-    expect(stepDetail(SOURCING.steps[1], 96_700)).toBe('$0 this yr')
+    expect(stepDetail(SOURCING.steps[1], 96_700)).toBe('$0.00 this yr')
     expect(stepDetail(SOURCING.steps[0], 96_700)).toBe(
-      'within $96,700 headroom · tax-free',
+      'within $96,700.00 headroom · tax-free',
     )
     expect(stepDetail(SOURCING_SHORT.steps[1], 0)).toBe(
-      'tax $3,093 → nets $100,000',
+      'tax $3,092.78 → nets $100,000.00',
     )
   })
 })

@@ -29,14 +29,14 @@ export function stepAction(step: SourcingStep): string {
 }
 
 // The sub-line for a waterfall step: the engine's gate note wins, an
-// untouched bucket is "$0 this yr", a taxed draw shows its cost, and a
+// untouched bucket is "$0.00 this yr", a taxed draw shows its cost, and a
 // tax-free sale names the headroom that made it free.
 export function stepDetail(step: SourcingStep, headroom: number): string {
   if (step.note) {
     return step.note
   }
   if (step.gross === 0) {
-    return '$0 this yr'
+    return '$0.00 this yr'
   }
   if (step.tax > 0) {
     return `tax ${formatUsd(step.tax)} → nets ${formatUsd(step.net)}`

@@ -53,9 +53,9 @@ describe('Assets card', () => {
     expect(rows).toHaveLength(9)
     expect(within(rows[0]).getByText('⚡')).toBeInTheDocument()
     expect(within(rows[0]).getByText('Ethereum')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('$70,000')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$70,000.00')).toBeInTheDocument()
     expect(within(rows[4]).getByText('Retirement')).toBeInTheDocument()
-    expect(within(rows[4]).getByText('$350,000')).toBeInTheDocument()
+    expect(within(rows[4]).getByText('$350,000.00')).toBeInTheDocument()
   })
 
   it('falls back to an older month when the latest lacks an entry', async () => {
@@ -71,7 +71,7 @@ describe('Assets card', () => {
 
     const rows = await screen.findAllByTestId('settings-asset-row')
     expect(within(rows[8]).getByText('Car')).toBeInTheDocument()
-    expect(within(rows[8]).getByText('$15,000')).toBeInTheDocument()
+    expect(within(rows[8]).getByText('$15,000.00')).toBeInTheDocument()
   })
 
   it('hides inactive accounts', async () => {
@@ -135,7 +135,7 @@ describe('Assets card', () => {
       expect(screen.getAllByTestId('settings-asset-row')).toHaveLength(10),
     )
     expect(screen.getByText('Gold coins')).toBeInTheDocument()
-    expect(screen.getByText('$2,500')).toBeInTheDocument()
+    expect(screen.getByText('$2,500.00')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/accounts')).toEqual({
       name: 'Gold coins',
       emoji: '💎',
@@ -180,7 +180,7 @@ describe('Liabilities card', () => {
     expect(rows).toHaveLength(1)
     expect(within(rows[0]).getByText('🏡')).toBeInTheDocument()
     expect(within(rows[0]).getByText('Mortgage')).toBeInTheDocument()
-    const amount = within(rows[0]).getByText('-$150,000')
+    const amount = within(rows[0]).getByText('-$150,000.00')
     expect(amount).toHaveClass('text-red')
   })
 
@@ -380,9 +380,9 @@ describe('Envelopes card', () => {
     expect(rows).toHaveLength(4)
     expect(within(rows[0]).getByText('🛒')).toBeInTheDocument()
     expect(within(rows[0]).getByText('Groceries')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('$500 / mo')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$500.00 / mo')).toBeInTheDocument()
     expect(within(rows[3]).getByText('Travel')).toBeInTheDocument()
-    expect(within(rows[3]).getByText('$0 / mo')).toBeInTheDocument()
+    expect(within(rows[3]).getByText('$0.00 / mo')).toBeInTheDocument()
   })
 
   it('says so when no envelopes exist yet', async () => {
@@ -492,7 +492,7 @@ describe('Envelopes card', () => {
     await waitFor(() =>
       expect(
         within(screen.getAllByTestId('settings-envelope-row')[0]).getByText(
-          '$550 / mo',
+          '$550.00 / mo',
         ),
       ).toBeInTheDocument(),
     )
@@ -824,7 +824,7 @@ describe('Assumptions card', () => {
       within(card).getByText('· refined from tracking'),
     ).toBeInTheDocument()
     expect(within(card).getByText('Planned spend')).toBeInTheDocument()
-    expect(within(card).getByText('$45,000 / yr')).toBeInTheDocument()
+    expect(within(card).getByText('$45,000.00 / yr')).toBeInTheDocument()
   })
 
   it('shows the initial withdrawal rate and guardrail band', async () => {
@@ -890,9 +890,9 @@ describe('Social Security card', () => {
     const card = await screen.findByTestId('social-security-card')
     expect(within(card).getByText('· editable, dated')).toBeInTheDocument()
     expect(within(card).getByText('You — from 67')).toBeInTheDocument()
-    expect(within(card).getByText('$1,500/mo')).toBeInTheDocument()
+    expect(within(card).getByText('$1,500.00/mo')).toBeInTheDocument()
     expect(within(card).getByText('Spouse — from 67')).toBeInTheDocument()
-    expect(within(card).getByText('$1,400/mo')).toBeInTheDocument()
+    expect(within(card).getByText('$1,400.00/mo')).toBeInTheDocument()
   })
 
   it('says so when no estimates exist yet', async () => {
@@ -911,22 +911,22 @@ describe('Tax parameters card', () => {
     const card = await screen.findByTestId('tax-card')
     expect(within(card).getByText('2026 · MFJ')).toBeInTheDocument()
     expect(within(card).getByText('0% LTCG up to')).toBeInTheDocument()
-    expect(within(card).getByText('$96,700')).toBeInTheDocument()
+    expect(within(card).getByText('$96,700.00')).toBeInTheDocument()
     expect(within(card).getByText('15% → 20% at')).toBeInTheDocument()
-    expect(within(card).getByText('$600,050')).toBeInTheDocument()
+    expect(within(card).getByText('$600,050.00')).toBeInTheDocument()
     expect(within(card).getByText('NIIT')).toBeInTheDocument()
-    expect(within(card).getByText('3.8% over $250,000')).toBeInTheDocument()
+    expect(within(card).getByText('3.8% over $250,000.00')).toBeInTheDocument()
     expect(within(card).getByText('Std deduction')).toBeInTheDocument()
-    expect(within(card).getByText('$30,000')).toBeInTheDocument()
+    expect(within(card).getByText('$30,000.00')).toBeInTheDocument()
   })
 
   it('lists the ordinary brackets', async () => {
     render(<Settings />)
 
     const card = await screen.findByTestId('tax-card')
-    expect(within(card).getByText('10% to $24,800')).toBeInTheDocument()
-    expect(within(card).getByText('12% to $100,800')).toBeInTheDocument()
-    expect(within(card).getByText('22% to $211,400')).toBeInTheDocument()
+    expect(within(card).getByText('10% to $24,800.00')).toBeInTheDocument()
+    expect(within(card).getByText('12% to $100,800.00')).toBeInTheDocument()
+    expect(within(card).getByText('22% to $211,400.00')).toBeInTheDocument()
     expect(within(card).getByText('24% and up')).toBeInTheDocument()
   })
 
@@ -1011,7 +1011,7 @@ describe('Editing appends new config rows', () => {
 
     fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
 
-    expect(await within(card).findByText('$48,000 / yr')).toBeInTheDocument()
+    expect(await within(card).findByText('$48,000.00 / yr')).toBeInTheDocument()
     const body = JSON.parse(
       postCalls(fetchMock, '/api/spend-plan')[0][1]?.body as string,
     )
@@ -1127,7 +1127,7 @@ describe('Editing appends new config rows', () => {
 
     fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
 
-    expect(await within(card).findByText('$1,550/mo')).toBeInTheDocument()
+    expect(await within(card).findByText('$1,550.00/mo')).toBeInTheDocument()
     const calls = postCalls(fetchMock, '/api/social-security')
     expect(calls).toHaveLength(1)
     expect(JSON.parse(calls[0][1]?.body as string)).toEqual({
@@ -1171,8 +1171,8 @@ describe('Tax parameter editing', () => {
 
     fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
 
-    expect(await within(card).findByText('$97,350')).toBeInTheDocument()
-    expect(within(card).getByText('10% to $25,000')).toBeInTheDocument()
+    expect(await within(card).findByText('$97,350.00')).toBeInTheDocument()
+    expect(within(card).getByText('10% to $25,000.00')).toBeInTheDocument()
     const puts = fetchMock.mock.calls.filter(
       ([input, init]) =>
         input === '/api/tax-params/2026' && init?.method === 'PUT',

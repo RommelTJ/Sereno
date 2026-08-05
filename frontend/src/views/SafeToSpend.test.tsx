@@ -21,7 +21,7 @@ describe('Safe-to-spend hero', () => {
   it('shows the headline from the API', async () => {
     render(<SafeToSpend />)
 
-    expect(await screen.findByText('$3,670')).toBeInTheDocument()
+    expect(await screen.findByText('$3,670.00')).toBeInTheDocument()
   })
 
   it('shows the formula pill', async () => {
@@ -49,7 +49,7 @@ describe('Envelopes card', () => {
     const rows = await screen.findAllByTestId('envelope-row')
     expect(rows).toHaveLength(4)
     expect(within(rows[0]).getByText('🛒 Groceries')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('$387 · $113 left')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$387.00 · $113.00 left')).toBeInTheDocument()
     const bar = within(rows[0]).getByTestId('envelope-bar')
     expect(bar).toHaveClass('bg-accent')
     expect(bar.style.width).toBe(`${(387 / 500) * 100}%`)
@@ -59,7 +59,7 @@ describe('Envelopes card', () => {
     render(<SafeToSpend />)
 
     const rows = await screen.findAllByTestId('envelope-row')
-    const overage = within(rows[2]).getByText('$546 of $500 · $46 over')
+    const overage = within(rows[2]).getByText('$546.00 of $500.00 · $46.00 over')
     expect(overage).toHaveClass('text-red')
     const bar = within(rows[2]).getByTestId('envelope-bar')
     expect(bar).toHaveClass('bg-red')
@@ -70,7 +70,7 @@ describe('Envelopes card', () => {
     render(<SafeToSpend />)
 
     const rows = await screen.findAllByTestId('envelope-row')
-    expect(within(rows[3]).getByText('$0 · $0 left')).toBeInTheDocument()
+    expect(within(rows[3]).getByText('$0.00 · $0.00 left')).toBeInTheDocument()
     expect(within(rows[3]).getByTestId('envelope-bar').style.width).toBe('0%')
   })
 })
@@ -80,7 +80,7 @@ describe('Funds card', () => {
     render(<SafeToSpend />)
 
     expect(await screen.findByText('Money in funds')).toBeInTheDocument()
-    expect(screen.getByText('$24,200')).toBeInTheDocument()
+    expect(screen.getByText('$24,200.00')).toBeInTheDocument()
   })
 
   it('renders one row per active fund with its available balance', async () => {
@@ -89,18 +89,18 @@ describe('Funds card', () => {
     const rows = await screen.findAllByTestId('sts-fund-row')
     expect(rows).toHaveLength(3)
     expect(within(rows[0]).getByText('🚨 Emergency fund')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('$10,000')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$10,000.00')).toBeInTheDocument()
     // A fund without an emoji keeps its plain name.
     expect(within(rows[2]).getByText('Travel fund')).toBeInTheDocument()
-    expect(within(rows[2]).getByText('$4,200')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('$4,200.00')).toBeInTheDocument()
   })
 
   it('shows the monthly plan, blank when a fund has none', async () => {
     render(<SafeToSpend />)
 
     const rows = await screen.findAllByTestId('sts-fund-row')
-    expect(within(rows[0]).getByText('$500 / mo')).toBeInTheDocument()
-    expect(within(rows[2]).getByText('$300 / mo')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$500.00 / mo')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('$300.00 / mo')).toBeInTheDocument()
     // The Bike fund has no monthly plan — no "/ mo" label at all.
     expect(within(rows[1]).queryByText(/\/ mo/)).not.toBeInTheDocument()
   })
@@ -160,7 +160,7 @@ describe('Add a spending item', () => {
       within(form).getByRole('button', { name: '+ Add spending row' }),
     )
 
-    expect(await screen.findByText('$3,625')).toBeInTheDocument()
+    expect(await screen.findByText('$3,625.00')).toBeInTheDocument()
     expect(expenseBody(fetchMock)).toEqual({
       txn_date: todayIso(),
       budget_month: '2026-06',
@@ -230,7 +230,7 @@ describe('Add a spending item', () => {
       target: { value: '1,200' },
     })
     // The server appends the drawdown, so the refetched list must land on
-    // the funds card — a stale $10,000 would misstate what's spendable.
+    // the funds card — a stale $10,000.00 would misstate what's spendable.
     routes['/api/funds'] = FUNDS.map((fund) =>
       fund.id === 1 ? { ...fund, balance: 8_800 } : fund,
     )
@@ -238,7 +238,7 @@ describe('Add a spending item', () => {
       within(form).getByRole('button', { name: '+ Add spending row' }),
     )
 
-    expect(await screen.findByText('$8,800')).toBeInTheDocument()
+    expect(await screen.findByText('$8,800.00')).toBeInTheDocument()
   })
 
   it('does not post when the amount is empty', async () => {
@@ -413,7 +413,7 @@ describe('Add an income item', () => {
       within(form).getByRole('button', { name: '+ Add income row' }),
     )
 
-    expect(await screen.findByText('$6,070')).toBeInTheDocument()
+    expect(await screen.findByText('$6,070.00')).toBeInTheDocument()
     expect(postBody(fetchMock, '/api/income')).toEqual({
       txn_date: todayIso(),
       budget_month: '2026-07',
@@ -617,7 +617,7 @@ describe('Month pager', () => {
     // The selected month drives everything: the hero, the envelopes card,
     // and the pager's own label.
     expect(await screen.findByText('May envelopes')).toBeInTheDocument()
-    expect(screen.getByText('$1,000')).toBeInTheDocument()
+    expect(screen.getByText('$1,000.00')).toBeInTheDocument()
     expect(screen.getByTestId('month-pager-label')).toHaveTextContent(
       'May 2026',
     )
@@ -644,7 +644,7 @@ describe('Month pager', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }))
 
     expect(await screen.findByText('July envelopes')).toBeInTheDocument()
-    expect(screen.getByText('$5,800')).toBeInTheDocument()
+    expect(screen.getByText('$5,800.00')).toBeInTheDocument()
     expect(
       fetchMock.mock.calls.some(
         ([input]) => input === '/api/budget-month?month=2026-07',
@@ -801,7 +801,7 @@ describe('Leftover line retirement', () => {
     })
     render(<SafeToSpend />)
 
-    await screen.findByText('$3,670')
+    await screen.findByText('$3,670.00')
     // Month paging supersedes the line: last month's closing number is one
     // tap back, in the hero itself.
     expect(
@@ -834,7 +834,7 @@ describe('Activity feed', () => {
 describe('Responsive layout', () => {
   it('stacks the hero column and forms into one column on narrow screens', async () => {
     render(<SafeToSpend />)
-    await screen.findByText('$3,670')
+    await screen.findByText('$3,670.00')
 
     expect(screen.getByTestId('view-safe-to-spend')).toHaveClass(
       'grid-cols-1',
@@ -858,7 +858,7 @@ describe('Responsive layout', () => {
   it('scales the hero figure down on narrow screens', async () => {
     render(<SafeToSpend />)
 
-    expect(await screen.findByText('$3,670')).toHaveClass(
+    expect(await screen.findByText('$3,670.00')).toHaveClass(
       'text-4xl',
       'sm:text-[56px]',
     )

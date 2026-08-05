@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.1.1**
+**v3.2.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -876,6 +876,27 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.2.0 — Every dollar amount shows exact cents. formatUsd, the
+app-wide money formatter, rounded to whole dollars before formatting,
+so cents were discarded on all 20 modules it reaches — while the
+dashboard's activity feed kept a private conditional-cents formatter,
+so the same screen disagreed with itself: "−$28.40" in the feed
+beside a funds card showing "$500" (issue #113). Every surface now
+formats two fixed decimals through the one shared formatUsd, negative
+sign placement kept ("-$1,234.56"), which also stops display rounding
+from concealing real data: the guardrail trigger portfolios and the
+sourcing waterfall's taxed draws carry true fractional cents
+("$103,092.78" rendered as "$103,093"), and a fund's displayed
+balance now matches its stored balance to the cent — the visibility
+half of #112's drift. The balance form's seeds follow suit: money
+prefills with exact cents, and the ETH quantity seeds through a new
+five-decimal formatter — the old locale default rounded quantities at
+the third decimal, so a fractional holding re-saved from its own
+prefill would silently change. Abbreviated forecast figures ("$1.25M")
+and percentages keep their precision; cents are meaningless at that
+scale. Frontend-only: the API has served exact-cent dollars since
+v3.1.1.
 
 v3.1.1 — Ledger money is stored as integer cents, and the fund guards
 stop throwing false 422s. Every money value was a Python float over
