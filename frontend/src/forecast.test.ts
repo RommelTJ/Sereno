@@ -15,6 +15,8 @@ import {
   sensitivityRows,
   spendCopy,
   spendSliderBounds,
+  spendSteps,
+  STEP_CHART_HEIGHT,
   verdict,
   verdictDelta,
 } from './forecast.ts'
@@ -78,6 +80,73 @@ describe('spendCopy', () => {
 
   it('uses the singular for one band', () => {
     expect(spendCopy(45_000, [BAND])).toBe('At $45,000.00 baseline · 1 band')
+  })
+})
+
+describe('spendSteps', () => {
+  // Pure geometry over a fixed "now", so the year ↔ age mapping in
+  // these tests never ages out from under the fixtures.
+  const NOW = 2026
+  const BANDS = [
+    { start_year: 2030, end_year: 2044, annual_amount: 55_000 },
+    { start_year: 2045, end_year: null, annual_amount: 38_000 },
+  ]
+
+  it('draws one full-height column per simulated age when flat', () => {
+    const steps = spendSteps(38, [], 45_000, NOW)
+    expect(steps).toHaveLength(63)
+    expect(steps[0]).toMatchObject({
+      age: 38,
+      level: 45_000,
+      banded: false,
+      bandIndex: null,
+    })
+    expect(steps.every((step) => step.height === STEP_CHART_HEIGHT)).toBe(true)
+  })
+
+  it('steps into each band at its start year and out after its end', () => {
+    const steps = spendSteps(38, BANDS, 45_000, NOW)
+    const byAge = new Map(steps.map((step) => [step.age, step]))
+    expect(byAge.get(41)).toMatchObject({ level: 45_000, banded: false })
+    expect(byAge.get(42)).toMatchObject({
+      level: 55_000,
+      banded: true,
+      bandIndex: 0,
+      boundary: true,
+      edge: 'start',
+    })
+    expect(byAge.get(56)).toMatchObject({ level: 55_000, edge: 'end' })
+    expect(byAge.get(57)).toMatchObject({
+      level: 38_000,
+      bandIndex: 1,
+      boundary: true,
+      edge: 'start',
+    })
+    expect(byAge.get(100)).toMatchObject({ level: 38_000, bandIndex: 1 })
+  })
+
+  it('scales heights to the schedule maximum', () => {
+    const steps = spendSteps(38, BANDS, 45_000, NOW)
+    const byAge = new Map(steps.map((step) => [step.age, step]))
+    expect(byAge.get(42)?.height).toBe(STEP_CHART_HEIGHT)
+    expect(byAge.get(38)?.height).toBeCloseTo((45_000 / 55_000) * STEP_CHART_HEIGHT)
+  })
+
+  it('falls back to the baseline after a closed band, with a boundary', () => {
+    const steps = spendSteps(
+      38,
+      [{ start_year: 2030, end_year: 2034, annual_amount: 55_000 }],
+      45_000,
+      NOW,
+    )
+    const byAge = new Map(steps.map((step) => [step.age, step]))
+    expect(byAge.get(46)?.edge).toBe('end')
+    expect(byAge.get(47)).toMatchObject({
+      level: 45_000,
+      banded: false,
+      boundary: true,
+      edge: null,
+    })
   })
 })
 

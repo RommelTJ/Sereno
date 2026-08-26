@@ -404,6 +404,49 @@ describe('banded verdict and baseline slider', () => {
   })
 })
 
+describe('spend step-chart', () => {
+  // The saved schedule's first band start, on the same year ↔ age
+  // mapping the component derives from the start age.
+  const BAND_START_AGE =
+    FORECAST.start_age + (SPEND_BANDS[0].start_year - new Date().getFullYear())
+
+  it('shares the x-axis with the balance chart', async () => {
+    render(<Forecast />)
+
+    const chart = await screen.findByTestId('forecast-chart')
+    const bars = within(chart).getAllByTestId(/^forecast-col-\d+$/)
+    const steps = within(chart).getAllByTestId(/^forecast-step-\d+$/)
+    expect(steps).toHaveLength(bars.length)
+  })
+
+  it('marks band years apart from baseline years', async () => {
+    stubApi({
+      '/api/forecast': FORECAST,
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': SPEND_BANDS,
+    })
+    render(<Forecast />)
+
+    const banded = await screen.findByTestId(`forecast-step-${BAND_START_AGE}`)
+    expect(banded).toHaveAttribute('data-banded', 'true')
+    expect(
+      screen.getByTestId(`forecast-step-${FORECAST.start_age}`),
+    ).toHaveAttribute('data-banded', 'false')
+  })
+
+  it('titles each column with its effective spend', async () => {
+    stubApi({
+      '/api/forecast': FORECAST,
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': SPEND_BANDS,
+    })
+    render(<Forecast />)
+
+    const banded = await screen.findByTestId(`forecast-step-${BAND_START_AGE}`)
+    expect(banded.getAttribute('title')).toContain('$55,000.00')
+  })
+})
+
 describe('max affordable button', () => {
   const MAX_AFFORDABLE = {
     year: NEXT_YEAR,
