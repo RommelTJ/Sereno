@@ -9,6 +9,7 @@ import Forecast from './views/Forecast.tsx'
 import Funds from './views/Funds.tsx'
 import Guardrails from './views/Guardrails.tsx'
 import Ledger from './views/Ledger.tsx'
+import Mortgage from './views/Mortgage.tsx'
 import SafeToSpend from './views/SafeToSpend.tsx'
 import Settings from './views/Settings.tsx'
 import Withdrawals from './views/Withdrawals.tsx'
@@ -51,6 +52,7 @@ function App() {
                 <Route path="/guardrails" element={<Guardrails />} />
                 <Route path="/withdrawals" element={<Withdrawals />} />
                 <Route path="/forecast" element={<Forecast />} />
+                <Route path="/mortgage" element={<Mortgage />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </main>
