@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type {
   Account,
   BindingConstraint,
@@ -30,6 +30,7 @@ import {
   spendCopy,
   spendSliderBounds,
   spendSteps,
+  STEP_CHART_HEIGHT,
   verdict,
   verdictDelta,
 } from '../forecast.ts'
@@ -189,23 +190,87 @@ function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
   )
 }
 
+interface StepDrag {
+  bandIndex: number
+  edge: 'start' | 'end' | null
+  startX: number
+  startY: number
+  band0: SpendBandInput
+  dollarsPerPx: number
+  colWidth: number
+  moved: boolean
+}
+
 function SpendStepChart({
   steps,
   startAge,
+  bands,
+  maxYear,
+  onPreview,
+  onCommit,
 }: {
   steps: SpendStep[]
   startAge: number
+  bands: SpendBandInput[]
+  maxYear: number
+  onPreview: (bands: SpendBandInput[]) => void
+  onCommit: () => void
 }) {
   const currentYear = new Date().getFullYear()
+  const rowRef = useRef<HTMLDivElement>(null)
+  const drag = useRef<StepDrag | null>(null)
+  const maxLevel = Math.max(...steps.map((step) => step.level), 1)
+
+  const clamp = (value: number, low: number, high: number) =>
+    Math.min(high, Math.max(low, value))
+
+  const dragPatch = (
+    session: StepDrag,
+    clientX: number,
+    clientY: number,
+  ): Partial<SpendBandInput> | null => {
+    if (session.edge === 'start' || session.edge === 'end') {
+      if (session.colWidth <= 0) {
+        return null
+      }
+      const years = Math.round((clientX - session.startX) / session.colWidth)
+      if (session.edge === 'start') {
+        const next = clamp(
+          session.band0.start_year + years,
+          currentYear,
+          session.band0.end_year ?? maxYear,
+        )
+        return next === bands[session.bandIndex]?.start_year ? null : { start_year: next }
+      }
+      const end0 = session.band0.end_year ?? maxYear
+      const next = clamp(end0 + years, session.band0.start_year, maxYear)
+      return next === bands[session.bandIndex]?.end_year ? null : { end_year: next }
+    }
+    // A mid-band column: vertical drag owns the level, on the $1,000
+    // grid, with the px-to-dollar mapping frozen at the drag's start
+    // so the scale never warps mid-gesture.
+    const dollars = (session.startY - clientY) * session.dollarsPerPx
+    const next = Math.max(
+      0,
+      Math.round((session.band0.annual_amount + dollars) / 1_000) * 1_000,
+    )
+    return next === bands[session.bandIndex]?.annual_amount
+      ? null
+      : { annual_amount: next }
+  }
+
   return (
     <div className="mt-4 border-t border-hairline-2 pt-3">
       <div className="flex justify-between text-[11.5px] text-[#5b6058]">
         <span className="font-bold">Spend per year</span>
-        <span className="text-faint">today's $ · bands in amber</span>
+        <span className="text-faint">
+          today's $ · drag a band's step or edge
+        </span>
       </div>
       <div
+        ref={rowRef}
         data-testid="forecast-spend-steps"
-        className="mt-1.5 flex h-[56px] items-end gap-[2px]"
+        className="mt-1.5 flex h-[56px] touch-none items-end gap-[2px]"
       >
         {steps.map((step) => (
           <div
@@ -213,8 +278,54 @@ function SpendStepChart({
             data-testid={`forecast-step-${step.age}`}
             data-banded={step.banded}
             title={`Age ${step.age} · ${currentYear + step.age - startAge} · ${formatUsd(step.level)}/yr`}
-            className={`flex-1 ${step.banded ? 'bg-amber' : 'bg-[#d9d4c9]'}`}
+            className={`flex-1 ${
+              step.banded
+                ? `bg-amber ${step.edge != null ? 'cursor-ew-resize' : 'cursor-ns-resize'}`
+                : 'bg-[#d9d4c9]'
+            }`}
             style={{ height: `${step.height}px` }}
+            onPointerDown={(event) => {
+              if (step.bandIndex == null) {
+                return
+              }
+              event.currentTarget.setPointerCapture?.(event.pointerId)
+              const width = rowRef.current?.getBoundingClientRect().width ?? 0
+              drag.current = {
+                bandIndex: step.bandIndex,
+                edge: step.edge,
+                startX: event.clientX,
+                startY: event.clientY,
+                band0: bands[step.bandIndex],
+                dollarsPerPx: maxLevel / STEP_CHART_HEIGHT,
+                colWidth: steps.length > 0 ? width / steps.length : 0,
+                moved: false,
+              }
+            }}
+            onPointerMove={(event) => {
+              const session = drag.current
+              if (session == null) {
+                return
+              }
+              const patch = dragPatch(session, event.clientX, event.clientY)
+              if (patch == null) {
+                return
+              }
+              session.moved = true
+              onPreview(
+                bands.map((band, index) =>
+                  index === session.bandIndex
+                    ? { ...session.band0, ...patch }
+                    : band,
+                ),
+              )
+            }}
+            onPointerUp={() => {
+              const session = drag.current
+              drag.current = null
+              if (session?.moved) {
+                onCommit()
+              }
+            }}
           />
         ))}
       </div>
@@ -698,6 +809,10 @@ function Forecast() {
         <SpendStepChart
           steps={spendSteps(forecast.start_age, bands, spend, currentYear)}
           startAge={forecast.start_age}
+          bands={bands}
+          maxYear={currentYear + 100 - forecast.start_age}
+          onPreview={(next) => setOverrides({ ...overrides, bands: next })}
+          onCommit={() => applyOverride({})}
         />
         <div className="mt-3.5 flex gap-[18px] text-[11.5px] text-[#5b6058]">
           <LegendSwatch color="bg-accent" label="ETH (first)" />
