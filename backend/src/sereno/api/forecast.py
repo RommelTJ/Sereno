@@ -465,7 +465,19 @@ def get_forecast(
     band_deltas = _band_deltas(bands, target, start_age)
 
     def sensitivity_row(level: float) -> SensitivityRow:
-        outcome = inputs.simulate(level, engine_purchases + band_deltas)
+        # A level means "what if we lived at this overall level": the
+        # whole schedule scales with it — baseline at the level, every
+        # band at level over the resolved spend — or a fully-banded
+        # plan would make the table inert.
+        scaled = [
+            BandOut(
+                start_year=each.start_year,
+                end_year=each.end_year,
+                annual_amount=each.annual_amount * level / target,
+            )
+            for each in bands
+        ]
+        outcome = inputs.simulate(level, engine_purchases + _band_deltas(scaled, level, start_age))
         return SensitivityRow(
             spend=level,
             run_out_age=outcome.run_out_age,
