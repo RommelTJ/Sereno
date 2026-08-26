@@ -369,6 +369,147 @@ class TestPurchases:
         assert by_spend[30_000.0]["balance_at_100"] < base_by_spend[30_000.0]["balance_at_100"]
 
 
+class TestBands:
+    def test_a_band_equals_its_purchase_delta_formulation(self, client):
+        # A band is sugar over the engine's cumulative ongoing deltas:
+        # stepping into 60,000 at 45 and back to the 45,000 baseline at
+        # 55 is exactly a +15,000 delta and its -15,000 mirror, so the
+        # simulations must agree to the float.
+        seed_portfolio()
+        seed_config()
+        banded = client.get(
+            "/api/forecast", params={"band": f"{year_at(45)}:{year_at(54)}:60000"}
+        ).json()
+        equivalent = client.get(
+            "/api/forecast",
+            params=[
+                ("purchase", f"{year_at(45)}:0:15000"),
+                ("purchase", f"{year_at(55)}:0:-15000"),
+            ],
+        ).json()
+        assert banded["series"] == equivalent["series"]
+        assert banded["run_out_age"] == equivalent["run_out_age"]
+        assert banded["balance_at_100"] == equivalent["balance_at_100"]
+
+    def test_bands_ride_outside_the_purchase_lists(self, client):
+        # purchases[] and purchase_costs[] describe user-entered one-off
+        # purchases; a compiled band shares their engine representation
+        # but never their response surface.
+        seed_portfolio()
+        seed_config()
+        body = client.get(
+            "/api/forecast", params={"band": f"{year_at(45)}:{year_at(54)}:60000"}
+        ).json()
+        assert body["bands"] == [
+            {"start_year": year_at(45), "end_year": year_at(54), "annual_amount": 60_000.0}
+        ]
+        assert body["purchases"] == []
+        assert body["purchase_costs"] == []
+        assert body["unaffordable"] == []
+
+    def test_an_open_ended_band_never_steps_back_down(self, client):
+        seed_portfolio()
+        seed_config()
+        banded = client.get("/api/forecast", params={"band": f"{year_at(70)}::30000"}).json()
+        equivalent = client.get(
+            "/api/forecast", params={"purchase": f"{year_at(70)}:0:-15000"}
+        ).json()
+        assert banded["series"] == equivalent["series"]
+        assert banded["balance_at_100"] == equivalent["balance_at_100"]
+
+    def test_a_band_covering_this_year_applies_from_the_start_age(self, client):
+        # A schedule ages forward: a band that started five years ago
+        # and still covers this year clamps to the simulation's first
+        # year instead of erroring.
+        seed_portfolio()
+        seed_config()
+        banded = client.get(
+            "/api/forecast", params={"band": f"{TODAY.year - 5}:{year_at(45)}:60000"}
+        ).json()
+        equivalent = client.get(
+            "/api/forecast",
+            params=[
+                ("purchase", f"{TODAY.year}:0:15000"),
+                ("purchase", f"{year_at(46)}:0:-15000"),
+            ],
+        ).json()
+        assert banded["series"] == equivalent["series"]
+
+    def test_gaps_fall_back_to_the_resolved_spend(self, client):
+        # Uncovered years spend the baseline — and the baseline is the
+        # resolved spend, so ?spend= keeps meaning "the level outside
+        # the bands".
+        seed_portfolio()
+        seed_config()
+        banded = client.get(
+            "/api/forecast",
+            params={"spend": 50_000, "band": f"{year_at(50)}:{year_at(59)}:60000"},
+        ).json()
+        equivalent = client.get(
+            "/api/forecast",
+            params=[
+                ("spend", "50000"),
+                ("purchase", f"{year_at(50)}:0:10000"),
+                ("purchase", f"{year_at(60)}:0:-10000"),
+            ],
+        ).json()
+        assert banded["series"] == equivalent["series"]
+
+    def test_bands_stay_in_the_baseline_and_the_cost_rows(self, client):
+        # The baseline prices the purchases against the *banded* plan:
+        # dropping the purchase must not also drop the schedule.
+        seed_portfolio()
+        seed_config()
+        band = f"{year_at(45)}:{year_at(54)}:60000"
+        flat = client.get("/api/forecast").json()
+        band_only = client.get("/api/forecast", params={"band": band}).json()
+        # The band really moves the plan — the equalities below must not
+        # hold by everything collapsing to the flat run.
+        assert band_only["balance_at_100"] != flat["balance_at_100"]
+        body = client.get(
+            "/api/forecast",
+            params=[("band", band), ("purchase", f"{year_at(48)}:100000")],
+        ).json()
+        assert body["baseline"]["balance_at_100"] == band_only["balance_at_100"]
+        assert body["baseline"]["run_out_age"] == band_only["run_out_age"]
+        (cost,) = body["purchase_costs"]
+        assert cost["balance_at_100"] == band_only["balance_at_100"]
+
+    def test_rejects_a_malformed_band(self, client):
+        for bad in (
+            "2040",
+            "2040:2050",
+            "2040:2050:abc",
+            "x:2050:60000",
+            "2040:2050:60000:1",
+            "2040:2050:-1",
+        ):
+            response = client.get("/api/forecast", params={"band": bad})
+            assert response.status_code == 422, bad
+
+    def test_rejects_overlapping_bands(self, client):
+        response = client.get(
+            "/api/forecast",
+            params=[
+                ("band", f"{year_at(45)}:{year_at(54)}:60000"),
+                ("band", f"{year_at(50)}::30000"),
+            ],
+        )
+        assert response.status_code == 422
+        detail = response.json()["detail"]
+        assert "overlap" in detail
+        assert f"{year_at(45)}-{year_at(54)}" in detail
+        assert f"{year_at(50)}+" in detail
+
+    def test_rejects_a_band_entirely_in_the_past(self, client):
+        params = {"band": f"{TODAY.year - 7}:{TODAY.year - 3}:60000"}
+        assert client.get("/api/forecast", params=params).status_code == 422
+
+    def test_rejects_a_band_beyond_age_100(self, client):
+        params = {"band": f"{year_at(101)}::60000"}
+        assert client.get("/api/forecast", params=params).status_code == 422
+
+
 class TestBaseline:
     def test_the_baseline_is_the_no_purchase_outcome(self, client):
         # One call answers both "where do I land?" and "what did the
