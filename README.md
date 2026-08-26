@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.4.0**
+**v3.5.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -980,6 +980,27 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.5.0 — The longevity forecast assumed one flat spend level from the
+current age to 100, and real spending is not flat: it steps up through
+peak years, down as activity declines, ends when a mortgage is paid
+off, and rises again for late-life care — modelled flat, a
+mediocre-return forecast can report running out decades early purely
+because it never stops charging for expenses with a known end date.
+Spending is now an age-banded schedule: effective-dated, append-only
+rows of "from year, to year, annual amount" in today's dollars, a gap
+meaning "no change from baseline" so one band needs no lifetime
+schedule around it, and overlaps rejected naming the two rows. The
+engine did not change — a schedule compiles in the API layer to the
+zero-amount ongoing deltas the purchase machinery already understands
+— and the schedule is editable where the question gets asked: on the
+Forecast screen as rows or a draggable step-chart sharing the balance
+chart's x-axis, transient until Save to plan writes a new version, and
+under Settings as the Spend schedule card. The saved schedule is every
+bare caller's default, the max-affordable solver prices purchases
+against it, and sensitivity levels scale the whole schedule. Guardrails
+deliberately stay on the flat target (#119): they monitor history,
+while this schedule plans hypothetical future years.
 
 v3.4.0 — The mortgage is the largest line in the budget and the only
 one with a known end date, but nothing in Sereno knew it was a loan. It
