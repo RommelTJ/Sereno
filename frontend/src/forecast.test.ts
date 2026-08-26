@@ -93,11 +93,50 @@ describe('chartColumns', () => {
       brokerageUsd: 50_000,
       retirementUsd: 50_000,
       ssUsd: 0,
+      totalUsd: 200_000,
+      deltaUsd: null,
       cap: 0,
       marker: '',
       purchaseUsd: null,
       shortUsd: null,
     })
+  })
+
+  it('totals the three balance buckets', () => {
+    const columns = chartColumns(
+      series({ 38: { eth: 100_000, brokerage: 50_000, retirement: 50_000 } }),
+    )
+    expect(columns[0].totalUsd).toBe(200_000)
+  })
+
+  it('leaves Social Security out of the total — it is a flow, not a balance', () => {
+    const columns = chartColumns(
+      series({
+        38: {
+          eth: 100_000,
+          brokerage: 50_000,
+          retirement: 50_000,
+          ss_income: 34_800,
+        },
+      }),
+    )
+    expect(columns[0].totalUsd).toBe(200_000)
+  })
+
+  it('carries the change against the previous simulated year', () => {
+    const columns = chartColumns(
+      series({
+        38: { eth: 200_000 },
+        39: { eth: 245_000 },
+        40: { eth: 195_000 },
+      }),
+    )
+    expect(columns[1].deltaUsd).toBe(45_000)
+    expect(columns[2].deltaUsd).toBe(-50_000)
+  })
+
+  it('has no change to report on the first simulated year', () => {
+    expect(chartColumns(series({ 38: { eth: 200_000 } }))[0].deltaUsd).toBeNull()
   })
 
   it('labels only the ages divisible by five', () => {
@@ -159,6 +198,8 @@ describe('chartColumns', () => {
       brokerageUsd: 0,
       retirementUsd: 0,
       ssUsd: 0,
+      totalUsd: 0,
+      deltaUsd: null,
       cap: 0,
       marker: '',
       purchaseUsd: null,
