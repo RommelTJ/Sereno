@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ACCOUNTS,
   FORECAST,
@@ -444,6 +444,100 @@ describe('spend step-chart', () => {
 
     const banded = await screen.findByTestId(`forecast-step-${BAND_START_AGE}`)
     expect(banded.getAttribute('title')).toContain('$55,000.00')
+  })
+})
+
+describe('step-chart dragging', () => {
+  const BAND_START_AGE =
+    FORECAST.start_age + (SPEND_BANDS[0].start_year - new Date().getFullYear())
+
+  const bandedRoutes = () => ({
+    '/api/forecast': FORECAST,
+    '/api/accounts': ACCOUNTS,
+    '/api/spend-bands': SPEND_BANDS,
+  })
+
+  beforeEach(() => {
+    // jsdom has no layout: give the steps row a real width so a
+    // horizontal drag can translate px into years — 630px across 63
+    // columns is 10px per year.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 630,
+      height: 56,
+      top: 0,
+      left: 0,
+      bottom: 56,
+      right: 630,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('drags a band level vertically and refetches once on release', async () => {
+    const fetchMock = stubApi(bandedRoutes())
+    render(<Forecast />)
+
+    // A mid-band column, not an edge: vertical drag owns the level.
+    const column = await screen.findByTestId(`forecast-step-${BAND_START_AGE + 2}`)
+    const calls = fetchMock.mock.calls.length
+    fireEvent.pointerDown(column, { clientX: 100, clientY: 40, pointerId: 1 })
+    fireEvent.pointerMove(column, { clientX: 100, clientY: 30, pointerId: 1 })
+
+    // 10px up on the 56px chart whose top is the 55,000 maximum:
+    // 10/56 × 55,000 ≈ 9,821 → snapped to the $1,000 grid → 65,000.
+    expect(screen.getByTestId('forecast-band-amount-0')).toHaveValue('65000')
+    // Live while dragging, but no fetch until release.
+    expect(fetchMock.mock.calls.length).toBe(calls)
+
+    fireEvent.pointerUp(column, { clientX: 100, clientY: 30, pointerId: 1 })
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `band=${SPEND_BANDS[0].start_year}%3A2044%3A65000`,
+    )
+  })
+
+  it('drags a band boundary horizontally to move its year', async () => {
+    const fetchMock = stubApi(bandedRoutes())
+    render(<Forecast />)
+
+    const edge = await screen.findByTestId(`forecast-step-${BAND_START_AGE}`)
+    fireEvent.pointerDown(edge, { clientX: 100, clientY: 40, pointerId: 1 })
+    fireEvent.pointerMove(edge, { clientX: 120, clientY: 40, pointerId: 1 })
+    fireEvent.pointerUp(edge, { clientX: 120, clientY: 40, pointerId: 1 })
+
+    // 20px right at 10px per column = two years later.
+    expect(screen.getByTestId('forecast-band-start-0')).toHaveValue(
+      SPEND_BANDS[0].start_year + 2,
+    )
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `band=${SPEND_BANDS[0].start_year + 2}%3A2044%3A55000`,
+    )
+  })
+
+  it('leaves baseline years inert', async () => {
+    const fetchMock = stubApi(bandedRoutes())
+    render(<Forecast />)
+
+    const column = await screen.findByTestId(`forecast-step-${FORECAST.start_age}`)
+    const calls = fetchMock.mock.calls.length
+    fireEvent.pointerDown(column, { clientX: 10, clientY: 40, pointerId: 1 })
+    fireEvent.pointerMove(column, { clientX: 10, clientY: 10, pointerId: 1 })
+    fireEvent.pointerUp(column, { clientX: 10, clientY: 10, pointerId: 1 })
+
+    expect(fetchMock.mock.calls.length).toBe(calls)
+    expect(screen.getByTestId('forecast-band-amount-0')).toHaveValue('55000')
+  })
+
+  it('opts the drag surface out of touch scrolling', async () => {
+    stubApi(bandedRoutes())
+    render(<Forecast />)
+
+    const row = await screen.findByTestId('forecast-spend-steps')
+    expect(row.className).toContain('touch-none')
   })
 })
 
