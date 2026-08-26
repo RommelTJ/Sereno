@@ -25,6 +25,8 @@ import type {
   Category,
   CategoryInput,
   LedgerMonth,
+  Mortgage,
+  MortgageInput,
   QuickLink,
   QuickLinkInput,
   SocialSecurityEntry,
@@ -39,6 +41,7 @@ import {
   createAccount,
   createAssumption,
   createCategory,
+  createMortgage,
   createSocialSecurity,
   createQuickLink,
   createSpendPlan,
@@ -49,6 +52,7 @@ import {
   fetchAssumptions,
   fetchCategories,
   fetchLedger,
+  fetchMortgage,
   fetchQuickLinks,
   fetchSocialSecurity,
   fetchSpendPlan,
@@ -67,6 +71,7 @@ import GhostButton from '../components/GhostButton.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
 import { ASSET_EMOJI_OPTIONS, EMOJI_OPTIONS } from '../emoji.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
+import { formatMortgageRate } from '../mortgage.ts'
 import { useNetWorth } from '../netWorth.ts'
 import type {
   AccountRow,
@@ -89,6 +94,9 @@ import {
   formatRate,
   guardrailPreview,
   KIND_OPTIONS,
+  mortgageAccounts,
+  mortgageEdit,
+  mortgageFormValues,
   PRIORITY_OPTIONS,
   quickLinkInput,
   socialSecurityEdits,
@@ -107,6 +115,7 @@ interface SettingsData {
   spendPlan: SpendPlan | null
   socialSecurity: SocialSecurityEntry[]
   taxParams: TaxParam[]
+  mortgage: Mortgage | null
 }
 
 function Card({
@@ -1013,6 +1022,129 @@ function AssumptionsCard({
   )
 }
 
+function MortgageCard({
+  mortgage,
+  accounts,
+  onSave,
+}: {
+  mortgage: Mortgage | null
+  accounts: Account[]
+  onSave: (input: MortgageInput) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [values, setValues] = useState(() =>
+    mortgageFormValues(mortgage, accounts),
+  )
+
+  const startEditing = () => {
+    setValues(mortgageFormValues(mortgage, accounts))
+    setEditing(true)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const input = mortgageEdit(values, mortgage, todayIso())
+      if (input) {
+        await onSave(input)
+      }
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const set = (key: keyof typeof values) => (value: string) =>
+    setValues((current) => ({ ...current, [key]: value }))
+
+  const linked = accounts.find(
+    (account) => account.id === mortgage?.account_id,
+  )
+
+  return (
+    <Card
+      title="Mortgage"
+      hint="· payoff is solved from the ledger"
+      testId="mortgage-card"
+      action={
+        editing ? (
+          <SaveButton disabled={saving} onClick={() => void save()} />
+        ) : (
+          <EditButton onClick={startEditing} />
+        )
+      }
+    >
+      {editing ? (
+        <div className="mt-3 grid grid-cols-1 gap-[11px] sm:grid-cols-2">
+          <SelectField
+            id="mortgage-account"
+            label="Account"
+            value={values.accountId}
+            options={mortgageAccounts(accounts).map((account) => ({
+              value: String(account.id),
+              label: `${account.emoji ?? ''} ${account.name}`.trim(),
+            }))}
+            onChange={set('accountId')}
+          />
+          <EditField
+            id="mortgage-rate"
+            label="Rate %"
+            value={values.ratePct}
+            onChange={set('ratePct')}
+          />
+          <EditField
+            id="mortgage-pi"
+            label="P&I $ / mo"
+            value={values.monthlyPi}
+            onChange={set('monthlyPi')}
+          />
+          <EditField
+            id="mortgage-extra"
+            label="Extra principal $ / mo"
+            value={values.monthlyExtra}
+            onChange={set('monthlyExtra')}
+          />
+          <EditField
+            id="mortgage-escrow"
+            label="Escrow $ / mo"
+            value={values.monthlyEscrow}
+            onChange={set('monthlyEscrow')}
+          />
+        </div>
+      ) : (
+        <div className="mt-3">
+          <ConfigLine
+            label="Account"
+            value={
+              linked ? `${linked.emoji ?? ''} ${linked.name}`.trim() : '—'
+            }
+          />
+          <ConfigLine
+            label="Rate"
+            value={mortgage ? formatMortgageRate(mortgage.annual_rate) : '—'}
+          />
+          <ConfigLine
+            label="P&I"
+            value={mortgage ? `${formatUsd(mortgage.monthly_pi)} / mo` : '—'}
+          />
+          <ConfigLine
+            label="Extra principal"
+            value={mortgage ? `${formatUsd(mortgage.monthly_extra)} / mo` : '—'}
+          />
+          <ConfigLine
+            label="Escrow"
+            value={
+              mortgage ? `${formatUsd(mortgage.monthly_escrow)} / mo` : '—'
+            }
+            hint="· survives payoff"
+          />
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function SocialSecurityCard({
   socialSecurity,
   onSave,
@@ -1328,6 +1460,7 @@ function Settings() {
       fetchSpendPlan(),
       fetchSocialSecurity(),
       fetchTaxParams(),
+      fetchMortgage(),
     ]).then(
       ([
         accounts,
@@ -1338,6 +1471,7 @@ function Settings() {
         spendPlan,
         socialSecurity,
         taxParams,
+        mortgage,
       ]) =>
         setData({
           accounts,
@@ -1348,6 +1482,7 @@ function Settings() {
           spendPlan,
           socialSecurity,
           taxParams,
+          mortgage,
         }),
     )
   }, [])
@@ -1490,6 +1625,12 @@ function Settings() {
     setData((current) => (current ? { ...current, assumption, spendPlan } : current))
   }
 
+  const saveMortgage = async (input: MortgageInput) => {
+    await createMortgage(input)
+    const mortgage = await fetchMortgage()
+    setData((current) => (current ? { ...current, mortgage } : current))
+  }
+
   const saveSocialSecurity = async (inputs: SocialSecurityInput[]) => {
     for (const input of inputs) {
       await createSocialSecurity(input)
@@ -1567,6 +1708,11 @@ function Settings() {
         <SocialSecurityCard
           socialSecurity={data.socialSecurity}
           onSave={saveSocialSecurity}
+        />
+        <MortgageCard
+          mortgage={data.mortgage}
+          accounts={data.accounts}
+          onSave={saveMortgage}
         />
       </div>
       <TaxCard

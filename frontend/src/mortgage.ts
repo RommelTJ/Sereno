@@ -11,6 +11,11 @@ import type { Mortgage, MortgageDerived } from './api.ts'
 import { formatRate } from './guardrails.ts'
 import { formatMonth, formatUsd } from './ledger.ts'
 
+// Both mortgage surfaces — the Plan card and the Settings row — show
+// the rate the same way: two decimals, trailing zeros kept, so 3.00%
+// and 3.25% align. Same shape as a withdrawal rate, so same helper.
+export const formatMortgageRate = formatRate
+
 // The payment that stops at payoff: principal & interest plus whatever
 // extra principal is riding along. Never escrow.
 export function monthlyPayment(mortgage: Mortgage): number {
