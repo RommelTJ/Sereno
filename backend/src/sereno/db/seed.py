@@ -256,6 +256,14 @@ def seed(conn: sqlite3.Connection) -> bool:
         " VALUES (?, '2026-01-01', 67, ?)",
         [("you", 1500), ("spouse", 1400)],
     )
+    # Chosen to agree with the ledger above: 3% on the $150,000 June balance
+    # is $375 of interest, so $1,075 of P&I leaves the $700 of principal the
+    # monthly balances actually step down by.
+    conn.execute(
+        "INSERT INTO mortgage (effective_date, account_id, annual_rate, monthly_pi,"
+        " monthly_extra, monthly_escrow) VALUES ('2026-01-01', ?, 0.03, 1075, 200, 450)",
+        (accounts["Mortgage"],),
+    )
     brackets = json.dumps(
         [
             {"rate": 0.10, "upto": 24800},
