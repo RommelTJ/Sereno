@@ -510,6 +510,83 @@ class TestBands:
         assert client.get("/api/forecast", params=params).status_code == 422
 
 
+def save_bands(client, bands):
+    response = client.post(
+        "/api/spend-bands", json={"effective_date": TODAY.isoformat(), "bands": bands}
+    )
+    assert response.status_code == 201
+
+
+class TestSavedSchedule:
+    def test_a_saved_schedule_is_the_forecast_default(self, client):
+        # The dashboard's Longevity card and every other bare caller
+        # get the plan as saved — the band= param exists to override
+        # it, not to opt in.
+        seed_portfolio()
+        seed_config()
+        explicit = client.get(
+            "/api/forecast", params={"band": f"{year_at(45)}:{year_at(54)}:60000"}
+        ).json()
+        save_bands(
+            client,
+            [{"start_year": year_at(45), "end_year": year_at(54), "annual_amount": 60_000}],
+        )
+        body = client.get("/api/forecast").json()
+        assert body["series"] == explicit["series"]
+        assert body["run_out_age"] == explicit["run_out_age"]
+        assert body["bands"] == [
+            {"start_year": year_at(45), "end_year": year_at(54), "annual_amount": 60_000.0}
+        ]
+
+    def test_a_lone_empty_band_overrides_back_to_flat(self, client):
+        seed_portfolio()
+        seed_config()
+        flat = client.get("/api/forecast").json()
+        assert flat["bands"] == []
+        save_bands(
+            client,
+            [{"start_year": year_at(45), "end_year": year_at(54), "annual_amount": 60_000}],
+        )
+        body = client.get("/api/forecast", params={"band": ""}).json()
+        assert body["series"] == flat["series"]
+        assert body["bands"] == []
+
+    def test_explicit_bands_replace_the_saved_schedule(self, client):
+        seed_portfolio()
+        seed_config()
+        override = {"band": f"{year_at(70)}::30000"}
+        unsaved = client.get("/api/forecast", params=override).json()
+        save_bands(
+            client,
+            [{"start_year": year_at(45), "end_year": year_at(54), "annual_amount": 60_000}],
+        )
+        body = client.get("/api/forecast", params=override).json()
+        assert body["series"] == unsaved["series"]
+        assert body["bands"] == [
+            {"start_year": year_at(70), "end_year": None, "annual_amount": 30_000.0}
+        ]
+
+    def test_an_aged_out_saved_band_is_skipped(self, client):
+        # A schedule saved years ago may hold bands entirely behind us
+        # now. They are history, not errors — the saved path never
+        # re-validates, it just compiles nothing for them.
+        seed_portfolio()
+        seed_config()
+        flat = client.get("/api/forecast").json()
+        version = execute(
+            "INSERT INTO spend_band_version (effective_date) VALUES (?)",
+            ((TODAY.replace(year=TODAY.year - 6)).isoformat(),),
+        )
+        execute(
+            "INSERT INTO spend_band (version_id, start_year, end_year, annual_amount)"
+            " VALUES (?, ?, ?, ?)",
+            (version, TODAY.year - 5, TODAY.year - 1, 60_000),
+        )
+        body = client.get("/api/forecast").json()
+        assert body["series"] == flat["series"]
+        assert body["run_out_age"] == flat["run_out_age"]
+
+
 class TestBaseline:
     def test_the_baseline_is_the_no_purchase_outcome(self, client):
         # One call answers both "where do I land?" and "what did the
