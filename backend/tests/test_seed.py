@@ -21,6 +21,8 @@ ALL_TABLES = [
     "social_security",
     "tax_param",
     "mortgage",
+    "spend_band_version",
+    "spend_band",
 ]
 
 
@@ -142,6 +144,27 @@ class TestSeedSatisfiesTheViews:
         assert row["monthly_pi"] - monthly_interest == pytest.approx(700)
         assert row["monthly_extra"] > 0
         assert row["monthly_escrow"] > 0
+
+    def test_spend_bands_step_around_the_flat_target(self, db):
+        # The seeded schedule is a coherent story against the 45,000
+        # plan: a step up through the peak years, then an open-ended
+        # step down — non-overlapping, noted, and never the flat
+        # target itself, or the seed would demo nothing.
+        seed(db)
+        rows = db.execute(
+            "SELECT b.start_year, b.end_year, b.annual_amount, b.note FROM spend_band b"
+            " JOIN spend_band_version v ON v.id = b.version_id ORDER BY b.start_year"
+        ).fetchall()
+        assert len(rows) >= 2
+        target = db.execute("SELECT annual_target FROM spend_plan").fetchone()[0]
+        previous_end = None
+        for row in rows:
+            assert row["note"], "every seeded band carries its rationale"
+            assert row["annual_amount"] != target
+            if previous_end is not None:
+                assert row["start_year"] > previous_end
+            previous_end = row["end_year"]
+        assert rows[-1]["end_year"] is None, "the last band is open-ended"
 
     def test_eth_balances_are_quantity_times_price(self, db):
         seed(db)
