@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.2.0**
+**v3.2.1**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -99,6 +99,10 @@ docker compose up --build
 
 Both containers hot-reload when you edit source files. Stop with `Ctrl-C` or
 `docker compose down`.
+
+Both services carry `restart: unless-stopped`, so a long-running deployment
+comes back on its own after a crash or a host reboot — and stays down once you
+stop it deliberately with `docker compose down` or `docker compose stop`.
 
 ### Seeding sample data
 
@@ -876,6 +880,18 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.2.1 — The containers come back after a reboot. Neither service declared a
+restart policy, so Docker defaulted both to `no`: a host reboot left the
+backend and frontend sitting in `Exited` while every other service on the
+same machine (which do declare one) came up with the daemon, and the site
+stayed down until someone noticed and ran `docker compose up -d` by hand.
+Both services now declare `restart: unless-stopped` — restarted after a crash
+or a reboot, but left alone once stopped deliberately, so `docker compose
+down` and `Ctrl-C` still mean what they always did. Compose applies restart
+policies to `up` containers only, so the one-off `docker compose run --rm`
+check commands are unaffected: a failing lint or test run still exits once
+with its status instead of looping.
 
 v3.2.0 — Every dollar amount shows exact cents. formatUsd, the
 app-wide money formatter, rounded to whole dollars before formatting,
