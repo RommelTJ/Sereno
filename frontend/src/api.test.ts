@@ -5,10 +5,12 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  createSpendBands,
   deleteExpense,
   deleteIncome,
   fetchForecast,
   fetchMaxAffordable,
+  fetchSpendBands,
   updateExpense,
   updateIncome,
 } from './api.ts'
@@ -34,6 +36,88 @@ describe('fetchForecast', () => {
     const fetchMock = stubApi({ '/api/forecast': null })
     await fetchForecast({ purchases: [] })
     expect(String(fetchMock.mock.calls[0][0])).not.toContain('purchase')
+  })
+})
+
+// The band wire format: bands ride the same way as repeated
+// band=start_year:end_year:amount params (an empty end year =
+// open-ended), except that an *empty list* still sends a lone empty
+// band= — "explicitly flat" — because absence means "use the saved
+// schedule" server-side. The note stays behind like a purchase's name.
+describe('fetchForecast band params', () => {
+  it('appends one band param per band and never the note', async () => {
+    const fetchMock = stubApi({ '/api/forecast': null })
+    await fetchForecast({
+      bands: [
+        {
+          start_year: 2031,
+          end_year: 2040,
+          annual_amount: 55_000,
+          note: 'peak travel years',
+        },
+        { start_year: 2045, end_year: null, annual_amount: 38_000 },
+      ],
+    })
+    const url = String(fetchMock.mock.calls[0][0])
+    expect(url).toContain('band=2031%3A2040%3A55000&band=2045%3A%3A38000')
+    expect(url).not.toContain('peak')
+  })
+
+  it('sends a lone empty band param for an explicitly flat override', async () => {
+    const fetchMock = stubApi({ '/api/forecast': null })
+    await fetchForecast({ bands: [] })
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/forecast?band=')
+  })
+
+  it('sends no band params when bands are untouched', async () => {
+    const fetchMock = stubApi({ '/api/forecast': null })
+    await fetchForecast({ spend: 60_000 })
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('band')
+  })
+
+  it('fetchMaxAffordable carries the band overrides', async () => {
+    const fetchMock = stubApi({ '/api/forecast/max-affordable': null })
+    await fetchMaxAffordable(2036, {
+      bands: [{ start_year: 2045, end_year: null, annual_amount: 38_000 }],
+    })
+    expect(String(fetchMock.mock.calls[0][0])).toContain('band=2045%3A%3A38000')
+  })
+})
+
+describe('spend band clients', () => {
+  it('fetchSpendBands GETs the saved schedule', async () => {
+    const fetchMock = stubApi({ '/api/spend-bands': [] })
+    await fetchSpendBands()
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/spend-bands')
+  })
+
+  it('createSpendBands POSTs the whole schedule, notes included', async () => {
+    const fetchMock = stubApi({ 'POST /api/spend-bands': [] })
+    await createSpendBands({
+      effective_date: '2026-08-26',
+      bands: [
+        {
+          start_year: 2031,
+          end_year: 2040,
+          annual_amount: 55_000,
+          note: 'peak travel years',
+        },
+      ],
+    })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/spend-bands')
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(init?.body as string)).toEqual({
+      effective_date: '2026-08-26',
+      bands: [
+        {
+          start_year: 2031,
+          end_year: 2040,
+          annual_amount: 55_000,
+          note: 'peak travel years',
+        },
+      ],
+    })
   })
 })
 
