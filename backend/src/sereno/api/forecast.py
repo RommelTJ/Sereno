@@ -36,7 +36,7 @@ from pydantic import BaseModel
 
 from sereno.api.config import get_assumptions, get_social_security, get_spend_plan
 from sereno.api.sourcing import current_age, current_tax_param, load_buckets
-from sereno.api.spend_bands import validate_bands
+from sereno.api.spend_bands import effective_schedule, validate_bands
 from sereno.db.connection import get_db
 from sereno.engine.forecast import (
     END_AGE,
@@ -434,7 +434,21 @@ def get_forecast(
     # band is a 422 even on an empty database, like any other invalid
     # param.
     purchases = _parse_purchases(purchase or [], current_age())
-    bands = _parse_bands(band or [])
+    # band= present replaces the saved schedule wholesale (a lone
+    # empty value = explicitly flat); absent, the saved schedule is
+    # the default. Saved rows skip validation — they were checked at
+    # save time, and a schedule legitimately ages into the past.
+    if band is None:
+        bands = [
+            BandOut(
+                start_year=saved.start_year,
+                end_year=saved.end_year,
+                annual_amount=saved.annual_amount,
+            )
+            for saved in effective_schedule(db)
+        ]
+    else:
+        bands = _parse_bands(band)
     inputs = _resolve_inputs(
         db, spend, return_pct, inflation_pct, eth_growth_pct, ss_you, ss_spouse, ss_start
     )
