@@ -115,7 +115,7 @@ _TAX_PARAM_COLUMNS = (
 )
 
 
-def _effective(db: sqlite3.Connection, table: str, columns: str) -> sqlite3.Row | None:
+def effective_row(db: sqlite3.Connection, table: str, columns: str) -> sqlite3.Row | None:
     return db.execute(
         f"SELECT {columns} FROM {table} WHERE effective_date <= ?"
         " ORDER BY effective_date DESC, id DESC LIMIT 1",
@@ -135,7 +135,7 @@ def _brackets_json(brackets: list[Bracket] | None) -> str | None:
 
 @router.get("/assumptions")
 def get_assumptions(db: Db) -> Assumption | None:
-    row = _effective(
+    row = effective_row(
         db, "assumption", "id, effective_date, return_pct, inflation_pct, eth_growth_pct"
     )
     return Assumption(**dict(row)) if row else None
@@ -143,7 +143,7 @@ def get_assumptions(db: Db) -> Assumption | None:
 
 @router.get("/spend-plan")
 def get_spend_plan(db: Db) -> SpendPlan | None:
-    row = _effective(
+    row = effective_row(
         db, "spend_plan", "id, effective_date, annual_target, initial_rate, guardrail_band"
     )
     return SpendPlan(**dict(row)) if row else None
