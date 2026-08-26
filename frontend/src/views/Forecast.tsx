@@ -17,7 +17,7 @@ import {
 } from '../api.ts'
 import { bandProblem, overrideBands, scheduleChanged } from '../spendBands.ts'
 import { todayIso } from '../ledger.ts'
-import type { ChartColumn, SensitivityRowCopy } from '../forecast.ts'
+import type { ChartColumn, SensitivityRowCopy, SpendStep } from '../forecast.ts'
 import {
   bindingConstraintCopy,
   bridgeCopy,
@@ -29,6 +29,7 @@ import {
   sensitivityRows,
   spendCopy,
   spendSliderBounds,
+  spendSteps,
   verdict,
   verdictDelta,
 } from '../forecast.ts'
@@ -184,6 +185,39 @@ function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
         className="w-full bg-ss-blue"
         style={{ height: `${column.ss}px` }}
       />
+    </div>
+  )
+}
+
+function SpendStepChart({
+  steps,
+  startAge,
+}: {
+  steps: SpendStep[]
+  startAge: number
+}) {
+  const currentYear = new Date().getFullYear()
+  return (
+    <div className="mt-4 border-t border-hairline-2 pt-3">
+      <div className="flex justify-between text-[11.5px] text-[#5b6058]">
+        <span className="font-bold">Spend per year</span>
+        <span className="text-faint">today's $ · bands in amber</span>
+      </div>
+      <div
+        data-testid="forecast-spend-steps"
+        className="mt-1.5 flex h-[56px] items-end gap-[2px]"
+      >
+        {steps.map((step) => (
+          <div
+            key={step.age}
+            data-testid={`forecast-step-${step.age}`}
+            data-banded={step.banded}
+            title={`Age ${step.age} · ${currentYear + step.age - startAge} · ${formatUsd(step.level)}/yr`}
+            className={`flex-1 ${step.banded ? 'bg-amber' : 'bg-[#d9d4c9]'}`}
+            style={{ height: `${step.height}px` }}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -661,6 +695,10 @@ function Forecast() {
             </div>
           ))}
         </div>
+        <SpendStepChart
+          steps={spendSteps(forecast.start_age, bands, spend, currentYear)}
+          startAge={forecast.start_age}
+        />
         <div className="mt-3.5 flex gap-[18px] text-[11.5px] text-[#5b6058]">
           <LegendSwatch color="bg-accent" label="ETH (first)" />
           <LegendSwatch color="bg-sidebar" label="Taxable brokerage" />
