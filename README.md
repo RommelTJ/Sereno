@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.3.0**
+**v3.4.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -921,6 +921,26 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.4.0 — The mortgage is the largest line in the budget and the only
+one with a known end date, but nothing in Sereno knew it was a loan. It
+sat in the ledger as a balance and in the budget as one undifferentiated
+monthly amount, which lost three facts: when the payment stops, that
+escrow outlives payoff while principal & interest does not, and that a
+payment fixed in nominal terms costs less in real terms every year —
+the forecast runs in today's dollars, so a flat real amount
+over-inflates the payment beforehand and never ends it afterward.
+Mortgage terms are now effective-dated config like assumptions and the
+spend plan — rate, P&I, extra principal, escrow, linked to the liability
+account — and everything else is derived rather than stored. The payoff
+date in particular: any maturity date typed by hand goes stale the
+moment the extra payment changes, so it is solved each time from the
+balance the ledger already tracks. A new Plan screen reads out the
+payoff month and the age then, the term and interest left, what the
+extra principal buys against the P&I-only schedule ("saves 32 months and
+$6,840.04 of interest"), and the payment today beside its real value at
+payoff. Escrow is stored apart and shown apart, because it is the part
+that keeps running.
 
 v3.3.0 — The forecast chart's tooltip answers "what is my net worth
 that year?". It listed four dollar lines — ETH, brokerage, 401(k),
