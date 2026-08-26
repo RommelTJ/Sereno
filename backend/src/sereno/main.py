@@ -14,6 +14,7 @@ from sereno.api.health import router as health_router
 from sereno.api.mortgage import router as mortgage_router
 from sereno.api.quick_links import router as quick_links_router
 from sereno.api.sourcing import router as sourcing_router
+from sereno.api.spend_bands import router as spend_bands_router
 from sereno.db.connection import connect
 from sereno.db.migrations import migrate
 
@@ -39,3 +40,4 @@ app.include_router(guardrails_router, prefix="/api")
 app.include_router(mortgage_router, prefix="/api")
 app.include_router(quick_links_router, prefix="/api")
 app.include_router(sourcing_router, prefix="/api")
+app.include_router(spend_bands_router, prefix="/api")
