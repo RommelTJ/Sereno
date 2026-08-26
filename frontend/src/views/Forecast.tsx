@@ -21,6 +21,7 @@ import {
   verdict,
   verdictDelta,
 } from '../forecast.ts'
+import { formatSignedUsd } from '../budgetReport.ts'
 import { formatUsd } from '../ledger.ts'
 import { hasWithdrawalBuckets } from '../sourcing.ts'
 
@@ -45,10 +46,21 @@ function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
             Unaffordable — {formatUsd(column.shortUsd)} short
           </p>
         )}
+        <p data-testid={`forecast-total-${column.age}`} className="num font-bold">
+          Total {formatUsd(column.totalUsd)}
+          {column.deltaUsd != null && ` (${formatSignedUsd(column.deltaUsd)})`}
+        </p>
         <p className="num">ETH {formatUsd(column.ethUsd)}</p>
         <p className="num">Brokerage {formatUsd(column.brokerageUsd)}</p>
         <p className="num">401(k) {formatUsd(column.retirementUsd)}</p>
-        <p className="num">Soc. Sec. {formatUsd(column.ssUsd)}/yr</p>
+        {/* Social Security is an annual flow, not a balance the total
+            can absorb — the rule says so before the /yr suffix does. */}
+        <p
+          data-testid={`forecast-ss-line-${column.age}`}
+          className="num mt-1.5 border-t border-white/20 pt-1.5"
+        >
+          Soc. Sec. {formatUsd(column.ssUsd)}/yr
+        </p>
       </div>
       {column.cap > 0 && (
         <div
