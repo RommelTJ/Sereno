@@ -545,24 +545,38 @@ def get_max_affordable(
     ss_spouse: Monthly = None,
     ss_start: StartAge = None,
     purchase: Purchases = None,
+    band: Bands = None,
 ) -> MaxAffordable | None:
     start_age = current_age()
     # The solve year validates like any purchase year, and the fixed
-    # purchases compose exactly as GET /api/forecast takes them.
+    # purchases and bands compose exactly as GET /api/forecast takes
+    # them: the solve runs against the banded plan, not a flat target.
     (solve,) = _parse_purchases([f"{year}:0"], start_age)
     fixed = [
         PlannedPurchase(age=p.age, amount=p.amount, ongoing_delta=p.ongoing_delta)
         for p in _parse_purchases(purchase or [], start_age)
     ]
+    if band is None:
+        bands = [
+            BandOut(
+                start_year=saved.start_year,
+                end_year=saved.end_year,
+                annual_amount=saved.annual_amount,
+            )
+            for saved in effective_schedule(db)
+        ]
+    else:
+        bands = _parse_bands(band)
     inputs = _resolve_inputs(
         db, spend, return_pct, inflation_pct, eth_growth_pct, ss_you, ss_spouse, ss_start
     )
     if inputs is None:
         return None
+    band_deltas = _band_deltas(bands, inputs.target, start_age)
 
     def outcome(amount: float) -> ForecastResult:
         candidate = PlannedPurchase(age=solve.age, amount=amount)
-        return inputs.simulate(inputs.target, [*fixed, candidate])
+        return inputs.simulate(inputs.target, [*fixed, *band_deltas, candidate])
 
     def satisfies(result: ForecastResult) -> bool:
         if any(miss.age == solve.age for miss in result.unaffordable):
