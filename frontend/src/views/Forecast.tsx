@@ -1,12 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ChangeEvent } from 'react'
 import type {
   Account,
   BindingConstraint,
   Forecast as ForecastData,
   ForecastOverrides,
   PlannedPurchaseInput,
+  SpendBand,
+  SpendBandInput,
 } from '../api.ts'
-import { fetchAccounts, fetchForecast, fetchMaxAffordable } from '../api.ts'
+import {
+  createSpendBands,
+  fetchAccounts,
+  fetchForecast,
+  fetchMaxAffordable,
+  fetchSpendBands,
+} from '../api.ts'
+import { bandProblem, overrideBands, scheduleChanged } from '../spendBands.ts'
+import { todayIso } from '../ledger.ts'
 import type { ChartColumn, SensitivityRowCopy } from '../forecast.ts'
 import {
   bindingConstraintCopy,
@@ -24,6 +34,98 @@ import {
 import { formatSignedUsd } from '../budgetReport.ts'
 import { formatUsd } from '../ledger.ts'
 import { hasWithdrawalBuckets } from '../sourcing.ts'
+
+function BandRow({
+  index,
+  band,
+  minYear,
+  maxYear,
+  onUpdate,
+  onNote,
+  onRemove,
+}: {
+  index: number
+  band: SpendBandInput
+  minYear: number
+  maxYear: number
+  onUpdate: (patch: Partial<SpendBandInput>) => void
+  onNote: (note: string) => void
+  onRemove: () => void
+}) {
+  const bounds = spendSliderBounds(band.annual_amount)
+  const yearChange =
+    (key: 'start_year' | 'end_year') =>
+    (event: ChangeEvent<HTMLInputElement>) => {
+      if (event.target.value === '') {
+        // Only the end year may be open-ended; a blank start is just
+        // an in-progress edit.
+        if (key === 'end_year') {
+          onUpdate({ end_year: null })
+        }
+        return
+      }
+      const next = Number(event.target.value)
+      if (Number.isInteger(next) && next >= minYear && next <= maxYear) {
+        onUpdate({ [key]: next })
+      }
+    }
+  return (
+    <div className="mt-3 rounded-[8px] border border-hairline p-2.5">
+      <div className="flex items-center gap-2">
+        <input
+          data-testid={`forecast-band-start-${index}`}
+          type="number"
+          min={minYear}
+          max={maxYear}
+          value={band.start_year}
+          onChange={yearChange('start_year')}
+          className="num w-[78px] rounded-[8px] border border-input-border px-[9px] py-1.5 text-[13px]"
+        />
+        <span className="text-xs text-muted-2">→</span>
+        <input
+          data-testid={`forecast-band-end-${index}`}
+          type="number"
+          min={minYear}
+          max={maxYear}
+          value={band.end_year ?? ''}
+          placeholder="open"
+          onChange={yearChange('end_year')}
+          className="num w-[78px] rounded-[8px] border border-input-border px-[9px] py-1.5 text-[13px]"
+        />
+        <span className="num min-w-0 flex-1 text-right text-[13px] font-bold">
+          {formatUsd(band.annual_amount)}
+        </span>
+        <button
+          data-testid={`forecast-band-remove-${index}`}
+          type="button"
+          aria-label="Remove band"
+          onClick={onRemove}
+          className="px-1 text-[13px] text-muted-2"
+        >
+          ✕
+        </button>
+      </div>
+      <input
+        data-testid={`forecast-band-amount-${index}`}
+        type="range"
+        min={bounds.min}
+        max={bounds.max}
+        step={bounds.step}
+        value={band.annual_amount}
+        onChange={(event) => onUpdate({ annual_amount: Number(event.target.value) })}
+        className="mt-1.5 w-full accent-accent"
+      />
+      <input
+        data-testid={`forecast-band-note-${index}`}
+        type="text"
+        value={band.note ?? ''}
+        placeholder="Why this band? (saved with the plan)"
+        onChange={(event) => onNote(event.target.value)}
+        className="mt-1.5 w-full rounded-[8px] border border-input-border px-[9px] py-1.5 text-[12px]"
+      />
+    </div>
+  )
+}
 
 function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
   return (
@@ -285,6 +387,7 @@ function PurchaseRow({
 function Forecast() {
   const [forecast, setForecast] = useState<ForecastData | null>()
   const [accounts, setAccounts] = useState<Account[]>()
+  const [savedBands, setSavedBands] = useState<SpendBand[]>()
   const [overrides, setOverrides] = useState<ForecastOverrides>({})
   // The solver's answer per row index — cleared the moment the row
   // moves, since the ceiling was solved for the old inputs.
@@ -292,13 +395,27 @@ function Forecast() {
 
   useEffect(() => {
     void fetchAccounts().then(setAccounts)
+    void fetchSpendBands().then((saved) => {
+      setSavedBands(saved)
+      if (saved.length > 0) {
+        // Seed the transient rows from the plan. The initial forecast
+        // below already reflects the saved schedule server-side, so
+        // no second fetch is needed.
+        setOverrides((current) => ({ ...current, bands: overrideBands(saved) }))
+      }
+    })
     void fetchForecast().then(setForecast)
   }, [])
 
   const applyOverride = (patch: ForecastOverrides) => {
     const next = { ...overrides, ...patch }
     setOverrides(next)
-    void fetchForecast(next).then(setForecast)
+    // An overlapping band draft would 422 server-side: hold every
+    // refetch until the shared check clears — the inline warning
+    // says what to fix.
+    if (bandProblem(next.bands ?? []) == null) {
+      void fetchForecast(next).then(setForecast)
+    }
   }
 
   const purchases = overrides.purchases ?? []
@@ -355,7 +472,58 @@ function Forecast() {
     })
   }
 
-  if (forecast === undefined || accounts === undefined) {
+  const bands = overrides.bands ?? []
+  const problem = bandProblem(bands)
+  const bandsChanged = savedBands != null && scheduleChanged(bands, savedBands)
+
+  const addBand = () => {
+    const start = new Date().getFullYear() + 1
+    applyOverride({
+      bands: [
+        ...bands,
+        {
+          start_year: start,
+          end_year: start + 9,
+          annual_amount: overrides.spend ?? forecast?.spend ?? 0,
+          note: null,
+        },
+      ],
+    })
+  }
+
+  const updateBand = (index: number, patch: Partial<SpendBandInput>) => {
+    applyOverride({
+      bands: bands.map((band, i) => (i === index ? { ...band, ...patch } : band)),
+    })
+  }
+
+  const removeBand = (index: number) => {
+    applyOverride({ bands: bands.filter((_, i) => i !== index) })
+  }
+
+  const noteBand = (index: number, note: string) => {
+    // The note never travels in band= params — like a purchase's
+    // name — but Save to plan persists it.
+    setOverrides({
+      ...overrides,
+      bands: bands.map((band, i) =>
+        i === index ? { ...band, note: note || null } : band,
+      ),
+    })
+  }
+
+  const saveBands = async () => {
+    await createSpendBands({ effective_date: todayIso(), bands })
+    setSavedBands(await fetchSpendBands())
+  }
+
+  const resetBands = () => {
+    if (savedBands != null) {
+      applyOverride({ bands: overrideBands(savedBands) })
+    }
+  }
+
+  if (forecast === undefined || accounts === undefined || savedBands === undefined) {
     return <div data-testid="view-forecast" className="max-w-[1000px]" />
   }
 
@@ -647,6 +815,64 @@ function Forecast() {
                 onMax={() => fillMaxAffordable(index)}
               />
             ))}
+          </div>
+          <div data-testid="forecast-bands" className="mt-4 border-t border-hairline pt-3.5">
+            <div className="flex items-center justify-between text-xs text-muted">
+              <span>
+                Spend bands <span className="text-faint">· today's $</span>
+              </span>
+              <button
+                data-testid="forecast-band-add"
+                type="button"
+                onClick={addBand}
+                className="rounded-[8px] border border-input-border px-2 py-1 text-[12px] font-semibold"
+              >
+                + Add
+              </button>
+            </div>
+            {bands.map((band, index) => (
+              <BandRow
+                // Rows have no identity beyond their position, like
+                // purchase rows.
+                // eslint-disable-next-line react/no-array-index-key
+                key={index}
+                index={index}
+                band={band}
+                minYear={new Date().getFullYear()}
+                maxYear={new Date().getFullYear() + 100 - forecast.start_age}
+                onUpdate={(patch) => updateBand(index, patch)}
+                onNote={(note) => noteBand(index, note)}
+                onRemove={() => removeBand(index)}
+              />
+            ))}
+            {problem != null && (
+              <p
+                data-testid="forecast-band-problem"
+                className="mt-2 text-[11.5px] font-semibold text-red-text"
+              >
+                {problem}
+              </p>
+            )}
+            <div className="mt-2.5 flex items-center gap-2">
+              <button
+                data-testid="forecast-band-save"
+                type="button"
+                onClick={() => void saveBands()}
+                disabled={problem != null || !bandsChanged}
+                className="rounded-[8px] border border-input-border px-2 py-1 text-[11.5px] font-semibold disabled:opacity-40"
+              >
+                Save to plan
+              </button>
+              <button
+                data-testid="forecast-band-reset"
+                type="button"
+                onClick={resetBands}
+                disabled={!bandsChanged}
+                className="rounded-[8px] border border-input-border px-2 py-1 text-[11.5px] font-semibold disabled:opacity-40"
+              >
+                Reset to plan
+              </button>
+            </div>
           </div>
           <p className="mt-3.5 text-[11px] text-muted-2">
             Real return {(returnPct - inflationPct).toFixed(1)}% · ETH spent first · SS{' '}

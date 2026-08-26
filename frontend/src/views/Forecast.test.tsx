@@ -107,7 +107,7 @@ describe('verdict hero', () => {
   })
 
   it('names the last funded age when the money runs out', async () => {
-    stubApi({ '/api/forecast': FORECAST_RUNS_OUT, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_RUNS_OUT, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const hero = await screen.findByTestId('forecast-verdict')
@@ -128,6 +128,7 @@ describe('bridge card', () => {
     stubApi({
       '/api/forecast': FORECAST_BROKEN_BRIDGE,
       '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
     })
     render(<Forecast />)
 
@@ -139,6 +140,7 @@ describe('bridge card', () => {
     stubApi({
       '/api/forecast': { ...FORECAST, start_age: 40 },
       '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
     })
     render(<Forecast />)
 
@@ -159,7 +161,7 @@ describe('planned purchases section', () => {
   })
 
   it('adds a purchase and refetches with its param', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -171,7 +173,7 @@ describe('planned purchases section', () => {
   })
 
   it('re-runs the simulation as the amount slider moves', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -185,7 +187,7 @@ describe('planned purchases section', () => {
   })
 
   it('moves the purchase year through its input', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -197,7 +199,7 @@ describe('planned purchases section', () => {
   })
 
   it('stacks purchases as repeated params', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -209,7 +211,7 @@ describe('planned purchases section', () => {
   })
 
   it('removes a purchase and refetches without it', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -220,7 +222,7 @@ describe('planned purchases section', () => {
   })
 
   it('keeps names client-side without refetching', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -374,6 +376,7 @@ describe('max affordable button', () => {
     const fetchMock = stubApi({
       '/api/forecast': FORECAST,
       '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
       '/api/forecast/max-affordable': MAX_AFFORDABLE,
     })
     render(<Forecast />)
@@ -403,6 +406,7 @@ describe('max affordable button', () => {
     const fetchMock = stubApi({
       '/api/forecast': FORECAST,
       '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
       '/api/forecast/max-affordable': MAX_AFFORDABLE,
     })
     render(<Forecast />)
@@ -426,7 +430,7 @@ describe('max affordable button', () => {
 
 describe('purchase-aware verdict', () => {
   it('carries the delta against the baseline', async () => {
-    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const hero = await screen.findByTestId('forecast-verdict')
@@ -443,7 +447,7 @@ describe('purchase-aware verdict', () => {
 
 describe('purchases on the chart', () => {
   it('marks the purchase year with a diamond in the label row', async () => {
-    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-chart')
@@ -452,7 +456,7 @@ describe('purchases on the chart', () => {
   })
 
   it('lists the purchase in the hover tooltip', async () => {
-    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-chart')
@@ -462,7 +466,7 @@ describe('purchases on the chart', () => {
   })
 
   it('turns the tick red and reports the short on an unaffordable year', async () => {
-    stubApi({ '/api/forecast': FORECAST_UNAFFORDABLE, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_UNAFFORDABLE, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const hero = await screen.findByTestId('forecast-verdict')
@@ -473,7 +477,7 @@ describe('purchases on the chart', () => {
   })
 
   it('caps each column with the forgone growth against the baseline', async () => {
-    stubApi({ '/api/forecast': FORECAST_WITH_CAP, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_WITH_CAP, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-chart')
@@ -483,7 +487,7 @@ describe('purchases on the chart', () => {
 
 describe('purchase cost card', () => {
   it('prices each purchase as the outcome without it', async () => {
-    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const card = await screen.findByTestId('forecast-purchase-costs')
@@ -551,7 +555,7 @@ describe('balance-by-bucket chart', () => {
   })
 
   it('shows the change against the previous simulated year', async () => {
-    stubApi({ '/api/forecast': FORECAST_GROWING, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_GROWING, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-chart')
@@ -632,7 +636,7 @@ describe('sensitivity table', () => {
 
 describe('assumption controls', () => {
   it('loads without overrides', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-verdict')
@@ -648,7 +652,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if spend level', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-spend')
 
@@ -658,7 +662,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if return', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-return')
     expect(slider).toHaveAttribute('min', '3')
@@ -674,6 +678,7 @@ describe('assumption controls', () => {
     stubApi({
       '/api/forecast': { ...FORECAST, eth_growth_pct: 15 },
       '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
     })
     render(<Forecast />)
 
@@ -693,7 +698,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if ETH growth rate', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-eth')
 
@@ -703,7 +708,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if inflation', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-inflation')
     expect(slider).toHaveAttribute('min', '1')
@@ -715,7 +720,7 @@ describe('assumption controls', () => {
   })
 
   it('accumulates overrides across controls', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const spend = await screen.findByTestId('forecast-spend')
     const inflation = screen.getByTestId('forecast-inflation')
@@ -737,7 +742,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches when a Social Security figure changes', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const you = await screen.findByTestId('forecast-ss-you')
 
@@ -761,7 +766,7 @@ describe('assumption controls', () => {
 
 describe('empty state', () => {
   it('points at Settings until config and balances exist', async () => {
-    stubApi({ '/api/forecast': null, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': null, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const empty = await screen.findByTestId('forecast-empty')
@@ -771,7 +776,7 @@ describe('empty state', () => {
   })
 
   it('points at account classification when no priorities are set', async () => {
-    stubApi({ '/api/forecast': null, '/api/accounts': UNCLASSIFIED_ACCOUNTS })
+    stubApi({ '/api/forecast': null, '/api/accounts': UNCLASSIFIED_ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const empty = await screen.findByTestId('forecast-empty')
