@@ -49,7 +49,12 @@ const LABEL_STEP = 5
 // so the hover tooltip can show the exact per-bucket balances. A
 // purchase year carries a ◆ marker and its amount; an unaffordable
 // year carries how far the lump missed; cap is the hatched
-// forgone-growth band up to the baseline's total.
+// forgone-growth band up to the baseline's total. totalUsd is the
+// portfolio that year — the three balances only. Social Security is an
+// annual income flow, not a balance, so adding it in would answer "what
+// is my net worth?" with a number that is nobody's net worth. deltaUsd
+// is the change against the previous simulated year, null on the first,
+// which has no prior year to compare against.
 export interface ChartColumn {
   age: number
   label: string
@@ -61,6 +66,8 @@ export interface ChartColumn {
   brokerageUsd: number
   retirementUsd: number
   ssUsd: number
+  totalUsd: number
+  deltaUsd: number | null
   cap: number
   marker: '' | '◆'
   purchaseUsd: number | null
@@ -97,9 +104,10 @@ export function chartColumns(
   const shortByAge = new Map(
     (extras.unaffordable ?? []).map((miss) => [miss.age, miss.short]),
   )
-  return series.map((point) => {
+  return series.map((point, index) => {
     const baseTotal = baseTotals.get(point.age)
     const purchaseUsd = purchaseByAge.get(point.age) ?? null
+    const previous = series[index - 1]
     return {
       age: point.age,
       label: point.age % LABEL_STEP === 0 ? String(point.age) : '',
@@ -111,6 +119,8 @@ export function chartColumns(
       brokerageUsd: point.brokerage,
       retirementUsd: point.retirement,
       ssUsd: point.ss_income,
+      totalUsd: total(point),
+      deltaUsd: previous == null ? null : total(point) - total(previous),
       cap:
         baseTotal == null ? 0 : Math.max(0, height(baseTotal) - height(total(point))),
       marker: purchaseUsd == null ? ('' as const) : ('◆' as const),
