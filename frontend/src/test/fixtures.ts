@@ -376,6 +376,30 @@ export const SPEND_PLAN = {
   guardrail_band: 0.2,
 }
 
+// GET /api/mortgage as the seed configures it: $150,000.00 at 3%, $1,075.00
+// P&I plus $200.00 extra against a June 2026 balance, which amortizes in
+// 140 months — February 2038 — against 172 on P&I alone.
+export const MORTGAGE = {
+  id: 1,
+  effective_date: '2026-01-01',
+  account_id: 10,
+  annual_rate: 0.03,
+  monthly_pi: 1075,
+  monthly_extra: 200,
+  monthly_escrow: 450,
+  derived: {
+    balance: 150_000,
+    balance_as_of: '2026-06-30',
+    payoff_date: '2038-02-01',
+    payoff_age: 50,
+    remaining_months: 140,
+    remaining_interest: 27_858.77,
+    months_saved: 32,
+    interest_saved: 6840.04,
+    payment_real_at_payoff: 903.11,
+  },
+}
+
 // GET /api/guardrails evaluated at the plan's annual target: June's
 // 1.5M investable at $45,000/yr is a 3.00% rate, inside the ±20% band
 // around the 2.94% anchor.
