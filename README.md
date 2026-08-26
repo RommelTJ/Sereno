@@ -38,7 +38,8 @@ whole thing in plain SQL.
   401(k) after 59½. Solves for *net spendable*, not a naive 4%-per-bucket draw.
 - **Longevity forecast** — a year-by-year simulation from the current age (derived
   from a sanitized birthdate constant) to 100, charted one bar per year by bucket
-  (ETH, brokerage, 401(k), Social Security) with a hover breakdown per bar. Verdict
+  (ETH, brokerage, 401(k), Social Security) with a hover breakdown per bar, led by
+  that year's portfolio total and its change against the year before. Verdict
   up front: "You don't run out" or "Lasts to age N", plus a sensitivity table across
   spend levels and live sliders for return, ETH growth, inflation, and Social
   Security assumptions. Planned one-off purchases (a house in 2036, a car in 2041)
@@ -772,7 +773,14 @@ The forecast slice (the third Plan engine):
   Security income sliver at the base, enlarged to a 7px minimum so
   the income stays visible against multi-million balances; hovering
   a bar shows the age, its calendar year, and the exact per-bucket
-  dollar breakdown. The
+  dollar breakdown. The tooltip leads with that year's portfolio
+  total — ETH + brokerage + 401(k), with the change against the
+  previous year beside it ("$1,600,000.00 (+$45,000.00)"), and
+  nothing beside it on the first simulated year, which has no prior
+  year to compare against. Social Security sits below a rule, out of
+  the total: it is an annual income flow, not a balance, so folding
+  it in would answer "what is my net worth?" with a number that is
+  nobody's net worth. The
   sensitivity table shows the server's 2–6%-of-net-worth spend levels
   with each outcome (never runs out / tight at 90+ / runs out early)
   and highlights the row nearest the current spend. The assumptions
