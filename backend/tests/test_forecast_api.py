@@ -587,6 +587,27 @@ class TestSavedSchedule:
         assert body["run_out_age"] == flat["run_out_age"]
 
 
+class TestBandedSensitivity:
+    def test_levels_scale_the_whole_schedule(self, client):
+        # The sensitivity axis means "what if we lived at this overall
+        # level" — with a schedule, that scales every band along with
+        # the baseline, or a fully-banded plan would make the table
+        # inert. The seeded 1.5M portfolio puts 90,000 on the axis:
+        # exactly 2x the 45,000 target, so the 60,000 band doubles.
+        seed_portfolio()
+        seed_config()
+        rows = client.get(
+            "/api/forecast", params={"band": f"{year_at(45)}:{year_at(54)}:60000"}
+        ).json()["sensitivity"]
+        (row,) = [row for row in rows if row["spend"] == 90_000.0]
+        direct = client.get(
+            "/api/forecast",
+            params={"spend": 90_000, "band": f"{year_at(45)}:{year_at(54)}:120000"},
+        ).json()
+        assert row["run_out_age"] == direct["run_out_age"]
+        assert row["balance_at_100"] == direct["balance_at_100"]
+
+
 class TestBaseline:
     def test_the_baseline_is_the_no_purchase_outcome(self, client):
         # One call answers both "where do I land?" and "what did the
