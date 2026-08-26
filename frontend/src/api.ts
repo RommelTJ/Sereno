@@ -189,6 +189,19 @@ export interface SpendPlan {
   guardrail_band: number
 }
 
+// GET /api/spend-bands: the saved age-banded spend schedule — the
+// effective version's rows, inclusive calendar years in today's
+// dollars, a null end_year meaning open-ended. Empty when
+// unconfigured or cleared: both mean flat spending at the plan's
+// annual_target.
+export interface SpendBand {
+  id: number
+  start_year: number
+  end_year: number | null
+  annual_amount: number
+  note: string | null
+}
+
 // GET /api/mortgage: the loan's terms as effective-dated planning config,
 // null until they are entered. `derived` is everything the terms plus the
 // linked account's ledger balance imply — null when that account has no
@@ -357,6 +370,14 @@ export interface PurchaseCostRow {
   balance_at_100: number
 }
 
+// The band echoed back resolved — the schedule the simulation
+// actually applied, whether saved or overridden.
+export interface BandOut {
+  start_year: number
+  end_year: number | null
+  annual_amount: number
+}
+
 export interface Forecast {
   spend: number
   annual_target: number | null
@@ -368,6 +389,7 @@ export interface Forecast {
   ss_spouse: number
   ss_start: number
   tax_year: number
+  bands: BandOut[]
   purchases: PurchaseOut[]
   series: ForecastPoint[]
   run_out_age: number | null
@@ -379,7 +401,9 @@ export interface Forecast {
 }
 
 // The Forecast screen's transient what-ifs — never persisted; Settings
-// owns config writes. Purchases ride along the same way.
+// owns config writes. Purchases ride along the same way. Bands are
+// three-state: absent means "the saved schedule", an empty list means
+// "explicitly flat", rows mean "exactly these".
 export interface ForecastOverrides {
   spend?: number
   return_pct?: number
@@ -389,6 +413,7 @@ export interface ForecastOverrides {
   ss_spouse?: number
   ss_start?: number
   purchases?: PlannedPurchaseInput[]
+  bands?: SpendBandInput[]
 }
 
 export type BindingConstraint = 'purchase_year_liquidity' | 'longevity'
@@ -548,6 +573,22 @@ export interface SpendPlanInput {
   guardrail_band?: number
 }
 
+// A spend band as the screens hold it. The note never travels in
+// band= params — like a purchase's name — but persists on save.
+export interface SpendBandInput {
+  start_year: number
+  end_year: number | null
+  annual_amount: number
+  note?: string | null
+}
+
+// POST /api/spend-bands: the whole schedule as one effective-dated,
+// append-only version — an empty bands list persists "back to flat".
+export interface SpendScheduleInput {
+  effective_date: string
+  bands: SpendBandInput[]
+}
+
 export interface MortgageInput {
   effective_date: string
   account_id: number
@@ -658,6 +699,7 @@ export const fetchFunds = () => getJson<Fund[]>('/api/funds')
 export const fetchAssumptions = () =>
   getJson<Assumption | null>('/api/assumptions')
 export const fetchSpendPlan = () => getJson<SpendPlan | null>('/api/spend-plan')
+export const fetchSpendBands = () => getJson<SpendBand[]>('/api/spend-bands')
 export const fetchMortgage = () => getJson<Mortgage | null>('/api/mortgage')
 export const fetchGuardrails = (spend?: number) =>
   getJson<Guardrails | null>(
@@ -679,8 +721,11 @@ const purchaseParam = (purchase: PlannedPurchaseInput) => {
   return purchase.ongoing_delta ? `${base}:${purchase.ongoing_delta}` : base
 }
 
+const bandParam = (band: SpendBandInput) =>
+  `${band.start_year}:${band.end_year ?? ''}:${band.annual_amount}`
+
 const forecastParams = (overrides: ForecastOverrides) => {
-  const { purchases, ...scalars } = overrides
+  const { purchases, bands, ...scalars } = overrides
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(scalars)) {
     if (value != null) {
@@ -689,6 +734,17 @@ const forecastParams = (overrides: ForecastOverrides) => {
   }
   for (const purchase of purchases ?? []) {
     params.append('purchase', purchaseParam(purchase))
+  }
+  // Bands are three-state: leaving them out means "the saved
+  // schedule" server-side, so an empty list must still send a lone
+  // empty band= — "explicitly flat".
+  if (bands) {
+    if (bands.length === 0) {
+      params.append('band', '')
+    }
+    for (const band of bands) {
+      params.append('band', bandParam(band))
+    }
   }
   return params
 }
@@ -773,6 +829,8 @@ export const createAssumption = (input: AssumptionInput) =>
   postJson('/api/assumptions', input)
 export const createSpendPlan = (input: SpendPlanInput) =>
   postJson('/api/spend-plan', input)
+export const createSpendBands = (input: SpendScheduleInput) =>
+  postJson('/api/spend-bands', input)
 export const createMortgage = (input: MortgageInput) =>
   postJson('/api/mortgage', input)
 export const createSocialSecurity = (input: SocialSecurityInput) =>
