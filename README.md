@@ -100,6 +100,10 @@ docker compose up --build
 Both containers hot-reload when you edit source files. Stop with `Ctrl-C` or
 `docker compose down`.
 
+Both services carry `restart: unless-stopped`, so a long-running deployment
+comes back on its own after a crash or a host reboot — and stays down once you
+stop it deliberately with `docker compose down` or `docker compose stop`.
+
 ### Seeding sample data
 
 For development, populate the database with the sanitized, illustrative values
