@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   ACCOUNTS,
   FORECAST,
+  SPEND_BANDS,
   UNCLASSIFIED_ACCOUNTS,
 } from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
+import { todayIso } from '../ledger.ts'
 import Forecast from './Forecast.tsx'
 
 // The same portfolio asked for too much: the money lasts to 71.
@@ -85,7 +87,11 @@ const FORECAST_BROKEN_BRIDGE = {
 }
 
 beforeEach(() => {
-  stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+  stubApi({
+    '/api/forecast': FORECAST,
+    '/api/accounts': ACCOUNTS,
+    '/api/spend-bands': [],
+  })
 })
 
 describe('verdict hero', () => {
@@ -225,6 +231,132 @@ describe('planned purchases section', () => {
 
     expect(fetchMock.mock.calls.length).toBe(calls)
     expect(screen.getByTestId('forecast-purchase-name-0')).toHaveValue('House')
+  })
+})
+
+describe('spend bands section', () => {
+  const bandRoutes = () => ({
+    '/api/forecast': FORECAST,
+    '/api/accounts': ACCOUNTS,
+    '/api/spend-bands': SPEND_BANDS,
+    'POST /api/spend-bands': SPEND_BANDS,
+  })
+
+  const saveBody = (fetchMock: ReturnType<typeof stubApi>) => {
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => url === '/api/spend-bands' && init?.method === 'POST',
+    )
+    return call ? JSON.parse(call[1]?.body as string) : null
+  }
+
+  it('seeds the band rows from the saved schedule', async () => {
+    stubApi(bandRoutes())
+    render(<Forecast />)
+
+    expect(await screen.findByTestId('forecast-band-start-0')).toHaveValue(2030)
+    expect(screen.getByTestId('forecast-band-end-0')).toHaveValue(2044)
+    expect(screen.getByTestId('forecast-band-note-0')).toHaveValue('peak travel years')
+    // The open-ended band renders an empty end year.
+    expect(screen.getByTestId('forecast-band-end-1')).toHaveValue(null)
+    // Amounts are in today's dollars, and the section says so.
+    expect(screen.getByTestId('forecast-bands')).toHaveTextContent("today's $")
+  })
+
+  it('editing a band refetches with the full band set', async () => {
+    const fetchMock = stubApi(bandRoutes())
+    render(<Forecast />)
+
+    fireEvent.change(await screen.findByTestId('forecast-band-start-0'), {
+      target: { value: '2032' },
+    })
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      'band=2032%3A2044%3A55000&band=2045%3A%3A38000',
+    )
+  })
+
+  it('an overlapping draft warns instead of fetching', async () => {
+    const fetchMock = stubApi(bandRoutes())
+    render(<Forecast />)
+
+    const end = await screen.findByTestId('forecast-band-end-0')
+    const calls = fetchMock.mock.calls.length
+    fireEvent.change(end, { target: { value: '2046' } })
+
+    expect(screen.getByTestId('forecast-band-problem')).toHaveTextContent(
+      'bands 2030-2046 and 2045+ overlap',
+    )
+    expect(fetchMock.mock.calls.length).toBe(calls)
+  })
+
+  it('starts empty with no saved schedule and adds a band at the baseline', async () => {
+    const fetchMock = stubApi({ ...bandRoutes(), '/api/spend-bands': [] })
+    render(<Forecast />)
+
+    const section = await screen.findByTestId('forecast-bands')
+    expect(within(section).queryByTestId('forecast-band-start-0')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('forecast-band-add'))
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `band=${NEXT_YEAR}%3A${NEXT_YEAR + 9}%3A45000`,
+    )
+  })
+
+  it('removing every band sends the explicit flat override', async () => {
+    const fetchMock = stubApi(bandRoutes())
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-band-remove-1'))
+    fireEvent.click(screen.getByTestId('forecast-band-remove-0'))
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toBe('/api/forecast?band=')
+  })
+
+  it('keeps notes client-side without refetching, but saves them', async () => {
+    const fetchMock = stubApi(bandRoutes())
+    render(<Forecast />)
+
+    const note = await screen.findByTestId('forecast-band-note-0')
+    const calls = fetchMock.mock.calls.length
+    fireEvent.change(note, { target: { value: 'travel heavy' } })
+    expect(fetchMock.mock.calls.length).toBe(calls)
+
+    fireEvent.click(screen.getByTestId('forecast-band-save'))
+    await waitFor(() => {
+      expect(saveBody(fetchMock)).toMatchObject({
+        effective_date: todayIso(),
+        bands: [
+          expect.objectContaining({ note: 'travel heavy' }),
+          expect.objectContaining({ start_year: 2045, end_year: null }),
+        ],
+      })
+    })
+  })
+
+  it('save to plan stays disabled while the schedule is unchanged', async () => {
+    stubApi(bandRoutes())
+    render(<Forecast />)
+
+    expect(await screen.findByTestId('forecast-band-save')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('forecast-band-start-0'), {
+      target: { value: '2032' },
+    })
+    expect(screen.getByTestId('forecast-band-save')).toBeEnabled()
+  })
+
+  it('reset to plan restores the saved rows and refetches', async () => {
+    const fetchMock = stubApi(bandRoutes())
+    render(<Forecast />)
+
+    fireEvent.change(await screen.findByTestId('forecast-band-start-0'), {
+      target: { value: '2032' },
+    })
+    fireEvent.click(screen.getByTestId('forecast-band-reset'))
+
+    expect(screen.getByTestId('forecast-band-start-0')).toHaveValue(2030)
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      'band=2030%3A2044%3A55000&band=2045%3A%3A38000',
+    )
   })
 })
 
