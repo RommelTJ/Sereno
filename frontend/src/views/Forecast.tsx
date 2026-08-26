@@ -27,6 +27,7 @@ import {
   purchaseAmountSliderBounds,
   purchaseCostRows,
   sensitivityRows,
+  spendCopy,
   spendSliderBounds,
   verdict,
   verdictDelta,
@@ -589,7 +590,7 @@ function Forecast() {
           }`}
         >
           <p className="text-[11px] font-semibold tracking-[1.2px] text-muted-2 uppercase">
-            At {formatUsd(forecast.spend)} / year
+            {spendCopy(forecast.spend, forecast.bands)}
           </p>
           <p
             className={`mt-1 text-[34px] leading-[1.05] font-extrabold ${
@@ -717,7 +718,7 @@ function Forecast() {
         <div className="rounded-card border border-card-border bg-card p-[22px]">
           <p className="text-[13px] font-bold">Assumptions</p>
           <SliderRow
-            label="Spend / yr"
+            label={forecast.bands.length > 0 ? 'Baseline spend / yr' : 'Spend / yr'}
             value={spend}
             display={formatUsd(spend)}
             min={bounds.min}

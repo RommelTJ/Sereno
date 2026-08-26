@@ -4,6 +4,7 @@
 // chart column heights, bridge copy, and sensitivity rows.
 
 import type {
+  BandOut,
   BindingConstraint,
   ForecastBaseline,
   ForecastPoint,
@@ -28,6 +29,18 @@ export function verdict(runOutAge: number | null): Verdict {
     return { headline: "You don't run out.", ok: true }
   }
   return { headline: `Lasts to age ${runOutAge - 1}`, ok: runOutAge >= 90 }
+}
+
+// The hero's spend line. Flat plans keep the original wording; with a
+// schedule the single number would claim a flat plan that no longer
+// exists, so the line names what the number now is — the baseline for
+// uncovered years — and how many bands shape the rest.
+export function spendCopy(spend: number, bands: BandOut[]): string {
+  if (bands.length === 0) {
+    return `At ${formatUsd(spend)} / year`
+  }
+  const count = bands.length === 1 ? '1 band' : `${bands.length} bands`
+  return `At ${formatUsd(spend)} baseline · ${count}`
 }
 
 // The handoff's millions formatter: two decimals under ten million,
