@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from sereno.db.connection import connect
 from sereno.main import app
+from sereno.money import to_cents
 
 TODAY = date.today()
 
@@ -191,3 +192,117 @@ class TestPostGuardsTheTerms:
         account_id = insert_account()
         response = client.post("/api/mortgage", json=body(account_id, annual_rate=0))
         assert response.status_code == 201
+
+
+BALANCE_DATE = "2026-06-30"
+
+
+def insert_balance(account_id, balance_usd=150000, as_of_date=BALANCE_DATE):
+    # Dollars in, cents stored — the ledger boundary. Liability balances
+    # are stored positive.
+    return execute(
+        "INSERT INTO balance_entry (account_id, as_of_date, balance_usd) VALUES (?, ?, ?)",
+        (account_id, as_of_date, to_cents(balance_usd)),
+    )
+
+
+def insert_assumption(inflation_pct=3.0):
+    return execute(
+        "INSERT INTO assumption (effective_date, return_pct, inflation_pct, eth_growth_pct)"
+        " VALUES (?, 7.0, ?, NULL)",
+        (days_ago(30), inflation_pct),
+    )
+
+
+def configured(client, *, balance=150000, monthly_extra=200, monthly_pi=1075, **terms):
+    """The worked example: $150,000 at 3%, $1,075 P&I + $200 extra, $450
+    escrow, against a June 2026 balance. Solves to 140 months."""
+    account_id = insert_account()
+    if balance is not None:
+        insert_balance(account_id, balance)
+    insert_mortgage(
+        days_ago(30),
+        account_id,
+        monthly_pi=monthly_pi,
+        monthly_extra=monthly_extra,
+        monthly_escrow=450,
+        **terms,
+    )
+    return client.get("/api/mortgage").json()["derived"]
+
+
+class TestDerivedPayoff:
+    def test_null_until_the_account_has_a_balance(self, client):
+        assert configured(client, balance=None) is None
+
+    def test_reports_the_balance_it_solved_from(self, client):
+        derived = configured(client)
+        assert derived["balance"] == 150000
+        assert derived["balance_as_of"] == BALANCE_DATE
+
+    def test_solves_the_remaining_term(self, client):
+        # $150,000 at 3% paying $1,275 runs 140 months.
+        derived = configured(client)
+        assert derived["remaining_months"] == 140
+        assert derived["remaining_interest"] == pytest.approx(27858.77, abs=0.01)
+
+    def test_the_payoff_month_is_the_last_payment(self, client):
+        # 140 months past the June 2026 balance is February 2038.
+        assert configured(client)["payoff_date"] == "2038-02-01"
+
+    def test_reports_the_age_at_payoff(self, client):
+        assert configured(client)["payoff_age"] == 50
+
+    def test_escrow_never_shortens_the_schedule(self, client):
+        # Property tax and insurance pay down no principal, so a bigger
+        # escrow must leave the payoff exactly where it was.
+        assert configured(client)["payoff_date"] == "2038-02-01"
+        assert (
+            configured(client, monthly_pi=1075)["remaining_months"]
+            == configured(client)["remaining_months"]
+        )
+
+    def test_null_when_the_payment_cannot_cover_the_interest(self, client):
+        # $150,000 at 3% owes $375 a month; $300 never amortizes.
+        assert configured(client, monthly_pi=300, monthly_extra=0) is None
+
+
+class TestDerivedExtraPrincipal:
+    def test_measures_the_extra_against_the_pi_only_schedule(self, client):
+        # 172 months at $1,075 becomes 140 at $1,275.
+        derived = configured(client)
+        assert derived["months_saved"] == 32
+        assert derived["interest_saved"] == pytest.approx(6840.04, abs=0.01)
+
+    def test_saves_nothing_without_extra_principal(self, client):
+        derived = configured(client, monthly_extra=0)
+        assert derived["months_saved"] == 0
+        assert derived["interest_saved"] == 0
+
+    def test_null_when_pi_alone_would_never_amortize(self, client):
+        # Only the extra payment gets this loan below its interest, so
+        # there is no P&I-only baseline to measure against.
+        derived = configured(client, monthly_pi=300, monthly_extra=800)
+        assert derived["remaining_months"] > 0
+        assert derived["months_saved"] is None
+        assert derived["interest_saved"] is None
+
+
+class TestDerivedRealValue:
+    def test_deflates_the_payment_to_its_value_at_payoff(self, client):
+        # $1,275 nominal, 140 months out at 3% inflation.
+        insert_assumption(inflation_pct=3.0)
+        assert configured(client)["payment_real_at_payoff"] == pytest.approx(903.11, abs=0.01)
+
+    def test_escrow_is_not_part_of_the_payment_that_ends(self, client):
+        # The $450 escrow survives payoff, so only P&I plus extra is
+        # deflated — including escrow would inflate this by a third.
+        insert_assumption(inflation_pct=3.0)
+        assert configured(client)["payment_real_at_payoff"] < 1275
+
+    def test_zero_inflation_leaves_the_payment_at_face_value(self, client):
+        insert_assumption(inflation_pct=0.0)
+        assert configured(client)["payment_real_at_payoff"] == pytest.approx(1275)
+
+    def test_null_without_an_inflation_assumption(self, client):
+        assert configured(client)["payment_real_at_payoff"] is None
