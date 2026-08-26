@@ -362,6 +362,48 @@ describe('spend bands section', () => {
   })
 })
 
+describe('banded verdict and baseline slider', () => {
+  const FORECAST_BANDED = {
+    ...FORECAST,
+    bands: [
+      { start_year: 2030, end_year: 2044, annual_amount: 55_000 },
+      { start_year: 2045, end_year: null, annual_amount: 38_000 },
+    ],
+  }
+
+  it('labels the hero with the baseline and the band count', async () => {
+    stubApi({
+      '/api/forecast': FORECAST_BANDED,
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': SPEND_BANDS,
+    })
+    render(<Forecast />)
+
+    const hero = await screen.findByTestId('forecast-verdict')
+    expect(hero).toHaveTextContent('At $45,000.00 baseline · 2 bands')
+  })
+
+  it('narrows the spend slider label to the baseline while bands are active', async () => {
+    stubApi({
+      '/api/forecast': FORECAST_BANDED,
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': SPEND_BANDS,
+    })
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-spend')
+    expect(screen.getByText('Baseline spend / yr')).toBeInTheDocument()
+  })
+
+  it('keeps the flat labels with no bands', async () => {
+    render(<Forecast />)
+
+    const hero = await screen.findByTestId('forecast-verdict')
+    expect(hero).toHaveTextContent(/at \$45,000\.00 \/ year/i)
+    expect(screen.getByText('Spend / yr')).toBeInTheDocument()
+  })
+})
+
 describe('max affordable button', () => {
   const MAX_AFFORDABLE = {
     year: NEXT_YEAR,

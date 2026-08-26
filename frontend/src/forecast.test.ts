@@ -13,6 +13,7 @@ import {
   purchaseAmountSliderBounds,
   purchaseCostRows,
   sensitivityRows,
+  spendCopy,
   spendSliderBounds,
   verdict,
   verdictDelta,
@@ -58,6 +59,25 @@ describe('verdict', () => {
 
   it('treats reaching 90 as ok even when 95 is not', () => {
     expect(verdict(91)).toEqual({ headline: 'Lasts to age 90', ok: true })
+  })
+})
+
+describe('spendCopy', () => {
+  const BAND = { start_year: 2030, end_year: 2044, annual_amount: 55_000 }
+  const OPEN_BAND = { start_year: 2045, end_year: null, annual_amount: 38_000 }
+
+  it('keeps the flat wording with no bands', () => {
+    expect(spendCopy(45_000, [])).toBe('At $45,000.00 / year')
+  })
+
+  it('names the baseline and the band count', () => {
+    expect(spendCopy(45_000, [BAND, OPEN_BAND])).toBe(
+      'At $45,000.00 baseline · 2 bands',
+    )
+  })
+
+  it('uses the singular for one band', () => {
+    expect(spendCopy(45_000, [BAND])).toBe('At $45,000.00 baseline · 1 band')
   })
 })
 
