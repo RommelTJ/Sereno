@@ -30,6 +30,7 @@ beforeEach(() => {
     '/api/guardrails': null,
     '/api/sourcing': null,
     '/api/forecast': null,
+    '/api/mortgage': null,
     // The Settings view's config fetches, as a fresh database answers.
     '/api/assumptions': null,
     '/api/spend-plan': null,
@@ -50,7 +51,7 @@ describe('App shell navigation', () => {
     expect(screen.getByTestId('view-guardrails')).toBeInTheDocument()
   })
 
-  it('renders each of the nine views as it navigates through the sidebar', () => {
+  it('renders each of the ten views as it navigates through the sidebar', () => {
     render(<App />)
 
     const views: Array<[string, string]> = [
@@ -61,6 +62,7 @@ describe('App shell navigation', () => {
       ['Guardrails', 'view-guardrails'],
       ['Withdrawal sourcing', 'view-withdrawals'],
       ['Longevity forecast', 'view-forecast'],
+      ['Mortgage', 'view-mortgage'],
       ['Settings & data', 'view-settings'],
       ['Dashboard', 'view-dashboard'],
     ]

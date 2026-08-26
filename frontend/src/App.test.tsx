@@ -34,7 +34,7 @@ describe('App shell', () => {
     expect(screen.getByText('SETTINGS')).toBeInTheDocument()
   })
 
-  it('renders a nav link for each of the nine views', () => {
+  it('renders a nav link for each of the ten views', () => {
     render(<App />)
 
     for (const label of [
@@ -46,6 +46,7 @@ describe('App shell', () => {
       'Guardrails',
       'Withdrawal sourcing',
       'Longevity forecast',
+      'Mortgage',
       'Settings & data',
     ]) {
       expect(screen.getByRole('link', { name: label })).toBeInTheDocument()

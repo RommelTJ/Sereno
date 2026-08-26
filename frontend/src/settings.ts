@@ -11,6 +11,8 @@ import type {
   CategoryPlanInput,
   CategoryUpdate,
   LedgerMonth,
+  Mortgage,
+  MortgageInput,
   QuickLinkInput,
   SocialSecurityEntry,
   SocialSecurityInput,
@@ -436,6 +438,72 @@ function toFraction(raw: string): number | undefined {
 // inverse, for prefilling the percent fields.
 function toPercent(fraction: number): string {
   return String(+(fraction * 100).toFixed(4))
+}
+
+export interface MortgageFormValues {
+  accountId: string
+  ratePct: string
+  monthlyPi: string
+  monthlyExtra: string
+  monthlyEscrow: string
+}
+
+// The liability accounts the terms may link. Assets carry no loan, and
+// linking one would amortize the wrong balance without ever erroring.
+export function mortgageAccounts(accounts: Account[]): Account[] {
+  return accounts.filter((account) => account.is_liability && account.active)
+}
+
+export function mortgageFormValues(
+  mortgage: Mortgage | null,
+  accounts: Account[],
+): MortgageFormValues {
+  const fallback = mortgageAccounts(accounts)[0]
+  return {
+    accountId: String(mortgage?.account_id ?? fallback?.id ?? ''),
+    ratePct: mortgage ? toPercent(mortgage.annual_rate) : '',
+    monthlyPi: mortgage ? String(mortgage.monthly_pi) : '',
+    monthlyExtra: mortgage ? String(mortgage.monthly_extra) : '',
+    monthlyEscrow: mortgage ? String(mortgage.monthly_escrow) : '',
+  }
+}
+
+// The POST body for the mortgage card's Save, or null when there is
+// nothing to append: an incomplete form, or terms identical to the ones
+// already in effect — an append that changes nothing is history noise.
+// The rate field holds percent ("3") for the stored fraction (0.03), and
+// a blank extra or escrow reads as none.
+export function mortgageEdit(
+  values: MortgageFormValues,
+  mortgage: Mortgage | null,
+  today: string,
+): MortgageInput | null {
+  const accountId = parseNumber(values.accountId)
+  const rate = toFraction(values.ratePct)
+  const pi = parseNumber(values.monthlyPi)
+  if (accountId == null || rate == null || pi == null || pi <= 0) {
+    return null
+  }
+  const extra = parseNumber(values.monthlyExtra) ?? 0
+  const escrow = parseNumber(values.monthlyEscrow) ?? 0
+  const unchanged =
+    mortgage != null &&
+    accountId === mortgage.account_id &&
+    rate === mortgage.annual_rate &&
+    pi === mortgage.monthly_pi &&
+    extra === mortgage.monthly_extra &&
+    escrow === mortgage.monthly_escrow
+  if (unchanged) {
+    return null
+  }
+  return {
+    effective_date: today,
+    account_id: accountId,
+    annual_rate: rate,
+    monthly_pi: pi,
+    monthly_extra: extra,
+    monthly_escrow: escrow,
+  }
 }
 
 export interface TaxBracketValues {

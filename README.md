@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.3.0**
+**v3.4.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -36,6 +36,12 @@ whole thing in plain SQL.
 - **Withdrawal sourcing** — a tax-aware sequencing waterfall: fill the spending gap from
   ETH first inside the 0% long-term-capital-gains headroom, then taxable brokerage, then
   401(k) after 59½. Solves for *net spendable*, not a naive 4%-per-bucket draw.
+- **Mortgage** — the loan's terms as effective-dated config, and the payoff date
+  solved from them rather than typed: balance from the ledger, rate, and P&I plus
+  extra principal give the month the payment stops, the age then, the interest
+  left, and what the extra buys against the P&I-only schedule. Escrow is stored
+  apart because it survives payoff, and the payment's real value at payoff makes
+  the nominal-vs-real gap visible instead of implicit.
 - **Longevity forecast** — a year-by-year simulation from the current age (derived
   from a sanitized birthdate constant) to 100, charted one bar per year by bucket
   (ETH, brokerage, 401(k), Social Security) with a hover breakdown per bar, led by
@@ -435,6 +441,29 @@ The config slice (the one input source for the Plan engines):
   409). `PUT /api/tax-params/{year}` revises that year in place —
   `tax_param` is keyed by year, the one config table that replaces
   rather than appends.
+- `GET /api/mortgage` — the mortgage's terms on the same effective-dated
+  rule (`null` until entered), plus a `derived` block solved from them
+  and the linked account's newest ledger balance: the balance and its
+  date, `remaining_months` and `remaining_interest`, `payoff_date` (the
+  first of the month the last payment lands in) and `payoff_age` from
+  the same sanitized birthdate the other planners use, `months_saved`
+  and `interest_saved` against the P&I-only schedule, and
+  `payment_real_at_payoff` — P&I plus extra deflated by the inflation
+  assumption. Escrow is stored but never amortized: property tax and
+  insurance pay down no principal and keep running after payoff, so
+  folding them in would both shorten the schedule and overstate the
+  relief. `derived` is `null` when the account has no balance yet or the
+  payment cannot cover one month's interest; `months_saved` alone is
+  `null` when P&I would never amortize, there being no baseline to
+  measure against. No maturity date is stored — any date typed by hand
+  goes stale the moment the extra payment changes.
+- `POST /api/mortgage` — appends a revision, so a refinance and every
+  change to the extra payment stay queryable. The linked account must
+  exist (404) and be an active liability (422); a negative rate, a
+  non-positive P&I, or negative extra or escrow is a 422. `annual_rate`
+  is a fraction (`0.03`), and the money columns stay dollars rather than
+  the ledger's integer cents — config rows are projection inputs, not
+  append-only chains that must sum exactly.
 
 The guardrails slice (the first Plan engine):
 
@@ -865,7 +894,11 @@ The forecast slice (the third Plan engine):
   stored fractions and preview the derived guardrails — initial rate ×
   (1 ± band) — live under the fields; a blank rate clears the anchor
   (Guardrails returns to its empty state), and a blank band falls back
-  to the ±20% default. The
+  to the ±20% default. The Mortgage card
+  links the liability account — only liabilities are offered, since an
+  asset carries no loan — and takes the rate as a percentage for the
+  stored fraction; Save appends a revision only when a term actually
+  changed, and the Mortgage screen's payoff moves with it. The
   Forecast screen's future sliders stay transient what-if overrides.
 
 ### Tests, linters, and type checkers
@@ -888,6 +921,26 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.4.0 — The mortgage is the largest line in the budget and the only
+one with a known end date, but nothing in Sereno knew it was a loan. It
+sat in the ledger as a balance and in the budget as one undifferentiated
+monthly amount, which lost three facts: when the payment stops, that
+escrow outlives payoff while principal & interest does not, and that a
+payment fixed in nominal terms costs less in real terms every year —
+the forecast runs in today's dollars, so a flat real amount
+over-inflates the payment beforehand and never ends it afterward.
+Mortgage terms are now effective-dated config like assumptions and the
+spend plan — rate, P&I, extra principal, escrow, linked to the liability
+account — and everything else is derived rather than stored. The payoff
+date in particular: any maturity date typed by hand goes stale the
+moment the extra payment changes, so it is solved each time from the
+balance the ledger already tracks. A new Plan screen reads out the
+payoff month and the age then, the term and interest left, what the
+extra principal buys against the P&I-only schedule ("saves 32 months and
+$6,840.04 of interest"), and the payment today beside its real value at
+payoff. Escrow is stored apart and shown apart, because it is the part
+that keeps running.
 
 v3.3.0 — The forecast chart's tooltip answers "what is my net worth
 that year?". It listed four dollar lines — ETH, brokerage, 401(k),

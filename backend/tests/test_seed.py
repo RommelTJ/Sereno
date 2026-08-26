@@ -3,6 +3,7 @@ import pytest
 from sereno.db.connection import connect
 from sereno.db.migrations import migrate
 from sereno.db.seed import main, seed
+from sereno.money import to_dollars
 
 ALL_TABLES = [
     "account",
@@ -19,6 +20,7 @@ ALL_TABLES = [
     "spend_plan",
     "social_security",
     "tax_param",
+    "mortgage",
 ]
 
 
@@ -119,6 +121,27 @@ class TestSeedSatisfiesTheViews:
             "Spouse paycheck",
         ]
         assert all(row["note"] is None for row in rows)
+
+    def test_mortgage_terms_amortize_the_seeded_balance(self, db):
+        # The seeded terms are not free-floating placeholders: the P&I has
+        # to explain the ledger's own mortgage paydown, or the payoff the
+        # Plan screen shows would contradict the balances beside it. The
+        # June 2026 balance is $150,000 and each month knocks off $700, so
+        # 3% on $150,000 leaves $375 of interest and $700 of principal.
+        seed(db)
+        row = db.execute(
+            "SELECT m.annual_rate, m.monthly_pi, m.monthly_extra, m.monthly_escrow,"
+            " b.balance_usd FROM mortgage m"
+            " JOIN account a ON a.id = m.account_id"
+            " JOIN balance_entry b ON b.account_id = a.id AND b.as_of_date = '2026-06-01'"
+        ).fetchone()
+        assert row is not None, "the seeded terms must link the Mortgage account"
+        assert row["balance_usd"] == 15_000_000
+        monthly_interest = to_dollars(row["balance_usd"]) * row["annual_rate"] / 12
+        assert monthly_interest == pytest.approx(375)
+        assert row["monthly_pi"] - monthly_interest == pytest.approx(700)
+        assert row["monthly_extra"] > 0
+        assert row["monthly_escrow"] > 0
 
     def test_eth_balances_are_quantity_times_price(self, db):
         seed(db)

@@ -310,3 +310,44 @@ def test_fund_emoji_backfills_existing_seed_funds(conn, tmp_path):
     assert migrate(conn, tmp_path) == [emoji_migration]
     emojis = dict(conn.execute("SELECT name, emoji FROM fund"))
     assert emojis == {"Emergency fund": "🚨", "Bike fund": "🚲"}
+
+
+def test_mortgage_table_holds_effective_dated_terms(conn):
+    # 0014 adds the mortgage config table: an effective-dated row per
+    # revision, linked to the liability account whose ledger balance the
+    # payoff is solved from. Extra principal and escrow default to zero, so
+    # a plain mortgage is three fields.
+    conn.execute("PRAGMA foreign_keys = ON")
+    migrate(conn)
+    conn.execute(
+        "INSERT INTO account (name, kind, is_liability) VALUES ('Mortgage', 'mortgage', 1)"
+    )
+    conn.execute(
+        "INSERT INTO mortgage (effective_date, account_id, annual_rate, monthly_pi)"
+        " VALUES ('2026-01-01', 1, 0.03, 1075)"
+    )
+    row = conn.execute(
+        "SELECT id, effective_date, account_id, annual_rate, monthly_pi,"
+        " monthly_extra, monthly_escrow FROM mortgage"
+    ).fetchone()
+    assert tuple(row) == (1, "2026-01-01", 1, 0.03, 1075, 0, 0)
+
+
+def test_mortgage_rows_require_a_real_account_and_the_core_terms(conn):
+    conn.execute("PRAGMA foreign_keys = ON")
+    migrate(conn)
+    conn.execute(
+        "INSERT INTO account (name, kind, is_liability) VALUES ('Mortgage', 'mortgage', 1)"
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO mortgage (effective_date, account_id, annual_rate, monthly_pi)"
+            " VALUES ('2026-01-01', 99, 0.03, 1075)"
+        )
+    for columns, values in (
+        ("effective_date, account_id, annual_rate", "'2026-01-01', 1, 0.03"),
+        ("effective_date, account_id, monthly_pi", "'2026-01-01', 1, 1075"),
+        ("account_id, annual_rate, monthly_pi", "1, 0.03, 1075"),
+    ):
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(f"INSERT INTO mortgage ({columns}) VALUES ({values})")  # noqa: S608
