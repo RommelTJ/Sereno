@@ -62,6 +62,20 @@ const FORECAST_WITH_CAP = {
   },
 }
 
+// A portfolio that rises then falls, so the tooltip has a real
+// year-over-year change to report in both directions.
+const GROWING_ETH: Record<number, number> = { 38: 200_000, 39: 245_000, 40: 200_000 }
+
+const FORECAST_GROWING = {
+  ...FORECAST,
+  series: FORECAST.series.map((point) => ({
+    ...point,
+    eth: GROWING_ETH[point.age] ?? 200_000,
+    brokerage: 0,
+    retirement: 0,
+  })),
+}
+
 // Taxable buckets emptied at 52 — six years short of the 59½ bridge.
 const FORECAST_BROKEN_BRIDGE = {
   ...FORECAST,
@@ -391,6 +405,47 @@ describe('balance-by-bucket chart', () => {
     expect(tip).toHaveTextContent('Brokerage $800,000.00')
     expect(tip).toHaveTextContent('401(k) $600,000.00')
     expect(tip).toHaveTextContent('Soc. Sec. $34,800.00/yr')
+  })
+
+  it('answers the year with a portfolio total that leaves Social Security out', async () => {
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    // 200k + 800k + 600k. Age 68 also draws $34,800 of Social
+    // Security — an income flow, so the total must not absorb it.
+    expect(screen.getByTestId('forecast-total-68')).toHaveTextContent(
+      'Total $1,600,000.00',
+    )
+  })
+
+  it('shows the change against the previous simulated year', async () => {
+    stubApi({ '/api/forecast': FORECAST_GROWING, '/api/accounts': ACCOUNTS })
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    expect(screen.getByTestId('forecast-total-39')).toHaveTextContent(
+      'Total $245,000.00 (+$45,000.00)',
+    )
+    expect(screen.getByTestId('forecast-total-40')).toHaveTextContent(
+      'Total $200,000.00 (-$45,000.00)',
+    )
+  })
+
+  it('reports no change on the first simulated year', async () => {
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    // Age 38 has no prior year, so the total stands alone.
+    expect(screen.getByTestId('forecast-total-38')).toHaveTextContent(
+      /^Total \$1,600,000\.00$/,
+    )
+  })
+
+  it('sets the Social Security line apart from the balances with a rule', async () => {
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    expect(screen.getByTestId('forecast-ss-line-68')).toHaveClass('border-t')
   })
 
   it('floors the Social Security sliver and hides it before the start age', async () => {
