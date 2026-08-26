@@ -189,6 +189,39 @@ export interface SpendPlan {
   guardrail_band: number
 }
 
+// GET /api/mortgage: the loan's terms as effective-dated planning config,
+// null until they are entered. `derived` is everything the terms plus the
+// linked account's ledger balance imply — null when that account has no
+// balance yet, or when the payment cannot cover one month's interest, so
+// there is no payoff to report. Escrow is stored and shown but never
+// amortized: it survives payoff, while principal & interest does not.
+export interface MortgageDerived {
+  balance: number
+  balance_as_of: string
+  payoff_date: string
+  payoff_age: number
+  remaining_months: number
+  remaining_interest: number
+  // Null when P&I alone would never amortize — no baseline to measure
+  // the extra principal against.
+  months_saved: number | null
+  interest_saved: number | null
+  // P&I plus extra, deflated to payoff by the inflation assumption.
+  // Null until an assumptions row exists.
+  payment_real_at_payoff: number | null
+}
+
+export interface Mortgage {
+  id: number
+  effective_date: string
+  account_id: number
+  annual_rate: number
+  monthly_pi: number
+  monthly_extra: number
+  monthly_escrow: number
+  derived: MortgageDerived | null
+}
+
 // GET /api/guardrails: the Guyton-Klinger engine evaluated at ?spend=
 // (default: the plan's annual target) against the latest month's
 // investable total. Null until a spend plan with an initial rate and a
@@ -515,6 +548,15 @@ export interface SpendPlanInput {
   guardrail_band?: number
 }
 
+export interface MortgageInput {
+  effective_date: string
+  account_id: number
+  annual_rate: number
+  monthly_pi: number
+  monthly_extra?: number
+  monthly_escrow?: number
+}
+
 export interface SocialSecurityInput {
   person: 'you' | 'spouse'
   effective_date: string
@@ -616,6 +658,7 @@ export const fetchFunds = () => getJson<Fund[]>('/api/funds')
 export const fetchAssumptions = () =>
   getJson<Assumption | null>('/api/assumptions')
 export const fetchSpendPlan = () => getJson<SpendPlan | null>('/api/spend-plan')
+export const fetchMortgage = () => getJson<Mortgage | null>('/api/mortgage')
 export const fetchGuardrails = (spend?: number) =>
   getJson<Guardrails | null>(
     spend != null ? `/api/guardrails?spend=${spend}` : '/api/guardrails',
@@ -730,6 +773,8 @@ export const createAssumption = (input: AssumptionInput) =>
   postJson('/api/assumptions', input)
 export const createSpendPlan = (input: SpendPlanInput) =>
   postJson('/api/spend-plan', input)
+export const createMortgage = (input: MortgageInput) =>
+  postJson('/api/mortgage', input)
 export const createSocialSecurity = (input: SocialSecurityInput) =>
   postJson('/api/social-security', input)
 export const createTaxParam = (input: TaxParamInput) =>

@@ -22,6 +22,9 @@ const TERMS = {
   monthly_pi: 1075,
   monthly_extra: 200,
   monthly_escrow: 450,
+  // The derived block travels on the same object; every helper below
+  // takes it explicitly, so none of them can quietly read a stale one.
+  derived: null,
 }
 
 const DERIVED = {
