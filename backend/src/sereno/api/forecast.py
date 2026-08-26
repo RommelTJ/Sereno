@@ -36,6 +36,7 @@ from pydantic import BaseModel
 
 from sereno.api.config import get_assumptions, get_social_security, get_spend_plan
 from sereno.api.sourcing import current_age, current_tax_param, load_buckets
+from sereno.api.spend_bands import effective_schedule, validate_bands
 from sereno.db.connection import get_db
 from sereno.engine.forecast import (
     END_AGE,
@@ -60,6 +61,8 @@ Monthly = Annotated[float | None, Query(ge=0)]
 StartAge = Annotated[float | None, Query(ge=0)]
 
 Purchases = Annotated[list[str] | None, Query()]
+
+Bands = Annotated[list[str] | None, Query()]
 
 SENSITIVITY_PERCENTAGES = (2, 3, 4, 5, 6)
 
@@ -95,6 +98,17 @@ class UnaffordableOut(BaseModel):
     year: int
     age: int
     short: float
+
+
+class BandOut(BaseModel):
+    """A resolved spend band — inclusive calendar years, today's
+    dollars, end_year None for the open-ended final band. Bands share
+    the engine's purchase representation but never the purchase
+    surfaces: they echo here, not in purchases[]."""
+
+    start_year: int
+    end_year: int | None
+    annual_amount: float
 
 
 class SensitivityRow(BaseModel):
@@ -148,6 +162,7 @@ class Forecast(BaseModel):
     ss_spouse: float
     ss_start: float
     tax_year: int
+    bands: list[BandOut]
     purchases: list[PurchaseOut]
     series: list[ForecastPointOut]
     run_out_age: int | None
@@ -213,6 +228,63 @@ def _parse_purchases(raw: list[str], start_age: int) -> list[PurchaseOut]:
             PurchaseOut(year=year, age=age, amount=amount, ongoing_delta=ongoing_delta)
         )
     return purchases
+
+
+def _parse_bands(raw: list[str]) -> list[BandOut]:
+    """band=start_year:end_year:amount — an empty end_year means
+    open-ended, and empty values drop out entirely (the frontend's
+    lone band= is "explicitly no bands"). Range rules — order, the
+    past, the age-100 horizon, overlap — are the saved schedule's own
+    validate_bands, so the what-if and the save reject identically."""
+    bands: list[BandOut] = []
+    for value in raw:
+        if not value:
+            continue
+        parts = value.split(":")
+        try:
+            if len(parts) != 3:
+                raise ValueError
+            start_year = int(parts[0])
+            end_year = int(parts[1]) if parts[1] else None
+            annual_amount = float(parts[2])
+            if annual_amount < 0:
+                raise ValueError
+        except ValueError:
+            detail = (
+                f"malformed band {value!r}:"
+                " use start_year:end_year:amount (empty end_year = open-ended)"
+            )
+            raise HTTPException(status_code=422, detail=detail) from None
+        bands.append(BandOut(start_year=start_year, end_year=end_year, annual_amount=annual_amount))
+    validate_bands([(band.start_year, band.end_year) for band in bands])
+    return bands
+
+
+def _band_deltas(
+    bands: Sequence[BandOut], baseline: float, start_age: int
+) -> list[PlannedPurchase]:
+    """The schedule compiled for the engine: walk the simulated ages,
+    and where the effective level changes — into a band, between
+    bands, back to the baseline — emit a zero-amount purchase carrying
+    the cumulative delta. amount=0 keeps the unaffordable[] machinery
+    out of it; the engine itself never learns bands exist."""
+    current_year = date.today().year
+
+    def level(age: int) -> float:
+        year = current_year + (age - start_age)
+        for band in bands:
+            if band.start_year <= year and (band.end_year is None or year <= band.end_year):
+                return band.annual_amount
+        return baseline
+
+    deltas: list[PlannedPurchase] = []
+    previous = baseline
+    for age in range(start_age, END_AGE + 1):
+        effective = level(age)
+        if effective != previous:
+            deltas.append(PlannedPurchase(age=age, amount=0.0, ongoing_delta=effective - previous))
+            previous = effective
+    return deltas
 
 
 @dataclass(frozen=True)
@@ -356,10 +428,27 @@ def get_forecast(
     ss_spouse: Monthly = None,
     ss_start: StartAge = None,
     purchase: Purchases = None,
+    band: Bands = None,
 ) -> Forecast | None:
-    # Parsed before the prerequisite checks: a malformed purchase is a
-    # 422 even on an empty database, like any other invalid param.
+    # Parsed before the prerequisite checks: a malformed purchase or
+    # band is a 422 even on an empty database, like any other invalid
+    # param.
     purchases = _parse_purchases(purchase or [], current_age())
+    # band= present replaces the saved schedule wholesale (a lone
+    # empty value = explicitly flat); absent, the saved schedule is
+    # the default. Saved rows skip validation — they were checked at
+    # save time, and a schedule legitimately ages into the past.
+    if band is None:
+        bands = [
+            BandOut(
+                start_year=saved.start_year,
+                end_year=saved.end_year,
+                annual_amount=saved.annual_amount,
+            )
+            for saved in effective_schedule(db)
+        ]
+    else:
+        bands = _parse_bands(band)
     inputs = _resolve_inputs(
         db, spend, return_pct, inflation_pct, eth_growth_pct, ss_you, ss_spouse, ss_start
     )
@@ -373,9 +462,22 @@ def get_forecast(
         PlannedPurchase(age=p.age, amount=p.amount, ongoing_delta=p.ongoing_delta)
         for p in purchases
     ]
+    band_deltas = _band_deltas(bands, target, start_age)
 
     def sensitivity_row(level: float) -> SensitivityRow:
-        outcome = inputs.simulate(level, engine_purchases)
+        # A level means "what if we lived at this overall level": the
+        # whole schedule scales with it — baseline at the level, every
+        # band at level over the resolved spend — or a fully-banded
+        # plan would make the table inert.
+        scaled = [
+            BandOut(
+                start_year=each.start_year,
+                end_year=each.end_year,
+                annual_amount=each.annual_amount * level / target,
+            )
+            for each in bands
+        ]
+        outcome = inputs.simulate(level, engine_purchases + _band_deltas(scaled, level, start_age))
         return SensitivityRow(
             spend=level,
             run_out_age=outcome.run_out_age,
@@ -384,7 +486,7 @@ def get_forecast(
 
     def cost_row(index: int) -> PurchaseCostRow:
         others = engine_purchases[:index] + engine_purchases[index + 1 :]
-        outcome = inputs.simulate(target, others)
+        outcome = inputs.simulate(target, others + band_deltas)
         return PurchaseCostRow(
             year=purchases[index].year,
             amount=purchases[index].amount,
@@ -392,10 +494,11 @@ def get_forecast(
             balance_at_100=outcome.balance_at_100,
         )
 
-    result = inputs.simulate(target, engine_purchases)
+    result = inputs.simulate(target, engine_purchases + band_deltas)
     # With no purchases the headline already is the baseline — no
-    # second simulation needed.
-    baseline_result = inputs.simulate(target, []) if engine_purchases else result
+    # second simulation needed. The schedule stays in the baseline:
+    # bands are the plan, not a purchase being priced.
+    baseline_result = inputs.simulate(target, band_deltas) if engine_purchases else result
     return Forecast(
         spend=target,
         annual_target=inputs.annual_target,
@@ -407,6 +510,7 @@ def get_forecast(
         ss_spouse=inputs.ss_spouse,
         ss_start=inputs.ss_start,
         tax_year=inputs.tax_year,
+        bands=bands,
         purchases=purchases,
         series=_series(result, buckets),
         run_out_age=result.run_out_age,
@@ -441,24 +545,38 @@ def get_max_affordable(
     ss_spouse: Monthly = None,
     ss_start: StartAge = None,
     purchase: Purchases = None,
+    band: Bands = None,
 ) -> MaxAffordable | None:
     start_age = current_age()
     # The solve year validates like any purchase year, and the fixed
-    # purchases compose exactly as GET /api/forecast takes them.
+    # purchases and bands compose exactly as GET /api/forecast takes
+    # them: the solve runs against the banded plan, not a flat target.
     (solve,) = _parse_purchases([f"{year}:0"], start_age)
     fixed = [
         PlannedPurchase(age=p.age, amount=p.amount, ongoing_delta=p.ongoing_delta)
         for p in _parse_purchases(purchase or [], start_age)
     ]
+    if band is None:
+        bands = [
+            BandOut(
+                start_year=saved.start_year,
+                end_year=saved.end_year,
+                annual_amount=saved.annual_amount,
+            )
+            for saved in effective_schedule(db)
+        ]
+    else:
+        bands = _parse_bands(band)
     inputs = _resolve_inputs(
         db, spend, return_pct, inflation_pct, eth_growth_pct, ss_you, ss_spouse, ss_start
     )
     if inputs is None:
         return None
+    band_deltas = _band_deltas(bands, inputs.target, start_age)
 
     def outcome(amount: float) -> ForecastResult:
         candidate = PlannedPurchase(age=solve.age, amount=amount)
-        return inputs.simulate(inputs.target, [*fixed, candidate])
+        return inputs.simulate(inputs.target, [*fixed, *band_deltas, candidate])
 
     def satisfies(result: ForecastResult) -> bool:
         if any(miss.age == solve.age for miss in result.unaffordable):

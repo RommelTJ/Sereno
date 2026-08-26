@@ -11,6 +11,7 @@ import {
   MORTGAGE,
   QUICK_LINKS,
   SOCIAL_SECURITY,
+  SPEND_BANDS,
   SPEND_PLAN,
   TAX_PARAMS,
 } from '../test/fixtures.ts'
@@ -27,6 +28,7 @@ const routes = () => ({
   '/api/social-security': SOCIAL_SECURITY,
   '/api/tax-params': TAX_PARAMS,
   '/api/mortgage': MORTGAGE,
+  '/api/spend-bands': SPEND_BANDS,
 })
 
 const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
@@ -1559,5 +1561,141 @@ describe('Responsive layout', () => {
       'grid-cols-1',
       'sm:grid-cols-[1fr_1fr_1fr_auto]',
     )
+  })
+})
+
+describe('Spend schedule card', () => {
+  it('lists the schedule with ranges, amounts, and notes', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('spend-bands-card')
+    expect(within(card).getByText('2030-2044')).toBeInTheDocument()
+    expect(within(card).getByText('$55,000.00 / yr')).toBeInTheDocument()
+    expect(within(card).getByText('peak travel years')).toBeInTheDocument()
+    expect(within(card).getByText('2045+')).toBeInTheDocument()
+    expect(within(card).getByText('$38,000.00 / yr')).toBeInTheDocument()
+    // Band amounts are absolute figures the forecast runs in real
+    // terms — the card must say the unit or the plan is ambiguous.
+    expect(card).toHaveTextContent(/today's dollars/)
+  })
+
+  it('says spending follows the flat target when unconfigured', async () => {
+    stubApi({ ...routes(), '/api/spend-bands': [] })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('spend-bands-card')
+    expect(card).toHaveTextContent(/follows the plan's annual target/)
+  })
+
+  it('prefills the rows on Edit', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('spend-bands-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    expect(within(card).getByTestId('settings-band-start-0')).toHaveValue(2030)
+    expect(within(card).getByTestId('settings-band-end-0')).toHaveValue(2044)
+    expect(within(card).getByTestId('settings-band-amount-0')).toHaveValue('55000')
+    expect(within(card).getByTestId('settings-band-note-0')).toHaveValue(
+      'peak travel years',
+    )
+    // The open-ended band's end year renders empty.
+    expect(within(card).getByTestId('settings-band-end-1')).toHaveValue(null)
+  })
+
+  it('saves the whole schedule as a new version dated today', async () => {
+    const fetchMock = stubApi({
+      ...routes(),
+      'POST /api/spend-bands': SPEND_BANDS,
+    })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('spend-bands-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByTestId('settings-band-amount-0'), {
+      target: { value: '60,000' },
+    })
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(postBody(fetchMock, '/api/spend-bands')).toEqual({
+        effective_date: todayIso(),
+        bands: [
+          {
+            start_year: 2030,
+            end_year: 2044,
+            annual_amount: 60_000,
+            note: 'peak travel years',
+          },
+          {
+            start_year: 2045,
+            end_year: null,
+            annual_amount: 38_000,
+            note: 'slower years, mortgage gone',
+          },
+        ],
+      })
+    })
+  })
+
+  it('posts nothing when the schedule did not change', async () => {
+    const fetchMock = stubApi(routes())
+    render(<Settings />)
+
+    const card = await screen.findByTestId('spend-bands-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(within(card).queryByTestId('settings-band-start-0')).toBeNull()
+    })
+    expect(postBody(fetchMock, '/api/spend-bands')).toBeUndefined()
+  })
+
+  it('disables Save and warns while the draft overlaps', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('spend-bands-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByTestId('settings-band-end-0'), {
+      target: { value: '2046' },
+    })
+
+    expect(within(card).getByTestId('settings-band-problem')).toHaveTextContent(
+      'bands 2030-2046 and 2045+ overlap',
+    )
+    expect(within(card).getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  it('adds and removes rows in the editor', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('spend-bands-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add band' }))
+    expect(within(card).getByTestId('settings-band-start-2')).toBeInTheDocument()
+
+    fireEvent.click(within(card).getAllByRole('button', { name: 'Remove band' })[2])
+    expect(within(card).queryByTestId('settings-band-start-2')).toBeNull()
+  })
+
+  it('removing every row saves the persistent clear', async () => {
+    const fetchMock = stubApi({
+      ...routes(),
+      'POST /api/spend-bands': [],
+    })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('spend-bands-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(within(card).getAllByRole('button', { name: 'Remove band' })[1])
+    fireEvent.click(within(card).getAllByRole('button', { name: 'Remove band' })[0])
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(postBody(fetchMock, '/api/spend-bands')).toEqual({
+        effective_date: todayIso(),
+        bands: [],
+      })
+    })
   })
 })

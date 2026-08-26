@@ -351,3 +351,49 @@ def test_mortgage_rows_require_a_real_account_and_the_core_terms(conn):
     ):
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(f"INSERT INTO mortgage ({columns}) VALUES ({values})")  # noqa: S608
+
+
+def test_spend_band_tables_hold_a_versioned_schedule(conn):
+    # 0015 adds the spend band schedule: a version row per save — so two
+    # saves on the same day stay distinct, and a version with no bands
+    # is a real "back to flat" — with the band rows hanging off it.
+    # end_year NULL means open-ended (the final band); note is the
+    # rationale that keeps a plan re-readable months later.
+    conn.execute("PRAGMA foreign_keys = ON")
+    migrate(conn)
+    conn.execute("INSERT INTO spend_band_version (effective_date) VALUES ('2026-08-26')")
+    conn.execute(
+        "INSERT INTO spend_band (version_id, start_year, end_year, annual_amount, note)"
+        " VALUES (1, 2030, 2044, 55000, 'peak travel years')"
+    )
+    conn.execute(
+        "INSERT INTO spend_band (version_id, start_year, annual_amount) VALUES (1, 2045, 38000)"
+    )
+    rows = conn.execute(
+        "SELECT id, version_id, start_year, end_year, annual_amount, note"
+        " FROM spend_band ORDER BY id"
+    ).fetchall()
+    assert [tuple(row) for row in rows] == [
+        (1, 1, 2030, 2044, 55000, "peak travel years"),
+        (2, 1, 2045, None, 38000, None),
+    ]
+
+
+def test_spend_band_rows_require_a_real_version_and_the_core_fields(conn):
+    conn.execute("PRAGMA foreign_keys = ON")
+    migrate(conn)
+    conn.execute("INSERT INTO spend_band_version (effective_date) VALUES ('2026-08-26')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO spend_band (version_id, start_year, annual_amount)"
+            " VALUES (99, 2030, 55000)"
+        )
+    for columns, values in (
+        ("start_year, annual_amount", "2030, 55000"),
+        ("version_id, annual_amount", "1, 55000"),
+        ("version_id, start_year", "1, 2030"),
+    ):
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(f"INSERT INTO spend_band ({columns}) VALUES ({values})")  # noqa: S608
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO spend_band_version (id) VALUES (2)")

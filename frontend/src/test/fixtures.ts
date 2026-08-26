@@ -376,6 +376,26 @@ export const SPEND_PLAN = {
   guardrail_band: 0.2,
 }
 
+// GET /api/spend-bands as the seed configures it: a step up through
+// the peak travel years, then an open-ended step down — placeholder
+// figures around the 45,000 plan.
+export const SPEND_BANDS = [
+  {
+    id: 1,
+    start_year: 2030,
+    end_year: 2044,
+    annual_amount: 55_000,
+    note: 'peak travel years',
+  },
+  {
+    id: 2,
+    start_year: 2045,
+    end_year: null,
+    annual_amount: 38_000,
+    note: 'slower years, mortgage gone',
+  },
+]
+
 // GET /api/mortgage as the seed configures it: $150,000.00 at 3%, $1,075.00
 // P&I plus $200.00 extra against a June 2026 balance, which amortizes in
 // 140 months — February 2038 — against 172 on P&I alone.
@@ -472,6 +492,7 @@ export const FORECAST: Forecast = {
   spend: 45_000,
   annual_target: 45_000,
   start_age: 38,
+  bands: [],
   return_pct: 7,
   inflation_pct: 3,
   eth_growth_pct: null,

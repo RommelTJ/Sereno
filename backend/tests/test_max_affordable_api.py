@@ -234,3 +234,40 @@ class TestSolver:
         assert body["max_amount"] == 0.0
         assert body["binding_constraint"] == "longevity"
         assert body["run_out_age"] is not None
+
+
+def save_bands(client, bands):
+    response = client.post(
+        "/api/spend-bands", json={"effective_date": TODAY.isoformat(), "bands": bands}
+    )
+    assert response.status_code == 201
+
+
+class TestBands:
+    def test_a_saved_schedule_shapes_the_solve(self, client):
+        # Solving at 65 is longevity-bound, so a step-down to 30,000
+        # from age 70 frees future money and raises the ceiling. The
+        # banded solve must match its purchase-delta formulation to
+        # the float, and a lone empty band= still overrides the saved
+        # schedule back to the flat solve.
+        seed_portfolio()
+        seed_config()
+        year = year_at(65)
+        flat = solve(client, year)["max_amount"]
+        as_purchase = solve(client, year, purchase=f"{year_at(70)}:0:-15000")["max_amount"]
+        assert as_purchase != flat
+        save_bands(client, [{"start_year": year_at(70), "annual_amount": 30_000}])
+        assert solve(client, year)["max_amount"] == as_purchase
+        assert solve(client, year, band="")["max_amount"] == flat
+
+    def test_a_band_override_shapes_the_solve(self, client):
+        seed_portfolio()
+        seed_config()
+        year = year_at(65)
+        as_purchase = solve(client, year, purchase=f"{year_at(70)}:0:-15000")["max_amount"]
+        banded = solve(client, year, band=f"{year_at(70)}::30000")["max_amount"]
+        assert banded == as_purchase
+
+    def test_rejects_a_malformed_band(self, client):
+        params = {"year": year_at(45), "band": "2040:2050"}
+        assert client.get("/api/forecast/max-affordable", params=params).status_code == 422

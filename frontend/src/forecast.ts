@@ -4,6 +4,7 @@
 // chart column heights, bridge copy, and sensitivity rows.
 
 import type {
+  BandOut,
   BindingConstraint,
   ForecastBaseline,
   ForecastPoint,
@@ -28,6 +29,79 @@ export function verdict(runOutAge: number | null): Verdict {
     return { headline: "You don't run out.", ok: true }
   }
   return { headline: `Lasts to age ${runOutAge - 1}`, ok: runOutAge >= 90 }
+}
+
+// The hero's spend line. Flat plans keep the original wording; with a
+// schedule the single number would claim a flat plan that no longer
+// exists, so the line names what the number now is — the baseline for
+// uncovered years — and how many bands shape the rest.
+export function spendCopy(spend: number, bands: BandOut[]): string {
+  if (bands.length === 0) {
+    return `At ${formatUsd(spend)} / year`
+  }
+  const count = bands.length === 1 ? '1 band' : `${bands.length} bands`
+  return `At ${formatUsd(spend)} baseline · ${count}`
+}
+
+// The spend step-chart's fixed plot height in px, the balance chart's
+// inline-height convention at sparkline scale.
+export const STEP_CHART_HEIGHT = 56
+
+export interface SpendStep {
+  age: number
+  level: number
+  height: number
+  banded: boolean
+  bandIndex: number | null
+  boundary: boolean
+  edge: 'start' | 'end' | null
+}
+
+interface StepBand {
+  start_year: number
+  end_year: number | null
+  annual_amount: number
+}
+
+// One column per simulated age: the band's amount where one covers
+// the year, the baseline everywhere else, heights scaled to the
+// schedule maximum. bandIndex ties a column back to its editable row;
+// edge marks a band's own start/end year — the drag handles — and
+// stays null on a clamped start, since a past year cannot be dragged.
+// "Now" is a parameter so the year ↔ age mapping is the caller's.
+export function spendSteps(
+  startAge: number,
+  bands: StepBand[],
+  baseline: number,
+  currentYear: number,
+): SpendStep[] {
+  const maxLevel = Math.max(baseline, ...bands.map((band) => band.annual_amount)) || 1
+  const steps: SpendStep[] = []
+  for (let age = startAge; age <= 100; age += 1) {
+    const year = currentYear + (age - startAge)
+    const found = bands.findIndex(
+      (band) =>
+        band.start_year <= year && (band.end_year == null || year <= band.end_year),
+    )
+    const band = found === -1 ? null : bands[found]
+    const level = band?.annual_amount ?? baseline
+    let edge: SpendStep['edge'] = null
+    if (band != null && year === band.start_year) {
+      edge = 'start'
+    } else if (band != null && year === band.end_year) {
+      edge = 'end'
+    }
+    steps.push({
+      age,
+      level,
+      height: (level / maxLevel) * STEP_CHART_HEIGHT,
+      banded: band != null,
+      bandIndex: found === -1 ? null : found,
+      boundary: steps.length > 0 && steps[steps.length - 1].level !== level,
+      edge,
+    })
+  }
+  return steps
 }
 
 // The handoff's millions formatter: two decimals under ten million,

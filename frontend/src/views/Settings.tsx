@@ -31,7 +31,10 @@ import type {
   QuickLinkInput,
   SocialSecurityEntry,
   SocialSecurityInput,
+  SpendBand,
+  SpendBandInput,
   SpendPlan,
+  SpendScheduleInput,
   TaxParam,
   TaxParamBody,
   TaxParamInput,
@@ -44,6 +47,7 @@ import {
   createMortgage,
   createSocialSecurity,
   createQuickLink,
+  createSpendBands,
   createSpendPlan,
   createTaxParam,
   deactivateAccount,
@@ -55,6 +59,7 @@ import {
   fetchMortgage,
   fetchQuickLinks,
   fetchSocialSecurity,
+  fetchSpendBands,
   fetchSpendPlan,
   fetchTaxParams,
   updateAccount,
@@ -68,6 +73,7 @@ import {
 } from '../api.ts'
 import EmojiSelect from '../components/EmojiSelect.tsx'
 import GhostButton from '../components/GhostButton.tsx'
+import { bandLabel, bandProblem, scheduleChanged } from '../spendBands.ts'
 import { FieldLabel } from '../components/SpendingForm.tsx'
 import { ASSET_EMOJI_OPTIONS, EMOJI_OPTIONS } from '../emoji.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
@@ -116,6 +122,7 @@ interface SettingsData {
   socialSecurity: SocialSecurityEntry[]
   taxParams: TaxParam[]
   mortgage: Mortgage | null
+  spendBands: SpendBand[]
 }
 
 function Card({
@@ -1145,6 +1152,217 @@ function MortgageCard({
   )
 }
 
+interface BandDraftRow {
+  start: string
+  end: string
+  amount: string
+  note: string
+}
+
+const bandDraftRows = (bands: SpendBand[]): BandDraftRow[] =>
+  bands.map((band) => ({
+    start: String(band.start_year),
+    end: band.end_year == null ? '' : String(band.end_year),
+    amount: String(band.annual_amount),
+    note: band.note ?? '',
+  }))
+
+// The draft parsed back into band inputs — null while any row is
+// unparseable (a blank start year, a non-numeric amount), which
+// disables Save the way an incomplete config form does.
+const bandDraftInputs = (rows: BandDraftRow[]): SpendBandInput[] | null => {
+  const bands: SpendBandInput[] = []
+  for (const row of rows) {
+    const start = row.start.trim() === '' ? undefined : Number(row.start)
+    const end = row.end.trim() === '' ? null : Number(row.end)
+    const amount = Number(row.amount.replace(/,/g, ''))
+    if (
+      start == null ||
+      !Number.isInteger(start) ||
+      (end != null && !Number.isInteger(end)) ||
+      !Number.isFinite(amount) ||
+      amount < 0
+    ) {
+      return null
+    }
+    bands.push({
+      start_year: start,
+      end_year: end,
+      annual_amount: amount,
+      note: row.note.trim() === '' ? null : row.note,
+    })
+  }
+  return bands
+}
+
+function SpendScheduleCard({
+  spendBands,
+  annualTarget,
+  onSave,
+}: {
+  spendBands: SpendBand[]
+  annualTarget: number | null
+  onSave: (input: SpendScheduleInput) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [rows, setRows] = useState<BandDraftRow[]>(() => bandDraftRows(spendBands))
+
+  const startEditing = () => {
+    setRows(bandDraftRows(spendBands))
+    setEditing(true)
+  }
+
+  const draft = bandDraftInputs(rows)
+  const problem = draft == null ? null : bandProblem(draft)
+
+  const save = async () => {
+    if (draft == null || problem != null) {
+      return
+    }
+    setSaving(true)
+    try {
+      // An unchanged schedule posts nothing — the config-card rule.
+      if (scheduleChanged(draft, spendBands)) {
+        await onSave({ effective_date: todayIso(), bands: draft })
+      }
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const setRow = (index: number, key: keyof BandDraftRow) => (value: string) =>
+    setRows((current) =>
+      current.map((row, i) => (i === index ? { ...row, [key]: value } : row)),
+    )
+
+  const addRow = () => {
+    const start = new Date().getFullYear() + 1
+    setRows((current) => [
+      ...current,
+      {
+        start: String(start),
+        end: String(start + 9),
+        amount: String(annualTarget ?? 0),
+        note: '',
+      },
+    ])
+  }
+
+  const removeRow = (index: number) =>
+    setRows((current) => current.filter((_, i) => i !== index))
+
+  const yearInput = (testId: string, value: string, onChange: (value: string) => void) => (
+    <input
+      data-testid={testId}
+      type="number"
+      placeholder="open"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="num w-[84px] rounded-input border border-input-border bg-card px-2 py-2 text-sm"
+    />
+  )
+
+  return (
+    <Card
+      title="Spend schedule"
+      hint="· age bands in today's dollars — gaps follow the annual target"
+      testId="spend-bands-card"
+      action={
+        editing ? (
+          <div className="flex items-center gap-2">
+            <GhostButton label="Cancel" onClick={() => setEditing(false)} />
+            <SaveButton
+              disabled={saving || draft == null || problem != null}
+              onClick={() => void save()}
+            />
+          </div>
+        ) : (
+          <EditButton onClick={startEditing} />
+        )
+      }
+    >
+      {editing ? (
+        <div className="mt-3">
+          {rows.map((row, index) => (
+            // Rows have no identity beyond their position, like the
+            // Forecast view's band rows.
+            // eslint-disable-next-line react/no-array-index-key
+            <div key={index} className="mt-2 border-b border-hairline-2 pb-2">
+              <div className="flex items-center gap-2">
+                {yearInput(`settings-band-start-${index}`, row.start, setRow(index, 'start'))}
+                <span className="text-xs text-muted-2">→</span>
+                {yearInput(`settings-band-end-${index}`, row.end, setRow(index, 'end'))}
+                <input
+                  data-testid={`settings-band-amount-${index}`}
+                  value={row.amount}
+                  onChange={(event) => setRow(index, 'amount')(event.target.value)}
+                  className="num min-w-0 flex-1 rounded-input border border-input-border bg-card px-2 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  aria-label="Remove band"
+                  onClick={() => removeRow(index)}
+                  className="px-1 text-[13px] text-muted-2"
+                >
+                  ✕
+                </button>
+              </div>
+              <input
+                data-testid={`settings-band-note-${index}`}
+                value={row.note}
+                placeholder="Why this band?"
+                onChange={(event) => setRow(index, 'note')(event.target.value)}
+                className="mt-2 w-full rounded-input border border-input-border bg-card px-2 py-1.5 text-[12px]"
+              />
+            </div>
+          ))}
+          {problem != null && (
+            <p
+              data-testid="settings-band-problem"
+              className="mt-2 text-[11.5px] font-semibold text-red-text"
+            >
+              {problem}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={addRow}
+            className="mt-2.5 rounded-[8px] border border-input-border px-2 py-1 text-[12px] font-semibold"
+          >
+            + Add band
+          </button>
+        </div>
+      ) : spendBands.length === 0 ? (
+        <p className="mt-3 text-[12.5px] text-muted">
+          No bands — spending follows the plan's annual target in every
+          simulated year.
+        </p>
+      ) : (
+        <div className="mt-3">
+          {spendBands.map((band) => (
+            <div
+              key={band.id}
+              className="flex items-center justify-between border-b border-hairline-2 py-[7px]"
+            >
+              <div>
+                <p className="num text-[13px]">{bandLabel(band)}</p>
+                {band.note != null && (
+                  <p className="text-[11px] text-muted-2">{band.note}</p>
+                )}
+              </div>
+              <p className="num text-[13px] font-bold">
+                {`${formatUsd(band.annual_amount)} / yr`}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function SocialSecurityCard({
   socialSecurity,
   onSave,
@@ -1461,6 +1679,7 @@ function Settings() {
       fetchSocialSecurity(),
       fetchTaxParams(),
       fetchMortgage(),
+      fetchSpendBands(),
     ]).then(
       ([
         accounts,
@@ -1472,6 +1691,7 @@ function Settings() {
         socialSecurity,
         taxParams,
         mortgage,
+        spendBands,
       ]) =>
         setData({
           accounts,
@@ -1483,6 +1703,7 @@ function Settings() {
           socialSecurity,
           taxParams,
           mortgage,
+          spendBands,
         }),
     )
   }, [])
@@ -1631,6 +1852,12 @@ function Settings() {
     setData((current) => (current ? { ...current, mortgage } : current))
   }
 
+  const saveSpendBands = async (input: SpendScheduleInput) => {
+    await createSpendBands(input)
+    const spendBands = await fetchSpendBands()
+    setData((current) => (current ? { ...current, spendBands } : current))
+  }
+
   const saveSocialSecurity = async (inputs: SocialSecurityInput[]) => {
     for (const input of inputs) {
       await createSocialSecurity(input)
@@ -1713,6 +1940,11 @@ function Settings() {
           mortgage={data.mortgage}
           accounts={data.accounts}
           onSave={saveMortgage}
+        />
+        <SpendScheduleCard
+          spendBands={data.spendBands}
+          annualTarget={data.spendPlan?.annual_target ?? null}
+          onSave={saveSpendBands}
         />
       </div>
       <TaxCard

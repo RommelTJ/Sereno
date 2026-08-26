@@ -264,6 +264,21 @@ def seed(conn: sqlite3.Connection) -> bool:
         " monthly_extra, monthly_escrow) VALUES ('2026-01-01', ?, 0.03, 1075, 200, 450)",
         (accounts["Mortgage"],),
     )
+    # An illustrative spend band schedule around the 45,000 plan: a
+    # step up through the peak travel years, then an open-ended step
+    # down once the mortgage is gone. Placeholder figures, like every
+    # other seeded number.
+    version = conn.execute(
+        "INSERT INTO spend_band_version (effective_date) VALUES ('2026-01-01')"
+    ).lastrowid
+    conn.executemany(
+        "INSERT INTO spend_band (version_id, start_year, end_year, annual_amount, note)"
+        " VALUES (?, ?, ?, ?, ?)",
+        [
+            (version, 2030, 2044, 55000, "peak travel years"),
+            (version, 2045, None, 38000, "slower years, mortgage gone"),
+        ],
+    )
     brackets = json.dumps(
         [
             {"rate": 0.10, "upto": 24800},

@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.4.0**
+**v3.5.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -51,7 +51,11 @@ whole thing in plain SQL.
   Security assumptions. Planned one-off purchases (a house in 2036, a car in 2041)
   drop dated lumps into the simulation as transient what-ifs, and a max-affordable
   solver answers "how much can I afford in year N?" — naming whether the year's own
-  liquidity or long-run longevity is the ceiling.
+  liquidity or long-run longevity is the ceiling. Spending needn't be flat: an
+  age-banded spend schedule — "from year, to year, annual amount" rows in today's
+  dollars — steps the simulation up through peak years and down when known costs
+  end, with uncovered years falling back to the plan's target, editable inline as
+  rows or a draggable step-chart and saveable to the plan.
 
 ## Design principles
 
@@ -464,6 +468,24 @@ The config slice (the one input source for the Plan engines):
   is a fraction (`0.03`), and the money columns stay dollars rather than
   the ledger's integer cents — config rows are projection inputs, not
   append-only chains that must sum exactly.
+- `GET /api/spend-bands` — the age-banded spend schedule: the latest
+  version effective on or before today (same-day re-saves win by
+  insertion order, future-dated versions stay staged), returned as its
+  band rows ordered by start year — inclusive calendar-year ranges in
+  today's dollars, a null `end_year` meaning open-ended, each carrying
+  the note that keeps the plan re-readable months later. An empty list
+  means no schedule: unconfigured and cleared read the same, since both
+  mean flat spending at the plan's `annual_target`.
+- `POST /api/spend-bands` — appends a whole schedule version
+  atomically: a version row plus its band rows, so two same-day saves
+  stay distinct and an empty `bands` list is the persistent "back to
+  flat". Overlapping bands are rejected naming both rows ("bands
+  2031-2040 and 2035+ overlap" — ends are inclusive, so adjacency is
+  legal), as are a band ending before it starts, negative amounts,
+  bands entirely in the past (a band that merely *started* in the past
+  keeps covering this year as the schedule ages forward), and starts
+  beyond the age-100 horizon; a rejected save writes nothing, not even
+  the version row.
 
 The guardrails slice (the first Plan engine):
 
@@ -550,7 +572,21 @@ The forecast slice (the third Plan engine):
   `purchase_costs`, one row per purchase simulated with just that one
   dropped. The sensitivity rows simulate with the purchases, like
   every other resolved override. Purchases are transient what-ifs —
-  nothing persists.
+  nothing persists. The saved spend-band schedule applies by default:
+  each simulated year spends its covering band's amount and uncovered
+  years fall back to the resolved spend, compiled in the API layer to
+  zero-amount ongoing deltas so the engine never changes and
+  `unaffordable[]` semantics are untouched. Repeated
+  `band=start_year:end_year:amount` params (an empty end year =
+  open-ended) replace the saved schedule wholesale — a lone empty
+  `band=` means explicitly flat — under exactly the validation a save
+  gets; the response echoes the resolved `bands`, which stay out of
+  `purchases[]` and `purchase_costs[]`, and the baseline and cost rows
+  keep the schedule while dropping purchases, so a purchase is priced
+  against the banded plan. Sensitivity rows scale the whole schedule
+  to each level — the baseline at the level, every band at level over
+  the resolved spend — so the 2–6% axis keeps meaning "living at this
+  overall level" even when the schedule covers every year.
 - `GET /api/forecast/max-affordable` — the solver behind "how much
   can I afford in year N?": a binary search to $1,000 over the same
   simulation, under the same transient overrides and fixed
@@ -564,7 +600,9 @@ The forecast slice (the third Plan engine):
   later year can raise the ceiling) versus `longevity` when the plan
   fails downstream. Read-only like every planner endpoint: a solve is
   a pure computation, so it stays a GET. Null until the forecast's
-  prerequisites exist.
+  prerequisites exist. The solve runs against the banded plan: the
+  saved spend-band schedule applies by default, and the same `band=`
+  override rides along beside the fixed `purchase=` params.
 
 ### Screens
 
@@ -838,6 +876,20 @@ The forecast slice (the third Plan engine):
   purchase. An unaffordable year turns its tick red and reports
   "$X short" in the tooltip while the verdict stays green: the
   screen says *you can't buy that in that year*, not *you go broke*.
+  Below the balance chart, a spend step-chart shares its x-axis — one
+  column per simulated year at that year's effective spend, band years
+  in amber — so "spend steps up here, the portfolio bends there" is
+  one glance: drag a band's step vertically to move its level on the
+  $1,000 grid, or a band's start/end column sideways to move that
+  year, the refetch landing once on release. The Spend bands section
+  beside the sliders edits the same rows as a table — start and end
+  year (blank = open-ended), amount, note — seeded from the saved
+  schedule on load; an overlapping draft warns in place instead of
+  fetching a 422, **Save to plan** writes the current row set as a new
+  schedule version, **Reset to plan** restores the saved rows, and
+  while bands are active the spend slider narrows to the *baseline*
+  used by uncovered years and the verdict hero names the baseline and
+  band count instead of claiming one flat number.
   All of it is transient what-if: Settings owns config writes. Until
   a tax year, assumptions, a spend target, and balances exist, the
   view points at Settings & data — and when no account has a
@@ -898,7 +950,14 @@ The forecast slice (the third Plan engine):
   links the liability account — only liabilities are offered, since an
   asset carries no loan — and takes the rate as a percentage for the
   stored fraction; Save appends a revision only when a term actually
-  changed, and the Mortgage screen's payoff moves with it. The
+  changed, and the Mortgage screen's payoff moves with it. The Spend
+  schedule card edits the age-banded spend plan as a row table — start
+  year, end year (blank = open-ended), amount in today's dollars, and
+  the note that keeps the plan re-readable — saving the whole set as
+  one new append-only version only when something changed; an
+  overlapping draft disables Save with the same warning the API would
+  return, and removing every row saves the persistent "back to flat".
+  The
   Forecast screen's future sliders stay transient what-if overrides.
 
 ### Tests, linters, and type checkers
@@ -921,6 +980,27 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.5.0 — The longevity forecast assumed one flat spend level from the
+current age to 100, and real spending is not flat: it steps up through
+peak years, down as activity declines, ends when a mortgage is paid
+off, and rises again for late-life care — modelled flat, a
+mediocre-return forecast can report running out decades early purely
+because it never stops charging for expenses with a known end date.
+Spending is now an age-banded schedule: effective-dated, append-only
+rows of "from year, to year, annual amount" in today's dollars, a gap
+meaning "no change from baseline" so one band needs no lifetime
+schedule around it, and overlaps rejected naming the two rows. The
+engine did not change — a schedule compiles in the API layer to the
+zero-amount ongoing deltas the purchase machinery already understands
+— and the schedule is editable where the question gets asked: on the
+Forecast screen as rows or a draggable step-chart sharing the balance
+chart's x-axis, transient until Save to plan writes a new version, and
+under Settings as the Spend schedule card. The saved schedule is every
+bare caller's default, the max-affordable solver prices purchases
+against it, and sensitivity levels scale the whole schedule. Guardrails
+deliberately stay on the flat target (#119): they monitor history,
+while this schedule plans hypothetical future years.
 
 v3.4.0 — The mortgage is the largest line in the budget and the only
 one with a known end date, but nothing in Sereno knew it was a loan. It

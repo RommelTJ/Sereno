@@ -1,11 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ACCOUNTS,
   FORECAST,
+  SPEND_BANDS,
   UNCLASSIFIED_ACCOUNTS,
 } from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
+import { todayIso } from '../ledger.ts'
 import Forecast from './Forecast.tsx'
 
 // The same portfolio asked for too much: the money lasts to 71.
@@ -85,7 +87,11 @@ const FORECAST_BROKEN_BRIDGE = {
 }
 
 beforeEach(() => {
-  stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+  stubApi({
+    '/api/forecast': FORECAST,
+    '/api/accounts': ACCOUNTS,
+    '/api/spend-bands': [],
+  })
 })
 
 describe('verdict hero', () => {
@@ -101,7 +107,7 @@ describe('verdict hero', () => {
   })
 
   it('names the last funded age when the money runs out', async () => {
-    stubApi({ '/api/forecast': FORECAST_RUNS_OUT, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_RUNS_OUT, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const hero = await screen.findByTestId('forecast-verdict')
@@ -122,6 +128,7 @@ describe('bridge card', () => {
     stubApi({
       '/api/forecast': FORECAST_BROKEN_BRIDGE,
       '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
     })
     render(<Forecast />)
 
@@ -133,6 +140,7 @@ describe('bridge card', () => {
     stubApi({
       '/api/forecast': { ...FORECAST, start_age: 40 },
       '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
     })
     render(<Forecast />)
 
@@ -153,7 +161,7 @@ describe('planned purchases section', () => {
   })
 
   it('adds a purchase and refetches with its param', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -165,7 +173,7 @@ describe('planned purchases section', () => {
   })
 
   it('re-runs the simulation as the amount slider moves', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -179,7 +187,7 @@ describe('planned purchases section', () => {
   })
 
   it('moves the purchase year through its input', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -191,7 +199,7 @@ describe('planned purchases section', () => {
   })
 
   it('stacks purchases as repeated params', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -203,7 +211,7 @@ describe('planned purchases section', () => {
   })
 
   it('removes a purchase and refetches without it', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -214,7 +222,7 @@ describe('planned purchases section', () => {
   })
 
   it('keeps names client-side without refetching', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     fireEvent.click(await screen.findByTestId('forecast-purchase-add'))
@@ -225,6 +233,311 @@ describe('planned purchases section', () => {
 
     expect(fetchMock.mock.calls.length).toBe(calls)
     expect(screen.getByTestId('forecast-purchase-name-0')).toHaveValue('House')
+  })
+})
+
+describe('spend bands section', () => {
+  const bandRoutes = () => ({
+    '/api/forecast': FORECAST,
+    '/api/accounts': ACCOUNTS,
+    '/api/spend-bands': SPEND_BANDS,
+    'POST /api/spend-bands': SPEND_BANDS,
+  })
+
+  const saveBody = (fetchMock: ReturnType<typeof stubApi>) => {
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) => url === '/api/spend-bands' && init?.method === 'POST',
+    )
+    return call ? JSON.parse(call[1]?.body as string) : null
+  }
+
+  it('seeds the band rows from the saved schedule', async () => {
+    stubApi(bandRoutes())
+    render(<Forecast />)
+
+    expect(await screen.findByTestId('forecast-band-start-0')).toHaveValue(2030)
+    expect(screen.getByTestId('forecast-band-end-0')).toHaveValue(2044)
+    expect(screen.getByTestId('forecast-band-note-0')).toHaveValue('peak travel years')
+    // The open-ended band renders an empty end year.
+    expect(screen.getByTestId('forecast-band-end-1')).toHaveValue(null)
+    // Amounts are in today's dollars, and the section says so.
+    expect(screen.getByTestId('forecast-bands')).toHaveTextContent("today's $")
+  })
+
+  it('editing a band refetches with the full band set', async () => {
+    const fetchMock = stubApi(bandRoutes())
+    render(<Forecast />)
+
+    fireEvent.change(await screen.findByTestId('forecast-band-start-0'), {
+      target: { value: '2032' },
+    })
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      'band=2032%3A2044%3A55000&band=2045%3A%3A38000',
+    )
+  })
+
+  it('an overlapping draft warns instead of fetching', async () => {
+    const fetchMock = stubApi(bandRoutes())
+    render(<Forecast />)
+
+    const end = await screen.findByTestId('forecast-band-end-0')
+    const calls = fetchMock.mock.calls.length
+    fireEvent.change(end, { target: { value: '2046' } })
+
+    expect(screen.getByTestId('forecast-band-problem')).toHaveTextContent(
+      'bands 2030-2046 and 2045+ overlap',
+    )
+    expect(fetchMock.mock.calls.length).toBe(calls)
+  })
+
+  it('starts empty with no saved schedule and adds a band at the baseline', async () => {
+    const fetchMock = stubApi({ ...bandRoutes(), '/api/spend-bands': [] })
+    render(<Forecast />)
+
+    const section = await screen.findByTestId('forecast-bands')
+    expect(within(section).queryByTestId('forecast-band-start-0')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('forecast-band-add'))
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `band=${NEXT_YEAR}%3A${NEXT_YEAR + 9}%3A45000`,
+    )
+  })
+
+  it('removing every band sends the explicit flat override', async () => {
+    const fetchMock = stubApi(bandRoutes())
+    render(<Forecast />)
+
+    fireEvent.click(await screen.findByTestId('forecast-band-remove-1'))
+    fireEvent.click(screen.getByTestId('forecast-band-remove-0'))
+
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toBe('/api/forecast?band=')
+  })
+
+  it('keeps notes client-side without refetching, but saves them', async () => {
+    const fetchMock = stubApi(bandRoutes())
+    render(<Forecast />)
+
+    const note = await screen.findByTestId('forecast-band-note-0')
+    const calls = fetchMock.mock.calls.length
+    fireEvent.change(note, { target: { value: 'travel heavy' } })
+    expect(fetchMock.mock.calls.length).toBe(calls)
+
+    fireEvent.click(screen.getByTestId('forecast-band-save'))
+    await waitFor(() => {
+      expect(saveBody(fetchMock)).toMatchObject({
+        effective_date: todayIso(),
+        bands: [
+          expect.objectContaining({ note: 'travel heavy' }),
+          expect.objectContaining({ start_year: 2045, end_year: null }),
+        ],
+      })
+    })
+  })
+
+  it('save to plan stays disabled while the schedule is unchanged', async () => {
+    stubApi(bandRoutes())
+    render(<Forecast />)
+
+    expect(await screen.findByTestId('forecast-band-save')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('forecast-band-start-0'), {
+      target: { value: '2032' },
+    })
+    expect(screen.getByTestId('forecast-band-save')).toBeEnabled()
+  })
+
+  it('reset to plan restores the saved rows and refetches', async () => {
+    const fetchMock = stubApi(bandRoutes())
+    render(<Forecast />)
+
+    fireEvent.change(await screen.findByTestId('forecast-band-start-0'), {
+      target: { value: '2032' },
+    })
+    fireEvent.click(screen.getByTestId('forecast-band-reset'))
+
+    expect(screen.getByTestId('forecast-band-start-0')).toHaveValue(2030)
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      'band=2030%3A2044%3A55000&band=2045%3A%3A38000',
+    )
+  })
+})
+
+describe('banded verdict and baseline slider', () => {
+  const FORECAST_BANDED = {
+    ...FORECAST,
+    bands: [
+      { start_year: 2030, end_year: 2044, annual_amount: 55_000 },
+      { start_year: 2045, end_year: null, annual_amount: 38_000 },
+    ],
+  }
+
+  it('labels the hero with the baseline and the band count', async () => {
+    stubApi({
+      '/api/forecast': FORECAST_BANDED,
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': SPEND_BANDS,
+    })
+    render(<Forecast />)
+
+    const hero = await screen.findByTestId('forecast-verdict')
+    expect(hero).toHaveTextContent('At $45,000.00 baseline · 2 bands')
+  })
+
+  it('narrows the spend slider label to the baseline while bands are active', async () => {
+    stubApi({
+      '/api/forecast': FORECAST_BANDED,
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': SPEND_BANDS,
+    })
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-spend')
+    expect(screen.getByText('Baseline spend / yr')).toBeInTheDocument()
+  })
+
+  it('keeps the flat labels with no bands', async () => {
+    render(<Forecast />)
+
+    const hero = await screen.findByTestId('forecast-verdict')
+    expect(hero).toHaveTextContent(/at \$45,000\.00 \/ year/i)
+    expect(screen.getByText('Spend / yr')).toBeInTheDocument()
+  })
+})
+
+describe('spend step-chart', () => {
+  // The saved schedule's first band start, on the same year ↔ age
+  // mapping the component derives from the start age.
+  const BAND_START_AGE =
+    FORECAST.start_age + (SPEND_BANDS[0].start_year - new Date().getFullYear())
+
+  it('shares the x-axis with the balance chart', async () => {
+    render(<Forecast />)
+
+    const chart = await screen.findByTestId('forecast-chart')
+    const bars = within(chart).getAllByTestId(/^forecast-col-\d+$/)
+    const steps = within(chart).getAllByTestId(/^forecast-step-\d+$/)
+    expect(steps).toHaveLength(bars.length)
+  })
+
+  it('marks band years apart from baseline years', async () => {
+    stubApi({
+      '/api/forecast': FORECAST,
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': SPEND_BANDS,
+    })
+    render(<Forecast />)
+
+    const banded = await screen.findByTestId(`forecast-step-${BAND_START_AGE}`)
+    expect(banded).toHaveAttribute('data-banded', 'true')
+    expect(
+      screen.getByTestId(`forecast-step-${FORECAST.start_age}`),
+    ).toHaveAttribute('data-banded', 'false')
+  })
+
+  it('titles each column with its effective spend', async () => {
+    stubApi({
+      '/api/forecast': FORECAST,
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': SPEND_BANDS,
+    })
+    render(<Forecast />)
+
+    const banded = await screen.findByTestId(`forecast-step-${BAND_START_AGE}`)
+    expect(banded.getAttribute('title')).toContain('$55,000.00')
+  })
+})
+
+describe('step-chart dragging', () => {
+  const BAND_START_AGE =
+    FORECAST.start_age + (SPEND_BANDS[0].start_year - new Date().getFullYear())
+
+  const bandedRoutes = () => ({
+    '/api/forecast': FORECAST,
+    '/api/accounts': ACCOUNTS,
+    '/api/spend-bands': SPEND_BANDS,
+  })
+
+  beforeEach(() => {
+    // jsdom has no layout: give the steps row a real width so a
+    // horizontal drag can translate px into years — 630px across 63
+    // columns is 10px per year.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 630,
+      height: 56,
+      top: 0,
+      left: 0,
+      bottom: 56,
+      right: 630,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('drags a band level vertically and refetches once on release', async () => {
+    const fetchMock = stubApi(bandedRoutes())
+    render(<Forecast />)
+
+    // A mid-band column, not an edge: vertical drag owns the level.
+    const column = await screen.findByTestId(`forecast-step-${BAND_START_AGE + 2}`)
+    const calls = fetchMock.mock.calls.length
+    fireEvent.pointerDown(column, { clientX: 100, clientY: 40, pointerId: 1 })
+    fireEvent.pointerMove(column, { clientX: 100, clientY: 30, pointerId: 1 })
+
+    // 10px up on the 56px chart whose top is the 55,000 maximum:
+    // 10/56 × 55,000 ≈ 9,821 → snapped to the $1,000 grid → 65,000.
+    expect(screen.getByTestId('forecast-band-amount-0')).toHaveValue('65000')
+    // Live while dragging, but no fetch until release.
+    expect(fetchMock.mock.calls.length).toBe(calls)
+
+    fireEvent.pointerUp(column, { clientX: 100, clientY: 30, pointerId: 1 })
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `band=${SPEND_BANDS[0].start_year}%3A2044%3A65000`,
+    )
+  })
+
+  it('drags a band boundary horizontally to move its year', async () => {
+    const fetchMock = stubApi(bandedRoutes())
+    render(<Forecast />)
+
+    const edge = await screen.findByTestId(`forecast-step-${BAND_START_AGE}`)
+    fireEvent.pointerDown(edge, { clientX: 100, clientY: 40, pointerId: 1 })
+    fireEvent.pointerMove(edge, { clientX: 120, clientY: 40, pointerId: 1 })
+    fireEvent.pointerUp(edge, { clientX: 120, clientY: 40, pointerId: 1 })
+
+    // 20px right at 10px per column = two years later.
+    expect(screen.getByTestId('forecast-band-start-0')).toHaveValue(
+      SPEND_BANDS[0].start_year + 2,
+    )
+    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain(
+      `band=${SPEND_BANDS[0].start_year + 2}%3A2044%3A55000`,
+    )
+  })
+
+  it('leaves baseline years inert', async () => {
+    const fetchMock = stubApi(bandedRoutes())
+    render(<Forecast />)
+
+    const column = await screen.findByTestId(`forecast-step-${FORECAST.start_age}`)
+    const calls = fetchMock.mock.calls.length
+    fireEvent.pointerDown(column, { clientX: 10, clientY: 40, pointerId: 1 })
+    fireEvent.pointerMove(column, { clientX: 10, clientY: 10, pointerId: 1 })
+    fireEvent.pointerUp(column, { clientX: 10, clientY: 10, pointerId: 1 })
+
+    expect(fetchMock.mock.calls.length).toBe(calls)
+    expect(screen.getByTestId('forecast-band-amount-0')).toHaveValue('55000')
+  })
+
+  it('opts the drag surface out of touch scrolling', async () => {
+    stubApi(bandedRoutes())
+    render(<Forecast />)
+
+    const row = await screen.findByTestId('forecast-spend-steps')
+    expect(row.className).toContain('touch-none')
   })
 })
 
@@ -242,6 +555,7 @@ describe('max affordable button', () => {
     const fetchMock = stubApi({
       '/api/forecast': FORECAST,
       '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
       '/api/forecast/max-affordable': MAX_AFFORDABLE,
     })
     render(<Forecast />)
@@ -271,6 +585,7 @@ describe('max affordable button', () => {
     const fetchMock = stubApi({
       '/api/forecast': FORECAST,
       '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
       '/api/forecast/max-affordable': MAX_AFFORDABLE,
     })
     render(<Forecast />)
@@ -294,7 +609,7 @@ describe('max affordable button', () => {
 
 describe('purchase-aware verdict', () => {
   it('carries the delta against the baseline', async () => {
-    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const hero = await screen.findByTestId('forecast-verdict')
@@ -311,7 +626,7 @@ describe('purchase-aware verdict', () => {
 
 describe('purchases on the chart', () => {
   it('marks the purchase year with a diamond in the label row', async () => {
-    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-chart')
@@ -320,7 +635,7 @@ describe('purchases on the chart', () => {
   })
 
   it('lists the purchase in the hover tooltip', async () => {
-    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-chart')
@@ -330,7 +645,7 @@ describe('purchases on the chart', () => {
   })
 
   it('turns the tick red and reports the short on an unaffordable year', async () => {
-    stubApi({ '/api/forecast': FORECAST_UNAFFORDABLE, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_UNAFFORDABLE, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const hero = await screen.findByTestId('forecast-verdict')
@@ -341,7 +656,7 @@ describe('purchases on the chart', () => {
   })
 
   it('caps each column with the forgone growth against the baseline', async () => {
-    stubApi({ '/api/forecast': FORECAST_WITH_CAP, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_WITH_CAP, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-chart')
@@ -351,7 +666,7 @@ describe('purchases on the chart', () => {
 
 describe('purchase cost card', () => {
   it('prices each purchase as the outcome without it', async () => {
-    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_WITH_PURCHASE, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const card = await screen.findByTestId('forecast-purchase-costs')
@@ -419,7 +734,7 @@ describe('balance-by-bucket chart', () => {
   })
 
   it('shows the change against the previous simulated year', async () => {
-    stubApi({ '/api/forecast': FORECAST_GROWING, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': FORECAST_GROWING, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-chart')
@@ -500,7 +815,7 @@ describe('sensitivity table', () => {
 
 describe('assumption controls', () => {
   it('loads without overrides', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     await screen.findByTestId('forecast-verdict')
@@ -516,7 +831,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if spend level', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-spend')
 
@@ -526,7 +841,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if return', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-return')
     expect(slider).toHaveAttribute('min', '3')
@@ -542,6 +857,7 @@ describe('assumption controls', () => {
     stubApi({
       '/api/forecast': { ...FORECAST, eth_growth_pct: 15 },
       '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
     })
     render(<Forecast />)
 
@@ -561,7 +877,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if ETH growth rate', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-eth')
 
@@ -571,7 +887,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches at a what-if inflation', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const slider = await screen.findByTestId('forecast-inflation')
     expect(slider).toHaveAttribute('min', '1')
@@ -583,7 +899,7 @@ describe('assumption controls', () => {
   })
 
   it('accumulates overrides across controls', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const spend = await screen.findByTestId('forecast-spend')
     const inflation = screen.getByTestId('forecast-inflation')
@@ -605,7 +921,7 @@ describe('assumption controls', () => {
   })
 
   it('refetches when a Social Security figure changes', async () => {
-    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS })
+    const fetchMock = stubApi({ '/api/forecast': FORECAST, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
     const you = await screen.findByTestId('forecast-ss-you')
 
@@ -629,7 +945,7 @@ describe('assumption controls', () => {
 
 describe('empty state', () => {
   it('points at Settings until config and balances exist', async () => {
-    stubApi({ '/api/forecast': null, '/api/accounts': ACCOUNTS })
+    stubApi({ '/api/forecast': null, '/api/accounts': ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const empty = await screen.findByTestId('forecast-empty')
@@ -639,7 +955,7 @@ describe('empty state', () => {
   })
 
   it('points at account classification when no priorities are set', async () => {
-    stubApi({ '/api/forecast': null, '/api/accounts': UNCLASSIFIED_ACCOUNTS })
+    stubApi({ '/api/forecast': null, '/api/accounts': UNCLASSIFIED_ACCOUNTS, '/api/spend-bands': [] })
     render(<Forecast />)
 
     const empty = await screen.findByTestId('forecast-empty')
