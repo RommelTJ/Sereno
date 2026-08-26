@@ -8,6 +8,7 @@ import {
   balance,
   CATEGORIES,
   LEDGER,
+  MORTGAGE,
   QUICK_LINKS,
   SOCIAL_SECURITY,
   SPEND_PLAN,
@@ -25,6 +26,7 @@ const routes = () => ({
   '/api/spend-plan': SPEND_PLAN,
   '/api/social-security': SOCIAL_SECURITY,
   '/api/tax-params': TAX_PARAMS,
+  '/api/mortgage': MORTGAGE,
 })
 
 const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
@@ -956,6 +958,118 @@ const postCalls = (fetchMock: ReturnType<typeof stubApi>, path: string) =>
   fetchMock.mock.calls.filter(
     ([input, init]) => input === path && init?.method === 'POST',
   )
+
+describe('Mortgage card', () => {
+  it('lists the effective terms with the rate as a percentage', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('mortgage-card')
+    expect(within(card).getByText('🏡 Mortgage')).toBeInTheDocument()
+    expect(within(card).getByText('3.00%')).toBeInTheDocument()
+    expect(within(card).getByText('$1,075.00 / mo')).toBeInTheDocument()
+    expect(within(card).getByText('$200.00 / mo')).toBeInTheDocument()
+    expect(within(card).getByText('$450.00 / mo')).toBeInTheDocument()
+  })
+
+  it('offers only liability accounts to link', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('mortgage-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    const select = within(card).getByLabelText('Account')
+    expect(
+      within(select).getByRole('option', { name: '🏡 Mortgage' }),
+    ).toBeInTheDocument()
+    // Assets can carry no loan; offering them would amortize the wrong
+    // balance without ever erroring.
+    expect(within(select).queryByRole('option', { name: /VFIAX/ })).toBeNull()
+    expect(within(select).getAllByRole('option')).toHaveLength(1)
+  })
+
+  it('prefills the form from the effective row', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('mortgage-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    expect(within(card).getByLabelText('Rate %')).toHaveValue('3')
+    expect(within(card).getByLabelText('P&I $ / mo')).toHaveValue('1075')
+    expect(within(card).getByLabelText('Extra principal $ / mo')).toHaveValue(
+      '200',
+    )
+    expect(within(card).getByLabelText('Escrow $ / mo')).toHaveValue('450')
+  })
+
+  it('appends a revision effective today, the rate back to a fraction', async () => {
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/mortgage': { ...MORTGAGE, id: 2 },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('mortgage-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Extra principal $ / mo'), {
+      target: { value: '500' },
+    })
+    r['/api/mortgage'] = { ...MORTGAGE, id: 2, monthly_extra: 500 }
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('$500.00 / mo')).toBeInTheDocument()
+    expect(postBody(fetchMock, '/api/mortgage')).toEqual({
+      effective_date: todayIso(),
+      account_id: 10,
+      annual_rate: 0.03,
+      monthly_pi: 1075,
+      monthly_extra: 500,
+      monthly_escrow: 450,
+    })
+  })
+
+  it('treats a blank extra or escrow as none', async () => {
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/mortgage': { ...MORTGAGE, id: 2 },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('mortgage-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Extra principal $ / mo'), {
+      target: { value: '' },
+    })
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/mortgage')).toMatchObject({
+        monthly_extra: 0,
+      }),
+    )
+  })
+
+  it('appends nothing when the terms did not change', async () => {
+    const fetchMock = stubApi(routes())
+    render(<Settings />)
+    const card = await screen.findByTestId('mortgage-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(within(card).getByRole('button', { name: 'Edit' })).toBeInTheDocument(),
+    )
+    expect(postCalls(fetchMock, '/api/mortgage')).toHaveLength(0)
+  })
+
+  it('shows dashes until the terms are entered', async () => {
+    stubApi({ ...routes(), '/api/mortgage': null })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('mortgage-card')
+    expect(within(card).getAllByText('—').length).toBeGreaterThan(0)
+  })
+})
 
 describe('Editing appends new config rows', () => {
   it('saves edited assumptions as a new row effective today', async () => {
