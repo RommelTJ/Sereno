@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.2.1**
+**v3.3.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -888,6 +888,20 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.3.0 — The forecast chart's tooltip answers "what is my net worth
+that year?". It listed four dollar lines — ETH, brokerage, 401(k),
+Social Security — of which only the first three are summable: the
+fourth is an annual income flow, and nothing but a `/yr` suffix said
+so, which made the obvious reading of the tooltip (add the lines up)
+the wrong one. The tooltip now leads with a bold portfolio total —
+the three balances, Social Security deliberately excluded — carrying
+the change against the previous simulated year beside it
+("$1,600,000.00 (+$45,000.00)"), and Social Security sits below a
+rule so the stock/flow split is visual rather than implied. The sum
+is derived once per column in `chartColumns`, alongside every other
+figure the chart already precomputes, so the render path stays free
+of arithmetic and the exclusion rule has one testable home.
 
 v3.2.1 — The containers come back after a reboot. Neither service declared a
 restart policy, so Docker defaulted both to `no`: a host reboot left the
