@@ -80,11 +80,11 @@ def insert_tax_param(tax_year=None, ltcg_0_ceiling=96_700, std_deduction=30_000)
     )
 
 
-def insert_account(name, kind, *, tax_treatment="LTCG", priority=None, access_age=None):
+def insert_account(name, kind, *, tax_treatment="LTCG", priority=None, access_age=None, owner=None):
     return execute(
         "INSERT INTO account (name, kind, tax_treatment, owner, is_liability, is_investable,"
-        " withdrawal_priority, access_age) VALUES (?, ?, ?, NULL, 0, 1, ?, ?)",
-        (name, kind, tax_treatment, priority, access_age),
+        " withdrawal_priority, access_age) VALUES (?, ?, ?, ?, 0, 1, ?, ?)",
+        (name, kind, tax_treatment, owner, priority, access_age),
     )
 
 
@@ -695,3 +695,42 @@ class TestSensitivity:
         assert by_spend[30_000.0]["run_out_age"] is None
         assert by_spend[30_000.0]["balance_at_100"] > 0
         assert by_spend[90_000.0]["run_out_age"] is not None
+
+
+class TestSeriesByTier:
+    """The chart has one band per withdrawal tier, so a tier that splits
+    into two buckets still reports one balance — and the HSA tier gets a
+    band of its own."""
+
+    def test_the_hsa_tier_is_its_own_band(self, client):
+        seed_portfolio()
+        hsa = insert_account(
+            "Fidelity HSA", "hsa", tax_treatment="TAX_FREE", priority=4, access_age=65
+        )
+        insert_balance(hsa, 200_000)
+        seed_config()
+        first = client.get("/api/forecast").json()["series"][0]
+        assert first["hsa"] == pytest.approx(200_000 * 1.04)
+        assert first["retirement"] == pytest.approx(500_000 * 1.04)
+
+    def test_two_owners_401k_buckets_report_one_balance(self, client):
+        eth = insert_account("Ethereum", "eth", priority=1)
+        insert_balance(eth, 400_000, cost_basis=4_000)
+        for owner in ("you", "spouse"):
+            account = insert_account(
+                f"{owner} 401(k)",
+                "401k",
+                tax_treatment="ORDINARY",
+                priority=3,
+                access_age=59.5,
+                owner=owner,
+            )
+            insert_balance(account, 250_000)
+        seed_config()
+        first = client.get("/api/forecast").json()["series"][0]
+        assert first["retirement"] == pytest.approx(500_000 * 1.04)
+
+    def test_a_portfolio_without_an_hsa_reports_a_zero_band(self, client):
+        seed_portfolio()
+        seed_config()
+        assert client.get("/api/forecast").json()["series"][0]["hsa"] == 0.0
