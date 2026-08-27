@@ -164,8 +164,10 @@ describe('HSA band', () => {
 
     const tip = await screen.findByTestId('forecast-tip-38')
     expect(tip).toHaveTextContent('HSA $100,000.00')
-    expect(screen.getByTestId('forecast-total-38')).toHaveTextContent('$1.70M')
-    expect(screen.getByTestId('forecast-chart')).toHaveTextContent(/HSA · locked/)
+    expect(screen.getByTestId('forecast-total-38')).toHaveTextContent(
+      'Total $1,700,000.00',
+    )
+    expect(screen.getByTestId('forecast-chart')).toHaveTextContent(/HSA · drawn last/)
   })
 })
 

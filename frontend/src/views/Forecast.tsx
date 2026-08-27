@@ -158,6 +158,7 @@ function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
         <p className="num">ETH {formatUsd(column.ethUsd)}</p>
         <p className="num">Brokerage {formatUsd(column.brokerageUsd)}</p>
         <p className="num">401(k) {formatUsd(column.retirementUsd)}</p>
+        <p className="num">HSA {formatUsd(column.hsaUsd)}</p>
         {/* Social Security is an annual flow, not a balance the total
             can absorb — the rule says so before the /yr suffix does. */}
         <p
@@ -181,6 +182,7 @@ function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
       <div className="w-full bg-accent" style={{ height: `${column.eth}px` }} />
       <div className="w-full bg-sidebar" style={{ height: `${column.brokerage}px` }} />
       <div className="w-full bg-amber" style={{ height: `${column.retirement}px` }} />
+      <div className="w-full bg-hsa" style={{ height: `${column.hsa}px` }} />
       <div
         data-testid={`forecast-ss-${column.age}`}
         className="w-full bg-ss-blue"
@@ -818,6 +820,7 @@ function Forecast() {
           <LegendSwatch color="bg-accent" label="ETH (first)" />
           <LegendSwatch color="bg-sidebar" label="Taxable brokerage" />
           <LegendSwatch color="bg-amber" label="401(k) · locked to 59½" />
+          <LegendSwatch color="bg-hsa" label="HSA · drawn last" />
           <LegendSwatch
             color="bg-ss-blue"
             label={`Soc. Security · spent first from ${ssStart}`}
