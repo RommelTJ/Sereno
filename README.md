@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.10.0**
+**v3.11.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -1121,6 +1121,53 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.11.0 — The access gate actually fires. The `access_age` check sat
+behind an `elif` on tax treatment, so it was unreachable for any bucket
+that was not `ORDINARY` (issue #135) — and `load_buckets` collapsed
+every non-ordinary tag into `LTCG`, which the engine had no third
+member to express. The real 401(k) and HSA accounts, tagged `TAX_FREE`,
+therefore drew freely at *any* age and paid 15% capital-gains tax on
+money that owes none: at 40, against a stored gate of 62, the waterfall
+handed over $573,954 and took $86,093 in tax that does not exist. The
+gate now runs before the treatment branch, for every bucket, and a
+locked draw leaves the 0% headroom intact for the buckets behind it
+instead of spending it. `TAX_FREE` joins `BucketTreatment` with a draw
+that realizes no gain and stacks on no ordinary income.
+
+One bucket per `withdrawal_priority` could not hold the accounts it was
+being asked to: a tier took its treatment from whichever row SQLite
+returned last and its gate from the first, so a 401(k) at 59½ sharing
+priority 3 with an HSA at 65 unlocked the HSA five and a half years
+early. Accounts now group by everything that decides their answer —
+tier, treatment, gate age, and, where there is a gate, their owner —
+with the owner deliberately dropped from the key for ungated accounts
+so ETH and brokerage never fragment on a field that cannot change their
+result. A tier that splits keeps its plain label where it doesn't and
+names only the differing part where it does: `401(k) · you`,
+`401(k) · spouse`. HSAs become the fourth tier, tax-free and drawn last.
+
+Two people of different ages needed two gates. `account.owner` has been
+a column since the first migration with nothing to write it; it is now
+part of the classification body and an Owner select in Settings, beside
+a fourth withdrawal priority. A second sanitized constant stands in for
+the spouse's birthdate and `age_offsets` derives the whole-year gap from
+the pair rather than writing it down — neither is a real birthday, and
+no birthdate lives in the schema. Each bucket carries its owner's offset
+from the simulation's axis, so `?age=` and `start_age` stay *your* age
+while her gates land on hers: at your 66 the 401(k) is open and her HSA
+is not, because she is 63.
+
+The screens stop guessing. `59.5` was hardcoded in the bridge card's
+heading and year count, in the chart legend, in `bridgeCopy`'s search
+window and its literal "31+ yrs", and in the 401(k) rule card — all
+disagreeing with accounts that said 62. Every one of them now reads the
+data: steps report their bucket's `access_age`, the forecast reports
+`first_unlock_age`, the bridge card names that age and disappears when
+nothing is gated, and the rule cards drop the lock sentence for a tier
+with no gate. The chart gains an HSA band, and its series sums by tier
+rather than by bucket name — a tier split between two owners used to
+match neither band and read as zero.
 
 v3.10.0 — The Ledger says which way the money went. The table showed
 absolute balances only, so telling whether an account grew or shrank —
