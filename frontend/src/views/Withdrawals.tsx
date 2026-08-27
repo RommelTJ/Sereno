@@ -3,10 +3,13 @@ import type { Account, Sourcing, SourcingStep } from '../api.ts'
 import { fetchAccounts, fetchSourcing } from '../api.ts'
 import { formatUsd } from '../ledger.ts'
 import {
+  formatGateAge,
+  hasTier,
   hasWithdrawalBuckets,
   stepAction,
   stepDetail,
   stepMarker,
+  tierGateAge,
 } from '../sourcing.ts'
 
 function StepRow({
@@ -48,6 +51,15 @@ function StepRow({
       </p>
     </div>
   )
+}
+
+// A tier with no access_age has no lock to describe, so the sentence
+// disappears rather than naming an age nobody set.
+function LockSentence({ age }: { age: number | null }) {
+  if (age == null) {
+    return null
+  }
+  return <>Under {formatGateAge(age)} it stays locked.</>
 }
 
 function RuleCard({
@@ -204,7 +216,10 @@ function Withdrawals() {
           </div>
         </div>
 
-        <div className="rounded-card border border-card-border bg-card p-6">
+        <div
+          data-testid="sourcing-rules"
+          className="rounded-card border border-card-border bg-card p-6"
+        >
           <p className="text-sm font-bold">Bucket rules</p>
           <div className="mt-3.5 flex flex-col gap-[11px] text-[12.5px]">
             <RuleCard title="① ETH" tag="LTCG · drawn first">
@@ -216,9 +231,18 @@ function Withdrawals() {
               taxed yearly either way.
             </RuleCard>
             <RuleCard title="③ 401(k)" tag="ordinary income">
-              Withdrawals stack on ordinary income. Under 59½ it stays
-              locked. Drawn last.
+              Withdrawals stack on ordinary income.{' '}
+              <LockSentence age={tierGateAge(sourcing.steps, '401(k)')} /> Drawn
+              after the taxable buckets.
             </RuleCard>
+            {hasTier(sourcing.steps, 'HSA') && (
+              <RuleCard title="④ HSA" tag="tax-free">
+                Qualified withdrawals come out whole — no gain to realise, no
+                ordinary income to stack.{' '}
+                <LockSentence age={tierGateAge(sourcing.steps, 'HSA')} /> Drawn
+                last.
+              </RuleCard>
+            )}
           </div>
           <p className="mt-3.5 rounded-[11px] border border-dashed border-red bg-red-soft p-3 text-xs text-red-text">
             <b>Engine rule:</b> never 0.04 × balance per bucket. Solve for

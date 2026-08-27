@@ -137,7 +137,9 @@ describe('bucket rules', () => {
     await screen.findByTestId('sourcing-waterfall')
     expect(screen.getByText(/Harvest up to the 0% LTCG ceiling/)).toBeInTheDocument()
     expect(screen.getByText(/Lot-level basis/)).toBeInTheDocument()
-    expect(screen.getByText(/Drawn last/)).toBeInTheDocument()
+    expect(
+      screen.getByTestId('sourcing-rules'),
+    ).toHaveTextContent(/Drawn after the taxable buckets/)
     expect(
       screen.getByText(/never 0\.04 × balance per bucket/),
     ).toBeInTheDocument()
