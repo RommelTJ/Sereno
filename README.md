@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.5.0**
+**v3.6.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -1025,6 +1025,32 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.6.0 — Guardrails measured intent, not behaviour: the withdrawal
+rate was computed from the spend plan's annual target, so spending
+could drift arbitrarily far from plan without the zone moving, literal
+portfolio withdrawals would have read 0% while a pre-funded cash
+buffer was consumed and then spiked when it emptied, and the
+at-retirement anchor rate was a hand-set constant nothing ever
+captured from reality. The default numerator is now the trailing
+twelve complete months of actual spending — discretionary lines plus
+fund outflows, never fund contributions, funding source deliberately
+ignored so the measure stays continuous across the buffer-to-portfolio
+transition — with the target standing in until a year of history
+exists, labeled by `spend_source` and `spend_months` so a short window
+is never dressed up as a year. The spend plan gains an effective-dated
+`drawdown_start` (migration 0016, set from the Settings Assumptions
+card): before it the Guardrails screen and Dashboard card mark the
+zone as a readiness check rather than a live trigger, and the first
+read on or after it stamps a new plan row whose `initial_rate` is the
+actual rate as of that date — once, deterministically, with a later
+hand revision always winning. The engine is untouched — this is the
+API layer choosing a better numerator — the denominator's cash
+exclusion is now documented as a decision rather than an artifact of
+account flags, and the raise/cut triggers drift with actual spending
+by design. Independent of the age-banded spend schedule (#118), which
+plans hypothetical future years; a band schedule never feeds the
+guardrail rate.
 
 v3.5.0 — The longevity forecast assumed one flat spend level from the
 current age to 100, and real spending is not flat: it steps up through
