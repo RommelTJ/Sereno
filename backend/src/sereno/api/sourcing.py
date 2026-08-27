@@ -1,17 +1,19 @@
 """The sourcing slice: the tax-aware withdrawal waterfall fed by live
-balances, lot-level basis, and the year's tax parameters. Buckets
-aggregate accounts by withdrawal_priority; each account contributes
-its newest balance row from any month — unlike guardrails'
-latest-month total, a bucket last updated months ago still sources
-withdrawals — and its basis from open tax lots, falling back to that
-balance row's cost_basis, then to zero (all gain, the conservative
-read). Each account's tax_treatment maps to how the engine prices the
-bucket — ordinary income, capital gains, or tax-free — with LTCG the
-fallback for anything unrecognised. ?age= defaults to the current age derived from the sanitized
-BIRTHDATE constant (no birthdate lives in the schema) and evaluates a
-what-if age;
-?spend= tests a what-if level and stands in for a missing spend plan.
-Null until a tax year, a balance, and a spend target exist.
+balances, lot-level basis, and the year's tax parameters. Accounts
+group into buckets by withdrawal_priority and by whatever else decides
+their answer — tax treatment, gate age, and, where there is a gate,
+their owner. Each account contributes its newest balance row from any
+month — unlike guardrails' latest-month total, a bucket last updated
+months ago still sources withdrawals — and its basis from open tax
+lots, falling back to that balance row's cost_basis, then to zero (all
+gain, the conservative read). tax_treatment maps to how the engine
+prices the bucket — ordinary income, capital gains, or tax-free — with
+LTCG the fallback for anything unrecognised. ?age= is your age,
+defaulting to the one derived from the sanitized BIRTHDATE constant (no
+birthdate lives in the schema); your spouse's slides with it, so a
+single axis carries both people's gates. ?spend= tests a what-if level
+and stands in for a missing spend plan. Null until a tax year, a
+balance, and a spend target exist.
 """
 
 import sqlite3
@@ -44,10 +46,13 @@ Age = Annotated[float | None, Query(ge=0)]
 
 ETH_PRIORITY = 1
 
-# Deliberately sanitized — the repo is public, so this is not a real
-# birthday. It anchors the planners' derived current age; no birthdate
-# lives in the schema.
+# Deliberately sanitized — the repo is public, so neither of these is a
+# real birthday. They anchor the planners' derived ages; no birthdate
+# lives in the schema. Only the whole-year gap between them is ever
+# used, so a January 1 stand-in for each carries everything the gates
+# need.
 BIRTHDATE = date(1988, 1, 1)
+SPOUSE_BIRTHDATE = date(1991, 1, 1)
 
 _PRIORITY_LABELS = {1: "ETH", 2: "Brokerage", 3: "401(k)", 4: "HSA"}
 
@@ -115,11 +120,29 @@ class Sourcing(BaseModel):
     shortfall: float
 
 
+def _whole_years(birthdate: date, today: date) -> int:
+    before_birthday = (today.month, today.day) < (birthdate.month, birthdate.day)
+    return today.year - birthdate.year - int(before_birthday)
+
+
 def current_age(today: date | None = None) -> int:
-    """Whole years since BIRTHDATE — the planners' derived age."""
+    """Whole years since BIRTHDATE — the planners' derived age, and the
+    axis every ?age= and start_age is expressed on."""
+    return _whole_years(BIRTHDATE, today or date.today())
+
+
+def age_offsets(today: date | None = None) -> dict[str, float]:
+    """How far each owner's age sits from that axis. Derived from the
+    two sanitized constants rather than written down, so the pair stays
+    the only place the gap is stated. A joint account — and one with no
+    owner recorded — is read against your own age."""
     today = today or date.today()
-    before_birthday = (today.month, today.day) < (BIRTHDATE.month, BIRTHDATE.day)
-    return today.year - BIRTHDATE.year - int(before_birthday)
+    yours = _whole_years(BIRTHDATE, today)
+    return {
+        "you": 0.0,
+        "joint": 0.0,
+        "spouse": float(_whole_years(SPOUSE_BIRTHDATE, today) - yours),
+    }
 
 
 def current_tax_param(db: sqlite3.Connection) -> TaxParam | None:
@@ -162,13 +185,15 @@ def _bucket_key(row: sqlite3.Row) -> _BucketKey:
     )
 
 
-def _bucket_order(key: _BucketKey) -> tuple[int, float, int, str]:
-    """Tier first, then the money that unlocks soonest — an ungated
-    bucket is reachable now — then the owner, then the treatment so two
-    otherwise identical keys still order deterministically."""
+def _bucket_order(key: _BucketKey, age_offset: float) -> tuple[int, float, int, str]:
+    """Tier first, then whichever money unlocks soonest on the caller's
+    age axis — an ungated bucket is reachable now, and a younger owner's
+    gate lands later than the same age would on yours — then the owner,
+    then the treatment, so two otherwise identical keys still order
+    deterministically."""
     return (
         key.priority,
-        key.access_age if key.access_age is not None else float("-inf"),
+        float("-inf") if key.access_age is None else key.access_age - age_offset,
         _OWNER_ORDER.get(key.owner or "", len(_OWNER_ORDER)),
         key.treatment,
     )
@@ -211,7 +236,12 @@ def load_buckets(db: sqlite3.Connection) -> list[Bucket]:
             basis + _account_basis(db, row["account_id"], row["cost_basis"]),
         )
 
-    keys = sorted(totals, key=_bucket_order)
+    offsets = age_offsets()
+
+    def offset_for(key: _BucketKey) -> float:
+        return offsets.get(key.owner or "", 0.0)
+
+    keys = sorted(totals, key=lambda key: _bucket_order(key, offset_for(key)))
     names = _bucket_names(keys)
     return [
         Bucket(
@@ -220,6 +250,7 @@ def load_buckets(db: sqlite3.Connection) -> list[Bucket]:
             basis=totals[key][1],
             treatment=key.treatment,
             access_age=key.access_age,
+            age_offset=offset_for(key),
             headroom_only=key.priority == ETH_PRIORITY,
         )
         for key in keys
