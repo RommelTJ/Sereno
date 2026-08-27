@@ -1,5 +1,12 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ACCOUNTS,
   LEDGER,
@@ -8,7 +15,7 @@ import {
   balance,
   ledgerPage,
 } from '../test/fixtures.ts'
-import { stubApi } from '../test/stubs.ts'
+import { stubApi, stubIntersectionObserver } from '../test/stubs.ts'
 import Ledger from './Ledger.tsx'
 
 describe('Ledger monthly balance table', () => {
@@ -463,5 +470,121 @@ describe('Quick links card', () => {
 
     await screen.findByRole('table')
     expect(screen.queryByTestId('quick-links')).not.toBeInTheDocument()
+  })
+})
+
+// The table holds the twelve newest months; older ones arrive a page at a
+// time as the sentinel row below the table scrolls into view. The fixture
+// page says has_more, so two more months sit behind the 2026-05 cursor.
+describe('Older months', () => {
+  const OLDER = [
+    {
+      month: '2026-04',
+      net_worth: 1_690_000,
+      balances: [balance(1, '2026-04-01', 66_000, 20, 3_300)],
+    },
+    {
+      month: '2026-03',
+      net_worth: 1_670_000,
+      balances: [balance(1, '2026-03-01', 64_000, 20, 3_200)],
+    },
+  ]
+
+  const routes = () => ({
+    '/api/accounts': ACCOUNTS,
+    '/api/ledger': ledgerPage(LEDGER, true),
+    '/api/ledger?before=2026-05': ledgerPage(OLDER),
+    '/api/quick-links': [],
+  })
+
+  it('appends the next page when the sentinel scrolls into view', async () => {
+    const fetchMock = stubApi(routes())
+    const observer = stubIntersectionObserver()
+    render(<Ledger />)
+    expect(await screen.findAllByTestId('ledger-row')).toHaveLength(2)
+
+    act(() => observer.trigger())
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('ledger-row')).toHaveLength(4),
+    )
+    const rows = screen.getAllByTestId('ledger-row')
+    expect(rows[2]).toHaveTextContent('April 2026')
+    expect(rows[3]).toHaveTextContent('March 2026')
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain(
+      '/api/ledger?before=2026-05',
+    )
+  })
+
+  it('keeps the newest-month highlight on the first row', async () => {
+    stubApi(routes())
+    const observer = stubIntersectionObserver()
+    render(<Ledger />)
+    await screen.findAllByTestId('ledger-row')
+
+    act(() => observer.trigger())
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('ledger-row')).toHaveLength(4),
+    )
+    const rows = screen.getAllByTestId('ledger-row')
+    expect(rows[0]).toHaveClass('bg-[#f3f6f3]')
+    expect(rows[2]).not.toHaveClass('bg-[#f3f6f3]')
+  })
+
+  it('stops once the oldest month has been reached', async () => {
+    stubApi(routes())
+    const observer = stubIntersectionObserver()
+    render(<Ledger />)
+    await screen.findAllByTestId('ledger-row')
+    expect(screen.getByTestId('ledger-sentinel')).toBeInTheDocument()
+
+    act(() => observer.trigger())
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('ledger-row')).toHaveLength(4),
+    )
+    expect(screen.queryByTestId('ledger-sentinel')).not.toBeInTheDocument()
+  })
+
+  it('renders no sentinel when the first page is the whole history', async () => {
+    stubApi({ ...routes(), '/api/ledger': ledgerPage(LEDGER) })
+    stubIntersectionObserver()
+    render(<Ledger />)
+
+    await screen.findAllByTestId('ledger-row')
+    expect(screen.queryByTestId('ledger-sentinel')).not.toBeInTheDocument()
+  })
+
+  it('shows a loading row and asks for one page at a time', async () => {
+    const inner = stubApi(routes())
+    let release = () => {}
+    const inFlight = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('before=')) await inFlight
+      return inner(input, init)
+    })
+    const observer = stubIntersectionObserver()
+    render(<Ledger />)
+    await screen.findAllByTestId('ledger-row')
+
+    act(() => observer.trigger())
+    act(() => observer.trigger())
+
+    expect(
+      await screen.findByText('Loading older months…'),
+    ).toBeInTheDocument()
+    release()
+    await waitFor(() =>
+      expect(screen.getAllByTestId('ledger-row')).toHaveLength(4),
+    )
+    expect(screen.queryByText('Loading older months…')).not.toBeInTheDocument()
+    expect(
+      inner.mock.calls.filter(([url]) =>
+        String(url).includes('before=2026-05'),
+      ),
+    ).toHaveLength(1)
   })
 })
