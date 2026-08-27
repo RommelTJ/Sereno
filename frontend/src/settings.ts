@@ -111,7 +111,17 @@ export const PRIORITY_OPTIONS = [
   { value: '', label: '—' },
   { value: '1', label: '1 — ETH' },
   { value: '2', label: '2 — Brokerage' },
-  { value: '3', label: '3 — Tax-advantaged' },
+  { value: '3', label: '3 — 401(k)' },
+  { value: '4', label: '4 — HSA' },
+]
+
+// Whose account it is: the gate on a tax-advantaged bucket is read
+// against its owner's age, and the two of you are not the same age.
+export const OWNER_OPTIONS = [
+  { value: '', label: '—' },
+  { value: 'you', label: 'You' },
+  { value: 'spouse', label: 'Spouse' },
+  { value: 'joint', label: 'Joint' },
 ]
 
 export interface AccountClassificationValues {
@@ -120,6 +130,7 @@ export interface AccountClassificationValues {
   investable: boolean
   priority: string
   accessAge: string
+  owner: string
 }
 
 export function classificationValues(
@@ -134,12 +145,13 @@ export function classificationValues(
         ? String(account.withdrawal_priority)
         : '',
     accessAge: account.access_age != null ? String(account.access_age) : '',
+    owner: account.owner ?? '',
   }
 }
 
 // Build the PUT /api/accounts/{id} body, or null while the form is invalid
 // (an access age that isn't a non-negative number). Blank means
-// unrestricted access / no withdrawal priority.
+// unrestricted access / no withdrawal priority / no owner recorded.
 export function classificationInput(
   values: AccountClassificationValues,
 ): AccountClassificationInput | null {
@@ -155,6 +167,7 @@ export function classificationInput(
     withdrawal_priority:
       values.priority === '' ? null : Number(values.priority),
     access_age: accessAge,
+    owner: values.owner === '' ? null : values.owner,
   }
 }
 

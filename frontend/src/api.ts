@@ -77,7 +77,7 @@ export interface AccountInput {
 
 // PUT /api/accounts/{id} classifies an account for the planners — kind,
 // tax treatment, the investable flag, withdrawal priority (1 ETH,
-// 2 brokerage, 3 401(k), 4 HSA), and access age — revised in place:
+// 2 brokerage, 3 401(k), 4 HSA), access age, and owner — revised in place:
 // dimension metadata, not an effective-dated fact. A liability can never
 // be investable or hold a priority (422).
 export interface AccountClassificationInput {
@@ -86,6 +86,7 @@ export interface AccountClassificationInput {
   is_investable: boolean
   withdrawal_priority: number | null
   access_age: number | null
+  owner: string | null
 }
 
 // GET /api/categories: the category dimension with each envelope's planned
