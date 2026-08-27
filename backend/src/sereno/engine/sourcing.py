@@ -7,7 +7,10 @@ ordinary income) and converts to sale proceeds through each bucket's
 gain fraction. A tax-free bucket — a Roth, or an HSA spent on
 qualified expenses — is neither taxed as gain nor stacked on ordinary
 income, so it comes out whole. Any bucket may carry an access_age,
-which gates it whatever its treatment. The engine solves for net
+which gates it whatever its treatment, read against its owner's age —
+age_offset carries how far that owner sits from the caller's age axis,
+so two people of different ages share one simulation without the
+engine ever learning whose bucket is whose. The engine solves for net
 spendable — never a flat 4% per bucket. Pure math over the caller's numbers; loading balances,
 basis, and tax parameters is the API layer's job.
 
@@ -48,6 +51,9 @@ class Bucket:
     basis: float
     treatment: BucketTreatment
     access_age: float | None = None
+    # The owner's age minus the caller's: 0 when the bucket is gated on
+    # the age passed in, negative when its owner is younger than that.
+    age_offset: float = 0.0
     headroom_only: bool = False
 
 
@@ -166,7 +172,7 @@ def source_withdrawals(
     ordinary_running = ordinary_income
     draws: list[BucketDraw] = []
     for bucket in buckets:
-        if bucket.access_age is not None and age < bucket.access_age:
+        if bucket.access_age is not None and age + bucket.age_offset < bucket.access_age:
             # The gate belongs to the bucket, not to its tax treatment:
             # a Roth or an HSA locks the way a traditional 401(k) does.
             # A locked bucket sells nothing, so it also spends none of
