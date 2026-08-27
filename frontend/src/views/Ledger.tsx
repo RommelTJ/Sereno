@@ -14,7 +14,7 @@ import {
 import BalanceForm from '../components/BalanceForm.tsx'
 import LedgerTable from '../components/LedgerTable.tsx'
 import QuickLinks from '../components/QuickLinks.tsx'
-import { ledgerColumns, ledgerRows } from '../ledger.ts'
+import { ledgerColumns, ledgerRows, ledgerTableColumns } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
 
 function Ledger() {
@@ -62,7 +62,10 @@ function Ledger() {
     setHasMore(page.has_more)
   }
 
-  const columns = accounts ? ledgerColumns(accounts) : []
+  // The form picks accounts; the table also carries the derived
+  // brokerage subtotal, which is no account to enter a balance for.
+  const accountColumns = accounts ? ledgerColumns(accounts) : []
+  const columns = accounts ? ledgerTableColumns(accounts) : []
 
   return (
     <div
@@ -80,7 +83,7 @@ function Ledger() {
           />
           <div className="flex flex-col gap-5">
             <BalanceForm
-              accounts={columns}
+              accounts={accountColumns}
               months={months}
               onSave={saveBalance}
             />

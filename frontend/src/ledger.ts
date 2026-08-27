@@ -20,6 +20,40 @@ export function ledgerColumns(accounts: Account[]): Account[] {
   ]
 }
 
+// A table column: a real account, or the derived brokerage subtotal.
+// The union is what keeps the derived column from passing as an
+// account — nothing reads `.id` or `.is_liability` off a column without
+// narrowing first, so a subtotal can never be mistaken for a real row
+// of the dimension the net-worth view sums.
+export type LedgerColumn =
+  | { kind: 'account'; account: Account }
+  | { kind: 'subtotal'; label: string; accountIds: number[] }
+
+// The table's columns: one per account, plus a "Brokerage" subtotal
+// directly after the last brokerage fund. Members come from the kind,
+// never the fund names, so a fourth fund joins the subtotal the moment
+// it is classified — and an install with none classified gets no
+// column at all.
+export function ledgerTableColumns(accounts: Account[]): LedgerColumn[] {
+  const ordered = ledgerColumns(accounts)
+  const columns: LedgerColumn[] = ordered.map((account) => ({
+    kind: 'account',
+    account,
+  }))
+  const funds = ordered.filter((account) => account.kind === 'brokerage_fund')
+  if (!funds.length) return columns
+  const last = columns.findLastIndex(
+    (column) =>
+      column.kind === 'account' && column.account.kind === 'brokerage_fund',
+  )
+  columns.splice(last + 1, 0, {
+    kind: 'subtotal',
+    label: 'Brokerage',
+    accountIds: funds.map((account) => account.id),
+  })
+  return columns
+}
+
 export interface LedgerRow {
   month: string
   date: string
@@ -188,7 +222,7 @@ export function formatQty(value: number): string {
 
 export function ledgerRows(
   months: LedgerMonth[],
-  columns: Account[],
+  columns: LedgerColumn[],
 ): LedgerRow[] {
   return months.map((month) => {
     const byAccount = new Map(
@@ -197,14 +231,30 @@ export function ledgerRows(
     return {
       month: month.month,
       date: formatMonth(month.month),
-      values: columns.map((account) => {
-        const balance = byAccount.get(account.id)
-        if (!balance) return 0
-        return account.is_liability
-          ? -balance.balance_usd
-          : balance.balance_usd
-      }),
+      values: columns.map((column) => columnValue(column, byAccount) ?? 0),
       netWorth: month.net_worth,
     }
   })
+}
+
+// One column's figure for one month: the account's balance, liabilities
+// negated for display, or the sum of the subtotal's members. Null where
+// the month holds no entry for it — a column the table shows as zero,
+// which is not the same fact as a balance of zero.
+function columnValue(
+  column: LedgerColumn,
+  byAccount: Map<number, LedgerBalance>,
+): number | null {
+  if (column.kind === 'account') {
+    const balance = byAccount.get(column.account.id)
+    if (!balance) return null
+    return column.account.is_liability
+      ? -balance.balance_usd
+      : balance.balance_usd
+  }
+  const held = column.accountIds
+    .map((id) => byAccount.get(id))
+    .filter((balance) => balance !== undefined)
+  if (!held.length) return null
+  return held.reduce((total, balance) => total + balance.balance_usd, 0)
 }
