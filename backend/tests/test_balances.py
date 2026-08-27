@@ -409,7 +409,7 @@ class TestUpdateAccount:
 
     def test_out_of_range_withdrawal_priority_is_rejected(self, client):
         created = self.create(client, "Robinhood")
-        for priority in (0, 4):
+        for priority in (0, 5):
             response = client.put(
                 f"/api/accounts/{created['id']}",
                 json={**self.CLASSIFICATION, "withdrawal_priority": priority},

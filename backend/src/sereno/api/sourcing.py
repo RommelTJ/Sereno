@@ -49,7 +49,7 @@ ETH_PRIORITY = 1
 # lives in the schema.
 BIRTHDATE = date(1988, 1, 1)
 
-_PRIORITY_LABELS = {1: "ETH", 2: "Brokerage", 3: "401(k)"}
+_PRIORITY_LABELS = {1: "ETH", 2: "Brokerage", 3: "401(k)", 4: "HSA"}
 
 # The account dimension's tax_treatment mapped onto what the engine can
 # price. LTCG is the fallback rather than a fourth branch: NONE — and
