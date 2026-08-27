@@ -142,11 +142,86 @@ describe('ledgerTableColumns', () => {
 
 describe('ledgerRows', () => {
   const columns = ledgerTableColumns(ACCOUNTS)
-  const subtotal = columns.findIndex((column) => column.kind === 'subtotal')
+  const at = (name: string) => columns.map(label).indexOf(name)
+  const subtotal = at('Brokerage')
+
+  const month = (key: string, entries: [number, number][]) => ({
+    month: key,
+    net_worth: 0,
+    balances: entries.map(([id, usd]) => balance(id, `${key}-01`, usd)),
+  })
 
   it('sums the brokerage funds into the subtotal column', () => {
     const rows = ledgerRows(LEDGER, columns)
     expect(rows[0].values[subtotal]).toBe(1_080_000)
     expect(rows[1].values[subtotal]).toBe(1_064_000)
+  })
+
+  // The delta is the number that answers "is this going the right way",
+  // and it is taken on the displayed figure — after the liability sign
+  // flip — so one rule covers an asset that grew and a debt that shrank.
+  it('gives each cell the change from the previous month', () => {
+    const rows = ledgerRows(LEDGER, columns)
+    expect(rows[0].deltas[at('Ethereum')]).toBe(2_000)
+    expect(rows[0].deltas[at('VFIAX')]).toBe(10_000)
+    expect(rows[0].deltas[at('Chase checking')]).toBe(2_000)
+  })
+
+  it('reads a paid-down mortgage as a favorable rise', () => {
+    const rows = ledgerRows(LEDGER, columns)
+    expect(rows[0].values[at('Mortgage')]).toBe(-150_000)
+    expect(rows[0].deltas[at('Mortgage')]).toBe(700)
+  })
+
+  it('leaves the oldest row without deltas', () => {
+    const rows = ledgerRows(LEDGER, columns)
+    expect(rows[1].deltas.every((delta) => delta === null)).toBe(true)
+  })
+
+  it('shows a carried-forward balance as no change, not as no data', () => {
+    const rows = ledgerRows(LEDGER, columns)
+    expect(rows[0].deltas[at('Vanguard Cash Plus')]).toBe(0)
+  })
+
+  it('suppresses the delta where the account had no entry last month', () => {
+    const months = [
+      month('2026-06', [
+        [7, 9_000],
+        [2, 700_000],
+      ]),
+      month('2026-05', [[7, 7_000]]),
+    ]
+    const rows = ledgerRows(months, columns)
+    expect(rows[0].deltas[at('VFIAX')]).toBeNull()
+    expect(rows[0].deltas[at('Chase checking')]).toBe(2_000)
+  })
+
+  it('rounds a sub-cent float residue to no change', () => {
+    const months = [
+      month('2026-06', [[7, 0.1 + 0.2]]),
+      month('2026-05', [[7, 0.3]]),
+    ]
+    expect(ledgerRows(months, columns)[0].deltas[at('Chase checking')]).toBe(0)
+  })
+
+  it('sums the member deltas into the subtotal delta', () => {
+    expect(ledgerRows(LEDGER, columns)[0].deltas[subtotal]).toBe(16_000)
+  })
+
+  it('suppresses the subtotal delta when a member is new', () => {
+    const months = [
+      month('2026-06', [
+        [2, 700_000],
+        [3, 250_000],
+        [4, 130_000],
+      ]),
+      month('2026-05', [
+        [2, 690_000],
+        [3, 246_000],
+      ]),
+    ]
+    const rows = ledgerRows(months, columns)
+    expect(rows[0].values[subtotal]).toBe(1_080_000)
+    expect(rows[0].deltas[subtotal]).toBeNull()
   })
 })
