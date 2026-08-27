@@ -60,6 +60,7 @@ export interface LedgerRow {
   values: number[] // aligned to the columns; liabilities negative
   deltas: (number | null)[] // aligned to values; null where nothing to subtract
   netWorth: number
+  netWorthDelta: number | null // null on the oldest row loaded
 }
 
 // Two decimals always — "$2,400.00" and "$28.40" align in a column,
@@ -249,6 +250,7 @@ export function ledgerRows(
   return months.map((month, index) => {
     const current = figures[index]
     // Months arrive newest first, so the previous month is the next row.
+    const previousMonth = months[index + 1]
     const previous = figures[index + 1]
     return {
       month: month.month,
@@ -263,6 +265,10 @@ export function ledgerRows(
         return roundCents(figure.value - prior.value)
       }),
       netWorth: month.net_worth,
+      netWorthDelta:
+        previousMonth === undefined
+          ? null
+          : roundCents(month.net_worth - previousMonth.net_worth),
     }
   })
 }

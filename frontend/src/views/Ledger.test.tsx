@@ -179,7 +179,8 @@ describe('Month-over-month deltas', () => {
     render(<Ledger />)
 
     const rows = await screen.findAllByTestId('ledger-row')
-    expect(within(rows[0]).getByText('-$8,000.00')).toHaveClass('text-red')
+    const ethereum = within(rows[0]).getAllByRole('cell')[1]
+    expect(within(ethereum).getByText('-$8,000.00')).toHaveClass('text-red')
   })
 
   it('keeps a liability figure red while its own delta reads green', async () => {

@@ -125,7 +125,8 @@ function LedgerTable({
                   )
                 })}
                 <td className="px-3.5 py-[11px] text-right font-bold">
-                  {formatUsd(row.netWorth)}
+                  <span>{formatUsd(row.netWorth)}</span>
+                  <Delta delta={row.netWorthDelta} />
                 </td>
               </tr>
             ))}
