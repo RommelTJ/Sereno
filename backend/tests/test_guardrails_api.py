@@ -67,6 +67,32 @@ def seed_portfolio():
     insert_balance(insert_account("Chase checking", "cash"), 25_000)
 
 
+def month_str(months_back):
+    """'YYYY-MM' for the month months_back before the current one."""
+    total = TODAY.year * 12 + TODAY.month - 1 - months_back
+    return f"{total // 12:04d}-{total % 12 + 1:02d}"
+
+
+def insert_expense(amount, budget_month, funded_from="discretionary", fund_id=None):
+    return execute(
+        "INSERT INTO expense_line (txn_date, budget_month, amount, funded_from, fund_id)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (f"{budget_month}-15", budget_month, to_cents(amount), funded_from, fund_id),
+    )
+
+
+def insert_fund(name="Travel fund"):
+    return execute("INSERT INTO fund (name, kind) VALUES (?, 'sinking')", (name,))
+
+
+def insert_fund_contribution(fund_id, amount, as_of_date):
+    return execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
+        " VALUES (?, ?, ?, ?, 'monthly_plan')",
+        (fund_id, as_of_date, to_cents(amount), to_cents(amount)),
+    )
+
+
 class TestPrerequisites:
     def test_returns_null_without_a_spend_plan(self, client):
         seed_portfolio()
@@ -107,6 +133,9 @@ class TestGuardrails:
             "raise_trigger": 45000 / (0.0294 * 0.80),
             "cut_trigger": 45000 / (0.0294 * 1.20),
             "four_percent_spend": 60000.0,
+            "spend_source": "target",
+            "spend_months": 0,
+            "drawdown_start": None,
         }
 
     def test_spend_query_tests_a_what_if_level(self, client):
@@ -114,6 +143,7 @@ class TestGuardrails:
         insert_spend_plan(annual_target=45000)
         body = client.get("/api/guardrails", params={"spend": 60000}).json()
         assert body["spend"] == 60000.0
+        assert body["spend_source"] == "what_if"
         assert body["annual_target"] == 45000.0
         assert body["rate"] == 0.04
         assert body["zone"] == "cut"
@@ -142,3 +172,66 @@ class TestGuardrails:
         seed_portfolio()
         insert_spend_plan()
         assert client.get("/api/guardrails", params={"spend": 0}).status_code == 422
+
+
+class TestTrailingSpend:
+    """The default numerator is trailing actual spending, not the plan's
+    target: money that left the household counts whatever funded it, so
+    the measure stays continuous across a buffer-to-portfolio transition.
+    Until twelve complete months exist the target stands in, labeled by
+    spend_months so a short window is never dressed up as a year."""
+
+    def test_a_year_of_actuals_replaces_the_target(self, client):
+        seed_portfolio()
+        insert_spend_plan(annual_target=45000)
+        for months_back in range(1, 13):
+            insert_expense(3000, month_str(months_back))
+        body = client.get("/api/guardrails").json()
+        assert body["spend"] == 36000.0
+        assert body["spend_source"] == "actual"
+        assert body["spend_months"] == 12
+        assert body["rate"] == 0.024
+        assert body["annual_target"] == 45000.0
+
+    def test_fund_outflows_count_and_contributions_do_not(self, client):
+        # Outflows are the realisation of the smoothed plan the
+        # contributions describe — counting both would double-count.
+        seed_portfolio()
+        insert_spend_plan()
+        fund_id = insert_fund()
+        for months_back in range(1, 13):
+            insert_expense(2000, month_str(months_back))
+            insert_fund_contribution(fund_id, 1500, f"{month_str(months_back)}-01")
+        insert_expense(5000, month_str(1), funded_from="fund", fund_id=fund_id)
+        assert client.get("/api/guardrails").json()["spend"] == 29000.0
+
+    def test_the_window_is_the_last_twelve_complete_months(self, client):
+        # The in-progress month undercounts and stays out; a thirteenth
+        # month back has aged out of the window.
+        seed_portfolio()
+        insert_spend_plan()
+        for months_back in range(1, 13):
+            insert_expense(3000, month_str(months_back))
+        insert_expense(9999, month_str(0))
+        insert_expense(8888, month_str(13))
+        body = client.get("/api/guardrails").json()
+        assert body["spend"] == 36000.0
+        assert body["spend_months"] == 12
+
+    def test_a_short_history_falls_back_to_the_target(self, client):
+        seed_portfolio()
+        insert_spend_plan(annual_target=45000)
+        insert_expense(3000, month_str(1))
+        insert_expense(3000, month_str(2))
+        body = client.get("/api/guardrails").json()
+        assert body["spend"] == 45000.0
+        assert body["spend_source"] == "target"
+        assert body["spend_months"] == 2
+
+    def test_a_current_month_only_history_counts_no_complete_months(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_expense(3000, month_str(0))
+        body = client.get("/api/guardrails").json()
+        assert body["spend_source"] == "target"
+        assert body["spend_months"] == 0
