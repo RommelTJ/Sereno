@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.7.0**
+**v3.8.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -18,7 +18,8 @@ whole thing in plain SQL.
 
 - **Net worth dashboard** — at-a-glance hero number with year-over-year change and a
   monthly sparkline, computed live from every account and liability.
-- **Ledger entries** — one row per month per account. Pick any active account and
+- **Ledger entries** — one row per month per account, the twelve newest months on
+  screen and older ones loaded as you scroll. Pick any active account and
   enter its value (ETH as quantity × price, auto-translated to USD); the latest entry
   in a month wins, earlier rows are kept as history, and balances carry forward until
   the next entry.
@@ -217,11 +218,18 @@ The balances slice:
   Send `balance_usd` for USD accounts, or `quantity` + `unit_price` for
   ETH-style holdings (USD is derived as quantity × price). Rows are never
   updated — history is kept.
-- `GET /api/ledger` — one group per month, newest first, with the canonical
-  per-account balances and that month's net worth. A month's balance for an
-  account is the latest entry **on or before** the month's end
-  (carry-forward), so an account entered in January still counts in March;
-  within a month the latest entry wins.
+- `GET /api/ledger` — one page of months, newest first: `months`, one group
+  per month with the canonical per-account balances and that month's net
+  worth, plus `has_more`. A month's balance for an account is the latest
+  entry **on or before** the month's end (carry-forward), so an account
+  entered in January still counts in March; within a month the latest entry
+  wins. `limit` (default 12, max 120) sizes the page and `before=YYYY-MM`
+  asks for the months older than that one, so a caller walks back through
+  history by handing back the page's oldest month; `has_more` says when to
+  stop. A page is whole months — one month is one row per account, so a row
+  limit would cut a month in half — which is also what bounds the work: the
+  monthly view joins every month against every entry, so an unbounded read
+  grows quadratically with history.
 - `GET /api/net-worth` — current net worth, year-over-year change vs. the same
   month a year earlier (`null` until 12 months of history exist), and the
   last-12-months series for the sparkline.
@@ -722,7 +730,11 @@ The forecast slice (the third Plan engine):
   month, never an entry's exact date) with one
   column per active account — assets then liabilities, liabilities negative
   in red — plus the net-worth column, horizontally scrollable as accounts
-  grow. Beside it, the "Update this month's balances" form: an account picker
+  grow. The table opens on the twelve newest months and loads older ones a
+  page at a time: a sentinel row below the last month, watched with an
+  `IntersectionObserver` against the viewport, so a touch flick pages the
+  same as a wheel. A loading row shows while a page is in flight, and both
+  row and observer go away once the oldest month is on screen. Beside it, the "Update this month's balances" form: an account picker
   over the active accounts with a single value input prefilled from the
   newest month (the ETH account swaps to quantity + $/ETH inputs with a live
   quantity × price readout), an "As of" date defaulting to today — pick an
@@ -1064,6 +1076,33 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.8.0 — The Ledger stops growing without a ceiling. Nothing in the
+ledger path was bounded: `GET /api/ledger` selected every row of
+`v_account_monthly` with no limit, no cursor and no date floor,
+`ledgerRows` mapped every month it received, and `LedgerTable` rendered
+every one of them — one row per month, forever. Twenty rows today, a
+hundred and twenty in ten years, and the view underneath grows faster
+than the DOM does, since it joins every distinct month against every
+balance entry before ranking. The endpoint now serves one page: the
+twelve newest months by default, older ones behind a `before=YYYY-MM`
+cursor, sized by a bounded `limit` (an unbounded one, or a "show all",
+would just re-open the query the paging closes) and carrying `has_more`
+so the caller knows when to stop. A page is measured in whole months and
+never rows — one month is one row per account — and its month list comes
+from `balance_entry` rather than the view, so both reads are bounded to
+the page's range. The table opens on those twelve and appends the next
+page when a sentinel row below the last month scrolls into view: an
+`IntersectionObserver` against the viewport, so an iOS momentum flick
+pages the same as a wheel, with one request in flight at a time, a
+loading row while it is out, and the row gone once the oldest month is on
+screen. Balance prefills are untouched — the monthly view carries
+balances forward, so every active account is already in the newest month,
+and a partial list of months was never a partial list of accounts. What
+this does not fix is the view's own shape: paging bounds the payload and
+the DOM, not the month x entry join, which stays quadratic in history.
+Minor: the ledger response is an object rather than a bare list now, and
+its callers ship with it.
 
 v3.7.0 — The deploy checkout's `git status` is clean. A reverse-proxied
 deployment needed two settings this repo deliberately doesn't carry — a

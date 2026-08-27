@@ -8,19 +8,21 @@ import {
   balance,
   CATEGORIES,
   LEDGER,
+  LEDGER_PAGE,
   MORTGAGE,
   QUICK_LINKS,
   SOCIAL_SECURITY,
   SPEND_BANDS,
   SPEND_PLAN,
   TAX_PARAMS,
+  ledgerPage,
 } from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import Settings from './Settings.tsx'
 
 const routes = () => ({
   '/api/accounts': ACCOUNTS,
-  '/api/ledger': LEDGER,
+  '/api/ledger': LEDGER_PAGE,
   '/api/categories': CATEGORIES,
   '/api/quick-links': QUICK_LINKS,
   '/api/assumptions': ASSUMPTION,
@@ -70,7 +72,7 @@ describe('Assets card', () => {
       },
       LEDGER[1],
     ]
-    stubApi({ ...routes(), '/api/ledger': ledger })
+    stubApi({ ...routes(), '/api/ledger': ledgerPage(ledger) })
     render(<Settings />)
 
     const rows = await screen.findAllByTestId('settings-asset-row')
@@ -126,13 +128,13 @@ describe('Assets card', () => {
     const created = { ...ACCOUNTS[8], id: 11, name: 'Gold coins', emoji: '💎' }
     liveRoutes['POST /api/accounts'] = created
     liveRoutes['/api/accounts'] = [...ACCOUNTS, created]
-    liveRoutes['/api/ledger'] = [
+    liveRoutes['/api/ledger'] = ledgerPage([
       {
         ...LEDGER[0],
         balances: [...LEDGER[0].balances, balance(11, '2026-06-15', 2_500)],
       },
       LEDGER[1],
-    ]
+    ])
     fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
 
     await waitFor(() =>

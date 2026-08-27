@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { ACCOUNTS, LEDGER } from './test/fixtures.ts'
+import { ACCOUNTS, LEDGER_PAGE, ledgerPage } from './test/fixtures.ts'
 import { stubApi } from './test/stubs.ts'
 import App from './App.tsx'
 
@@ -20,7 +20,7 @@ beforeEach(() => {
   stubApi({
     '/api/health': { status: 'ok', version: '1.2.3' },
     '/api/accounts': [],
-    '/api/ledger': [],
+    '/api/ledger': ledgerPage([]),
     '/api/net-worth': { current: null, yoy: null, series: [] },
     '/api/budget-month': EMPTY_BUDGET_MONTH,
     '/api/budget-year': EMPTY_BUDGET_YEAR,
@@ -193,7 +193,7 @@ describe('Header net worth', () => {
     const routes: Record<string, unknown> = {
       '/api/health': { status: 'ok', version: '1.2.3' },
       '/api/accounts': ACCOUNTS,
-      '/api/ledger': LEDGER,
+      '/api/ledger': LEDGER_PAGE,
       '/api/quick-links': [],
       '/api/net-worth': { current: 1_744_000, yoy: 0.017, series: [] },
       '/api/budget-month': EMPTY_BUDGET_MONTH,

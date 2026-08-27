@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import type { Account } from '../api.ts'
 import type { LedgerRow } from '../ledger.ts'
 import { formatUsd } from '../ledger.ts'
@@ -5,9 +6,40 @@ import { formatUsd } from '../ledger.ts'
 interface LedgerTableProps {
   columns: Account[]
   rows: LedgerRow[]
+  hasMore: boolean
+  loading: boolean
+  onLoadMore: () => void
 }
 
-function LedgerTable({ columns, rows }: LedgerTableProps) {
+function LedgerTable({
+  columns,
+  rows,
+  hasMore,
+  loading,
+  onLoadMore,
+}: LedgerTableProps) {
+  // The sentinel row below the last month asks for the next page when it
+  // comes into view. Observed against the viewport, since the page itself is
+  // the scroller — an IntersectionObserver follows an iOS momentum flick,
+  // which a wheel or scroll listener would not. The ref callback rebuilds the
+  // observer whenever the row remounts, and its cleanup disconnects the old
+  // one; the observer stops existing entirely once the oldest month is on
+  // screen and the row goes away.
+  const watch = useCallback(
+    (sentinel: HTMLTableRowElement | null) => {
+      if (!sentinel) return
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) onLoadMore()
+        },
+        { rootMargin: '200px' },
+      )
+      observer.observe(sentinel)
+      return () => observer.disconnect()
+    },
+    [onLoadMore],
+  )
+
   return (
     <section className="overflow-hidden rounded-card border border-card-border bg-card">
       <h2 className="border-b border-hairline px-5.5 py-4.5 text-sm font-bold">
@@ -61,6 +93,16 @@ function LedgerTable({ columns, rows }: LedgerTableProps) {
                 </td>
               </tr>
             ))}
+            {hasMore && (
+              <tr data-testid="ledger-sentinel" ref={watch}>
+                <td
+                  colSpan={columns.length + 2}
+                  className="px-3.5 py-[11px] text-left text-muted-2"
+                >
+                  {loading ? 'Loading older months…' : null}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

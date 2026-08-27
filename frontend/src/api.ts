@@ -38,6 +38,14 @@ export interface LedgerMonth {
   balances: LedgerBalance[]
 }
 
+// One page of the ledger, newest month first — the twelve newest by
+// default, older ones behind the `before` cursor. has_more says whether
+// older months remain, so a caller paging backwards knows when to stop.
+export interface LedgerPage {
+  months: LedgerMonth[]
+  has_more: boolean
+}
+
 export interface NetWorthPoint {
   month: string
   net_worth: number
@@ -696,7 +704,8 @@ async function deleteJson(path: string): Promise<void> {
 
 export const fetchHealth = () => getJson<Health>('/api/health')
 export const fetchAccounts = () => getJson<Account[]>('/api/accounts')
-export const fetchLedger = () => getJson<LedgerMonth[]>('/api/ledger')
+export const fetchLedger = (before?: string) =>
+  getJson<LedgerPage>(before ? `/api/ledger?before=${before}` : '/api/ledger')
 export const fetchNetWorth = () => getJson<NetWorth>('/api/net-worth')
 export const fetchBudgetMonth = (month?: string) =>
   getJson<BudgetMonth>(

@@ -221,7 +221,7 @@ class TestPostAccounts:
         accounts = client.get("/api/accounts").json()
         assert [account["name"] for account in accounts] == ["Valuables"]
         assert accounts[0]["emoji"] is None
-        (month,) = client.get("/api/ledger").json()
+        (month,) = client.get("/api/ledger").json()["months"]
         assert month["month"] == date.today().strftime("%Y-%m")
         assert month["net_worth"] == 5000
         assert month["balances"][0]["account_id"] == created["id"]
@@ -238,7 +238,7 @@ class TestPostAccounts:
         )
         assert response.status_code == 201
         assert response.json()["is_liability"] is True
-        (month,) = client.get("/api/ledger").json()
+        (month,) = client.get("/api/ledger").json()["months"]
         assert month["balances"][0]["balance_usd"] == 20000
         assert month["net_worth"] == -20000
 
@@ -290,7 +290,7 @@ class TestDeactivateAccount:
         post_entry(client, boat_id, "2026-05-28", balance_usd=9000)
         post_entry(client, cash_id, "2026-06-28", balance_usd=1000)
         assert client.post(f"/api/accounts/{boat_id}/deactivate").status_code == 200
-        months = {m["month"]: m["net_worth"] for m in client.get("/api/ledger").json()}
+        months = {m["month"]: m["net_worth"] for m in client.get("/api/ledger").json()["months"]}
         assert months["2026-05"] == 10000
 
     def test_deactivated_name_is_reusable(self, client):
@@ -543,11 +543,32 @@ def post_entry(client, account_id, as_of_date, **fields):
     return response.json()
 
 
+def month_sequence(start, count):
+    """`count` consecutive "YYYY-MM" keys from `start`, oldest first."""
+    year, month = (int(part) for part in start.split("-"))
+    keys = []
+    for _ in range(count):
+        keys.append(f"{year:04d}-{month:02d}")
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return keys
+
+
 class TestGetLedger:
+    """The ledger pages: newest 12 months by default, older months behind a
+    `before` cursor. A page is whole months — never a month cut in half."""
+
+    def fill(self, client, start, count):
+        """`count` consecutive months of entries for one cash account,
+        oldest first, each month a dollar richer than the last."""
+        cash_id = insert_account("Chase checking", "cash")
+        for index, month in enumerate(month_sequence(start, count)):
+            post_entry(client, cash_id, f"{month}-15", balance_usd=1000 + index)
+        return cash_id
+
     def test_empty_database_returns_no_months(self, client):
         response = client.get("/api/ledger")
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {"months": [], "has_more": False}
 
     def test_groups_balances_by_month_newest_first(self, client):
         eth_id = insert_account("Ethereum", "eth", tax_treatment="LTCG", is_investable=1)
@@ -558,54 +579,57 @@ class TestGetLedger:
         post_entry(client, cash_id, "2026-06-28", balance_usd=9000)
         response = client.get("/api/ledger")
         assert response.status_code == 200
-        assert response.json() == [
-            {
-                "month": "2026-06",
-                "net_worth": 79000,
-                "balances": [
-                    {
-                        "account_id": eth_id,
-                        "as_of_date": "2026-06-28",
-                        "balance_usd": 70000,
-                        "quantity": 20,
-                        "unit_price": 3500,
-                    },
-                    {
-                        "account_id": cash_id,
-                        "as_of_date": "2026-06-28",
-                        "balance_usd": 9000,
-                        "quantity": None,
-                        "unit_price": None,
-                    },
-                ],
-            },
-            {
-                "month": "2026-05",
-                "net_worth": 75000,
-                "balances": [
-                    {
-                        "account_id": eth_id,
-                        "as_of_date": "2026-05-28",
-                        "balance_usd": 68000,
-                        "quantity": 20,
-                        "unit_price": 3400,
-                    },
-                    {
-                        "account_id": cash_id,
-                        "as_of_date": "2026-05-28",
-                        "balance_usd": 7000,
-                        "quantity": None,
-                        "unit_price": None,
-                    },
-                ],
-            },
-        ]
+        assert response.json() == {
+            "months": [
+                {
+                    "month": "2026-06",
+                    "net_worth": 79000,
+                    "balances": [
+                        {
+                            "account_id": eth_id,
+                            "as_of_date": "2026-06-28",
+                            "balance_usd": 70000,
+                            "quantity": 20,
+                            "unit_price": 3500,
+                        },
+                        {
+                            "account_id": cash_id,
+                            "as_of_date": "2026-06-28",
+                            "balance_usd": 9000,
+                            "quantity": None,
+                            "unit_price": None,
+                        },
+                    ],
+                },
+                {
+                    "month": "2026-05",
+                    "net_worth": 75000,
+                    "balances": [
+                        {
+                            "account_id": eth_id,
+                            "as_of_date": "2026-05-28",
+                            "balance_usd": 68000,
+                            "quantity": 20,
+                            "unit_price": 3400,
+                        },
+                        {
+                            "account_id": cash_id,
+                            "as_of_date": "2026-05-28",
+                            "balance_usd": 7000,
+                            "quantity": None,
+                            "unit_price": None,
+                        },
+                    ],
+                },
+            ],
+            "has_more": False,
+        }
 
     def test_latest_entry_in_a_month_wins(self, client):
         cash_id = insert_account("Chase checking", "cash")
         post_entry(client, cash_id, "2026-06-26", balance_usd=8000)
         post_entry(client, cash_id, "2026-06-28", balance_usd=9000)
-        (month,) = client.get("/api/ledger").json()
+        (month,) = client.get("/api/ledger").json()["months"]
         assert month["balances"] == [
             {
                 "account_id": cash_id,
@@ -621,8 +645,63 @@ class TestGetLedger:
         mortgage_id = insert_account("Mortgage", "mortgage", is_liability=1)
         post_entry(client, home_id, "2026-06-28", balance_usd=350000)
         post_entry(client, mortgage_id, "2026-06-28", balance_usd=150000)
-        (month,) = client.get("/api/ledger").json()
+        (month,) = client.get("/api/ledger").json()["months"]
         assert month["net_worth"] == 200000
+
+    def test_returns_the_twelve_newest_months_by_default(self, client):
+        self.fill(client, "2025-05", 14)
+        page = client.get("/api/ledger").json()
+        assert [month["month"] for month in page["months"]] == list(
+            reversed(month_sequence("2025-07", 12))
+        )
+        assert page["has_more"] is True
+        assert page["months"][0]["net_worth"] == 1013
+
+    def test_exactly_twelve_months_reports_no_more(self, client):
+        self.fill(client, "2025-07", 12)
+        page = client.get("/api/ledger").json()
+        assert len(page["months"]) == 12
+        assert page["has_more"] is False
+
+    def test_before_returns_the_next_older_page(self, client):
+        self.fill(client, "2025-05", 14)
+        page = client.get("/api/ledger", params={"before": "2025-07"}).json()
+        assert [month["month"] for month in page["months"]] == ["2025-06", "2025-05"]
+        assert page["has_more"] is False
+        assert page["months"][0]["net_worth"] == 1001
+
+    def test_limit_caps_the_page(self, client):
+        self.fill(client, "2025-05", 14)
+        page = client.get("/api/ledger", params={"limit": 3}).json()
+        assert [month["month"] for month in page["months"]] == [
+            "2026-06",
+            "2026-05",
+            "2026-04",
+        ]
+        assert page["has_more"] is True
+
+    def test_a_page_carries_every_account_of_its_months(self, client):
+        # The page is measured in months, not rows: a limit of 2 must not
+        # cut a month's accounts in half.
+        cash_id = insert_account("Chase checking", "cash")
+        home_id = insert_account("Home", "home")
+        for month in month_sequence("2026-01", 3):
+            post_entry(client, cash_id, f"{month}-15", balance_usd=1000)
+            post_entry(client, home_id, f"{month}-15", balance_usd=350000)
+        page = client.get("/api/ledger", params={"limit": 2}).json()
+        assert [len(month["balances"]) for month in page["months"]] == [2, 2]
+
+    def test_before_the_oldest_month_returns_an_empty_final_page(self, client):
+        self.fill(client, "2025-05", 2)
+        page = client.get("/api/ledger", params={"before": "2025-05"}).json()
+        assert page == {"months": [], "has_more": False}
+
+    def test_malformed_before_is_rejected(self, client):
+        assert client.get("/api/ledger", params={"before": "2026-6"}).status_code == 422
+
+    def test_limit_outside_the_bounds_is_rejected(self, client):
+        assert client.get("/api/ledger", params={"limit": 0}).status_code == 422
+        assert client.get("/api/ledger", params={"limit": 121}).status_code == 422
 
 
 class TestGetNetWorth:

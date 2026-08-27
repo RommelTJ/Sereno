@@ -357,6 +357,16 @@ export const LEDGER = [
   },
 ]
 
+// GET /api/ledger serves one page of months plus the has_more signal.
+// A stub that is not exercising paging sends the whole fixture as a
+// single final page.
+export const ledgerPage = (
+  months: (typeof LEDGER)[number][],
+  has_more = false,
+) => ({ months, has_more })
+
+export const LEDGER_PAGE = ledgerPage(LEDGER)
+
 // Planning config, exactly as the config GETs resolve it: the effective
 // row (latest effective_date on or before today). Values mirror the seed —
 // sanitized handoff placeholders, never real finances.

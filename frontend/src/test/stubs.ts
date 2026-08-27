@@ -42,3 +42,32 @@ export function stubApi(routes: Record<string, unknown>) {
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
 }
+
+/**
+ * Replace setup's no-op IntersectionObserver with one that keeps its
+ * callbacks, so a test can put the observed element on screen without a
+ * layout engine: `const observer = stubIntersectionObserver()` then
+ * `act(() => observer.trigger())`.
+ */
+export function stubIntersectionObserver() {
+  const callbacks: IntersectionObserverCallback[] = []
+  class CapturingIntersectionObserver {
+    constructor(callback: IntersectionObserverCallback) {
+      callbacks.push(callback)
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  vi.stubGlobal('IntersectionObserver', CapturingIntersectionObserver)
+  return {
+    trigger() {
+      for (const callback of callbacks) {
+        callback(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        )
+      }
+    },
+  }
+}
