@@ -252,6 +252,19 @@ describe('Account classification', () => {
       '3',
     )
     expect(within(rows[4]).getByLabelText('Access age')).toHaveValue('59.5')
+    expect(within(rows[4]).getByLabelText('Owner')).toHaveValue('you')
+  })
+
+  it('offers the HSA withdrawal tier', async () => {
+    render(<Settings />)
+    const rows = await screen.findAllByTestId('settings-asset-row')
+
+    fireEvent.click(within(rows[4]).getByRole('button', { name: 'Edit' }))
+
+    const priority = within(rows[4]).getByLabelText('Withdrawal priority')
+    expect(
+      Array.from(priority.querySelectorAll('option')).map((o) => o.textContent),
+    ).toEqual(['—', '1 — ETH', '2 — Brokerage', '3 — 401(k)', '4 — HSA'])
   })
 
   it('classifies an account via PUT and closes the edit', async () => {
@@ -284,6 +297,9 @@ describe('Account classification', () => {
     fireEvent.change(within(row).getByLabelText('Withdrawal priority'), {
       target: { value: '2' },
     })
+    fireEvent.change(within(row).getByLabelText('Owner'), {
+      target: { value: 'spouse' },
+    })
 
     const classified = {
       ...robinhood,
@@ -303,6 +319,7 @@ describe('Account classification', () => {
         is_investable: true,
         withdrawal_priority: 2,
         access_age: null,
+        owner: 'spouse',
       }),
     )
     await waitFor(() =>

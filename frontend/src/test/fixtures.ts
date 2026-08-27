@@ -14,6 +14,7 @@ const account = (
     is_investable: boolean
     withdrawal_priority: number | null
     access_age: number | null
+    owner: string | null
     active: boolean
   }> = {},
 ) => ({
@@ -45,6 +46,7 @@ export const ACCOUNTS = [
   account(5, 'Retirement', '401k', '🏖️', {
     ...investable(3, 'ORDINARY'),
     access_age: 59.5,
+    owner: 'you',
   }),
   account(6, 'Home', 'home', '🏠'),
   account(7, 'Chase checking', 'cash', '💵'),
