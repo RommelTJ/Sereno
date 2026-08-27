@@ -42,22 +42,63 @@ export interface SliderBounds {
 // Bounds derive from the band edges — half the raise-edge spend up to
 // 1.5× the cut-edge spend — so the slider can always reach both rails,
 // whatever the portfolio and plan sizes are. Widened to the annual
-// target when it falls outside, and never below one step.
+// target and the resolved spend when either falls outside — trailing
+// actuals can land anywhere — and never below one step.
 export function sliderBounds(guardrails: {
   lower: number
   upper: number
   investable: number
   annual_target: number
+  spend: number
 }): SliderBounds {
   const step = 1_000
-  const { lower, upper, investable, annual_target } = guardrails
+  const { lower, upper, investable, annual_target, spend } = guardrails
   const min = Math.floor((0.5 * lower * investable) / step) * step
   const max = Math.ceil((1.5 * upper * investable) / step) * step
+  const floor = Math.floor(Math.min(annual_target, spend) / step) * step
+  const ceiling = Math.ceil(Math.max(annual_target, spend) / step) * step
   return {
-    min: Math.max(step, Math.min(min, Math.floor(annual_target / step) * step)),
-    max: Math.max(max, Math.ceil(annual_target / step) * step),
+    min: Math.max(step, Math.min(min, floor)),
+    max: Math.max(max, ceiling),
     step,
   }
+}
+
+export interface SpendBasis {
+  label: string
+  note: string | null
+}
+
+// The KPI label and history note for the resolved spend. The target
+// fallback always names how much history exists — a short window must
+// never be dressed up as a year of data.
+export function spendBasisCopy(guardrails: {
+  spend_source: 'actual' | 'target' | 'what_if'
+  spend_months: number
+}): SpendBasis {
+  if (guardrails.spend_source === 'actual') {
+    return { label: 'Trailing 12-mo spend', note: 'actual spending, last 12 months' }
+  }
+  if (guardrails.spend_source === 'target') {
+    return {
+      label: 'Planned spend',
+      note: `${guardrails.spend_months} of 12 months of spending history`,
+    }
+  }
+  return { label: 'What-if spend', note: null }
+}
+
+// Before drawdown_start — or while none is set — the zone reports where
+// you'd land, not a live Guyton-Klinger trigger. ISO dates compare
+// lexicographically.
+export function isReadiness(drawdownStart: string | null, today: string): boolean {
+  return drawdownStart === null || drawdownStart > today
+}
+
+export function drawdownStatus(drawdownStart: string | null, today: string): string {
+  return isReadiness(drawdownStart, today)
+    ? "Readiness — drawdown hasn't started"
+    : `Live — drawdown since ${drawdownStart}`
 }
 
 export interface ZoneCopy {

@@ -420,13 +420,17 @@ export const MORTGAGE = {
   },
 }
 
-// GET /api/guardrails evaluated at the plan's annual target: June's
-// 1.5M investable at $45,000/yr is a 3.00% rate, inside the ±20% band
-// around the 2.94% anchor.
+// GET /api/guardrails evaluated at the plan's annual target — the
+// bootstrap state, with under a year of spending history and no
+// drawdown scheduled: June's 1.5M investable at $45,000/yr is a 3.00%
+// rate, inside the ±20% band around the 2.94% anchor.
 export const GUARDRAILS = {
   investable: 1_500_000,
   spend: 45_000,
   annual_target: 45_000,
+  spend_source: 'target',
+  spend_months: 2,
+  drawdown_start: null,
   rate: 0.03,
   initial_rate: 0.0294,
   band: 0.2,

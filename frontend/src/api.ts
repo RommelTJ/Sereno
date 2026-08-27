@@ -187,6 +187,9 @@ export interface SpendPlan {
   annual_target: number
   initial_rate: number | null
   guardrail_band: number
+  // The effective-dated moment real drawdown begins, set once — null
+  // until it is scheduled; usually staged years ahead of the date.
+  drawdown_start: string | null
 }
 
 // GET /api/spend-bands: the saved age-banded spend schedule — the
@@ -236,13 +239,21 @@ export interface Mortgage {
 }
 
 // GET /api/guardrails: the Guyton-Klinger engine evaluated at ?spend=
-// (default: the plan's annual target) against the latest month's
-// investable total. Null until a spend plan with an initial rate and a
-// balance month exist.
+// against the latest month's investable total. The default spend is the
+// trailing twelve complete months of actual spending once that much
+// history exists (spend_source 'actual'), the plan's annual target
+// until then ('target') — spend_months says how much history backs the
+// figure — and a ?spend= what-if reports 'what_if'. Before
+// drawdown_start (or while it is null) the zone is a readiness metric,
+// not a live trigger. Null until a spend plan with an initial rate and
+// a balance month exist.
 export interface Guardrails {
   investable: number
   spend: number
   annual_target: number
+  spend_source: 'actual' | 'target' | 'what_if'
+  spend_months: number
+  drawdown_start: string | null
   rate: number
   initial_rate: number
   band: number
@@ -571,6 +582,7 @@ export interface SpendPlanInput {
   annual_target: number
   initial_rate?: number
   guardrail_band?: number
+  drawdown_start?: string
 }
 
 // A spend band as the screens hold it. The note never travels in
