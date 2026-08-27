@@ -60,7 +60,8 @@ class AccountClassification(BaseModel):
     """The planner-facing dimensions of an account: is_investable feeds the
     guardrails portfolio, withdrawal_priority orders the sourcing and
     forecast waterfall (1 ETH, 2 brokerage, 3 401(k), 4 HSA), and
-    access_age gates a bucket until its owner reaches that age."""
+    access_age gates a bucket until its owner reaches that age — whose
+    account it is decides which age that gate is read against."""
 
     kind: Literal[
         "eth",
@@ -79,6 +80,7 @@ class AccountClassification(BaseModel):
     is_investable: bool
     withdrawal_priority: Annotated[int, Field(ge=1, le=4)] | None
     access_age: Annotated[float, Field(ge=0)] | None
+    owner: Literal["you", "spouse", "joint"] | None = None
 
 
 def _account(db: sqlite3.Connection, account_id: int | None) -> Account:
@@ -232,13 +234,14 @@ def update_account(account_id: int, classification: AccountClassification, db: D
         )
     db.execute(
         "UPDATE account SET kind = ?, tax_treatment = ?, is_investable = ?,"
-        " withdrawal_priority = ?, access_age = ? WHERE id = ?",
+        " withdrawal_priority = ?, access_age = ?, owner = ? WHERE id = ?",
         (
             classification.kind,
             classification.tax_treatment,
             classification.is_investable,
             classification.withdrawal_priority,
             classification.access_age,
+            classification.owner,
             account_id,
         ),
     )
