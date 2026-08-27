@@ -44,7 +44,13 @@ Spend = Annotated[float | None, Query(gt=0)]
 
 Age = Annotated[float | None, Query(ge=0)]
 
+# The withdrawal tiers, in waterfall order. They double as the
+# forecast chart's bands, which is why they are named here rather than
+# left as bare integers at the call sites.
 ETH_PRIORITY = 1
+BROKERAGE_PRIORITY = 2
+RETIREMENT_PRIORITY = 3
+HSA_PRIORITY = 4
 
 # Deliberately sanitized — the repo is public, so neither of these is a
 # real birthday. They anchor the planners' derived ages; no birthdate
@@ -229,7 +235,11 @@ def _bucket_names(keys: list[_BucketKey]) -> dict[_BucketKey, str]:
     return names
 
 
-def load_buckets(db: sqlite3.Connection) -> list[Bucket]:
+def load_tiered_buckets(db: sqlite3.Connection) -> list[tuple[int, Bucket]]:
+    """Each bucket beside the withdrawal tier it came from. The engine
+    has no use for the tier — it draws in the order given — but the
+    forecast's chart bands are per tier, and a tier can now split into
+    more than one bucket."""
     totals: dict[_BucketKey, tuple[float, float]] = {}
     for row in db.execute(_LATEST_BALANCES):
         key = _bucket_key(row)
@@ -247,17 +257,24 @@ def load_buckets(db: sqlite3.Connection) -> list[Bucket]:
     keys = sorted(totals, key=lambda key: _bucket_order(key, offset_for(key)))
     names = _bucket_names(keys)
     return [
-        Bucket(
-            name=names[key],
-            balance=totals[key][0],
-            basis=totals[key][1],
-            treatment=key.treatment,
-            access_age=key.access_age,
-            age_offset=offset_for(key),
-            headroom_only=key.priority == ETH_PRIORITY,
+        (
+            key.priority,
+            Bucket(
+                name=names[key],
+                balance=totals[key][0],
+                basis=totals[key][1],
+                treatment=key.treatment,
+                access_age=key.access_age,
+                age_offset=offset_for(key),
+                headroom_only=key.priority == ETH_PRIORITY,
+            ),
         )
         for key in keys
     ]
+
+
+def load_buckets(db: sqlite3.Connection) -> list[Bucket]:
+    return [bucket for _, bucket in load_tiered_buckets(db)]
 
 
 @router.get("/sourcing")
