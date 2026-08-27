@@ -5,7 +5,9 @@ its newest balance row from any month — unlike guardrails'
 latest-month total, a bucket last updated months ago still sources
 withdrawals — and its basis from open tax lots, falling back to that
 balance row's cost_basis, then to zero (all gain, the conservative
-read). ?age= defaults to the current age derived from the sanitized
+read). Each account's tax_treatment maps to how the engine prices the
+bucket — ordinary income, capital gains, or tax-free — with LTCG the
+fallback for anything unrecognised. ?age= defaults to the current age derived from the sanitized
 BIRTHDATE constant (no birthdate lives in the schema) and evaluates a
 what-if age;
 ?spend= tests a what-if level and stands in for a missing spend plan.
@@ -26,6 +28,7 @@ from sereno.engine.sourcing import (
     STAKING_MIN_ETH_BALANCE,
     Bracket,
     Bucket,
+    BucketTreatment,
     source_withdrawals,
 )
 from sereno.money import to_dollars
@@ -46,6 +49,16 @@ ETH_PRIORITY = 1
 BIRTHDATE = date(1988, 1, 1)
 
 _PRIORITY_LABELS = {1: "ETH", 2: "Brokerage", 3: "401(k)"}
+
+# The account dimension's tax_treatment mapped onto what the engine can
+# price. LTCG is the fallback rather than a fourth branch: NONE — and
+# anything unrecognised — on an account someone gave a withdrawal
+# priority is a taxable holding, which is the conservative read.
+_BUCKET_TREATMENTS: dict[str, BucketTreatment] = {
+    "LTCG": "LTCG",
+    "ORDINARY": "ORDINARY",
+    "TAX_FREE": "TAX_FREE",
+}
 
 _LATEST_BALANCES = """
     SELECT a.withdrawal_priority AS priority, a.tax_treatment, a.access_age,
@@ -124,7 +137,7 @@ def load_buckets(db: sqlite3.Connection) -> list[Bucket]:
             name=_PRIORITY_LABELS.get(priority, f"Priority {priority}"),
             balance=(existing.balance if existing else 0.0) + to_dollars(row["balance_usd"]),
             basis=(existing.basis if existing else 0.0) + basis,
-            treatment="ORDINARY" if row["tax_treatment"] == "ORDINARY" else "LTCG",
+            treatment=_BUCKET_TREATMENTS.get(row["tax_treatment"], "LTCG"),
             access_age=row["access_age"] if existing is None else existing.access_age,
             headroom_only=priority == ETH_PRIORITY,
         )
