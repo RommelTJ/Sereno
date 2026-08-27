@@ -171,6 +171,7 @@ class Forecast(BaseModel):
     ss_spouse: float
     ss_start: float
     tax_year: int
+    first_unlock_age: float | None
     bands: list[BandOut]
     purchases: list[PurchaseOut]
     series: list[ForecastPointOut]
@@ -180,6 +181,16 @@ class Forecast(BaseModel):
     baseline: BaselineOut
     purchase_costs: list[PurchaseCostRow]
     sensitivity: list[SensitivityRow]
+
+
+def _first_unlock_age(buckets: list[Bucket]) -> float | None:
+    """When the earliest locked bucket opens, measured on the caller's
+    own age axis: a younger owner's gate lands later there than the age
+    she will actually be. None when nothing is gated."""
+    gates = [
+        bucket.access_age - bucket.age_offset for bucket in buckets if bucket.access_age is not None
+    ]
+    return min(gates) if gates else None
 
 
 def _series(result: ForecastResult, tiers: list[int]) -> list[ForecastPointOut]:
@@ -526,6 +537,7 @@ def get_forecast(
         ss_spouse=inputs.ss_spouse,
         ss_start=inputs.ss_start,
         tax_year=inputs.tax_year,
+        first_unlock_age=_first_unlock_age(inputs.buckets),
         bands=bands,
         purchases=purchases,
         series=_series(result, tiers),
