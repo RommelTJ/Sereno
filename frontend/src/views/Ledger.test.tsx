@@ -323,6 +323,15 @@ describe('Responsive layout', () => {
     )
   })
 
+  it('gives the table the extra width beside a fixed form column on wide screens', async () => {
+    render(<Ledger />)
+    await screen.findAllByTestId('ledger-row')
+
+    expect(screen.getByTestId('view-ledger')).toHaveClass(
+      '2xl:grid-cols-[1fr_440px]',
+    )
+  })
+
   it('stacks the ETH quantity and price grid on narrow screens', async () => {
     render(<Ledger />)
 
