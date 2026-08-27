@@ -12,6 +12,7 @@ import {
   LEDGER,
   LEDGER_PAGE,
   QUICK_LINKS,
+  UNCLASSIFIED_ACCOUNTS,
   balance,
   ledgerPage,
 } from '../test/fixtures.ts'
@@ -40,6 +41,7 @@ describe('Ledger monthly balance table', () => {
       'VFIAX',
       'VTIAX',
       'VGSH',
+      'Brokerage',
       'Retirement',
       'Home',
       'Chase checking',
@@ -48,6 +50,28 @@ describe('Ledger monthly balance table', () => {
       'Mortgage',
       'Net worth',
     ])
+  })
+
+  it('sums the three brokerage funds into the subtotal cell', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('$1,080,000.00')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('$1,064,000.00')).toBeInTheDocument()
+  })
+
+  it('gives a fresh install no subtotal column', async () => {
+    stubApi({
+      '/api/accounts': UNCLASSIFIED_ACCOUNTS,
+      '/api/ledger': LEDGER_PAGE,
+      '/api/quick-links': [],
+    })
+    render(<Ledger />)
+
+    await screen.findByRole('table')
+    expect(
+      screen.queryByRole('columnheader', { name: 'Brokerage' }),
+    ).not.toBeInTheDocument()
   })
 
   it('gives an inactive account no column', async () => {

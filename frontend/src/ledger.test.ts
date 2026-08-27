@@ -5,8 +5,21 @@
 // sign outside the dollar sign: "-$1,234.56".
 
 import { describe, expect, it } from 'vitest'
-import { draftFor, formatAmount, formatQty, formatUsd } from './ledger.ts'
-import { ACCOUNTS, LEDGER, balance } from './test/fixtures.ts'
+import type { LedgerColumn } from './ledger.ts'
+import {
+  draftFor,
+  formatAmount,
+  formatQty,
+  formatUsd,
+  ledgerRows,
+  ledgerTableColumns,
+} from './ledger.ts'
+import {
+  ACCOUNTS,
+  LEDGER,
+  UNCLASSIFIED_ACCOUNTS,
+  balance,
+} from './test/fixtures.ts'
 
 describe('formatUsd', () => {
   it('shows exact cents', () => {
@@ -74,5 +87,66 @@ describe('draftFor', () => {
       },
     ]
     expect(draftFor(eth, months, ACCOUNTS).qty).toBe('12.34560')
+  })
+})
+
+// The table's columns: one per active account, plus the brokerage
+// subtotal derived from the three funds. Its members come from the
+// kind, never the fund names, so a fourth fund joins on its own.
+const label = (column: LedgerColumn) =>
+  column.kind === 'account' ? column.account.name : column.label
+
+describe('ledgerTableColumns', () => {
+  it('adds a Brokerage subtotal directly after the last brokerage fund', () => {
+    expect(ledgerTableColumns(ACCOUNTS).map(label)).toEqual([
+      'Ethereum',
+      'VFIAX',
+      'VTIAX',
+      'VGSH',
+      'Brokerage',
+      'Retirement',
+      'Home',
+      'Chase checking',
+      'Vanguard Cash Plus',
+      'Car',
+      'Mortgage',
+    ])
+  })
+
+  it('takes its members from the kind, so a fourth fund joins it', () => {
+    const vbtlx = { ...ACCOUNTS[1], id: 11, name: 'VBTLX' }
+    const columns = ledgerTableColumns([
+      ...ACCOUNTS.slice(0, 4),
+      vbtlx,
+      ...ACCOUNTS.slice(4),
+    ])
+    const subtotal = columns.find((column) => column.kind === 'subtotal')
+
+    expect(columns.map(label).indexOf('Brokerage')).toBe(5)
+    expect(subtotal?.kind === 'subtotal' && subtotal.accountIds).toEqual([
+      2, 3, 4, 11,
+    ])
+  })
+
+  it('subtotals a lone brokerage fund', () => {
+    const columns = ledgerTableColumns([ACCOUNTS[1], ACCOUNTS[6]])
+    expect(columns.map(label)).toEqual(['VFIAX', 'Brokerage', 'Chase checking'])
+  })
+
+  it('gives a fresh install no subtotal column', () => {
+    expect(ledgerTableColumns(UNCLASSIFIED_ACCOUNTS).map(label)).not.toContain(
+      'Brokerage',
+    )
+  })
+})
+
+describe('ledgerRows', () => {
+  const columns = ledgerTableColumns(ACCOUNTS)
+  const subtotal = columns.findIndex((column) => column.kind === 'subtotal')
+
+  it('sums the brokerage funds into the subtotal column', () => {
+    const rows = ledgerRows(LEDGER, columns)
+    expect(rows[0].values[subtotal]).toBe(1_080_000)
+    expect(rows[1].values[subtotal]).toBe(1_064_000)
   })
 })
