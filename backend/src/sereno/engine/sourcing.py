@@ -154,17 +154,21 @@ def source_withdrawals(
     ordinary_running = ordinary_income
     draws: list[BucketDraw] = []
     for bucket in buckets:
-        if bucket.treatment == "LTCG":
-            draw, remaining_headroom = _draw_ltcg(bucket, remaining, remaining_headroom)
-        elif bucket.access_age is not None and age < bucket.access_age:
+        if bucket.access_age is not None and age < bucket.access_age:
+            # The gate belongs to the bucket, not to its tax treatment:
+            # a Roth or an HSA locks the way a traditional 401(k) does.
+            # A locked bucket sells nothing, so it also spends none of
+            # the headroom the buckets behind it inherit.
             draw = BucketDraw(
                 name=bucket.name,
-                treatment="ORDINARY",
+                treatment=bucket.treatment,
                 gross=0.0,
                 tax=0.0,
                 net=0.0,
                 note=f"locked until age {bucket.access_age:g}",
             )
+        elif bucket.treatment == "LTCG":
+            draw, remaining_headroom = _draw_ltcg(bucket, remaining, remaining_headroom)
         else:
             gross, tax = _gross_up_ordinary(
                 remaining, bucket.balance, ordinary_running, std_deduction, ordinary_brackets
