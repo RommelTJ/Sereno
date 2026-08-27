@@ -103,6 +103,9 @@ class SourcingStep(BaseModel):
     tax: float
     net: float
     note: str | None
+    # The owner's own gate age, not one shifted onto the caller's axis:
+    # the screens name it the way its owner would.
+    access_age: float | None
 
 
 class Sourcing(BaseModel):
@@ -312,8 +315,9 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
                 tax=draw.tax,
                 net=draw.net,
                 note=draw.note,
+                access_age=bucket.access_age,
             )
-            for draw in result.draws
+            for bucket, draw in zip(buckets, result.draws, strict=True)
         ],
         net_delivered=result.net_delivered,
         shortfall=result.shortfall,
