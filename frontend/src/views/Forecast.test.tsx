@@ -120,7 +120,7 @@ describe('bridge card', () => {
     render(<Forecast />)
 
     const bridge = await screen.findByTestId('forecast-bridge')
-    expect(bridge).toHaveTextContent('21.5 yrs')
+    expect(bridge).toHaveTextContent('22 yrs')
     expect(bridge).toHaveTextContent('22+ yrs')
   })
 
@@ -188,7 +188,7 @@ describe('bridge card', () => {
     render(<Forecast />)
 
     const bridge = await screen.findByTestId('forecast-bridge')
-    expect(bridge).toHaveTextContent('Need to cover 19.5 yrs')
+    expect(bridge).toHaveTextContent('Need to cover 20 yrs')
     expect(screen.getByTestId('forecast-chart')).toHaveTextContent('age 40 → 100')
   })
 })

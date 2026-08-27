@@ -36,7 +36,7 @@ import {
 } from '../forecast.ts'
 import { formatSignedUsd } from '../budgetReport.ts'
 import { formatUsd } from '../ledger.ts'
-import { hasWithdrawalBuckets } from '../sourcing.ts'
+import { formatGateAge, hasWithdrawalBuckets } from '../sourcing.ts'
 
 function BandRow({
   index,
@@ -704,7 +704,11 @@ function Forecast() {
 
   const outcome = verdict(forecast.run_out_age)
   const delta = verdictDelta(forecast)
-  const bridge = bridgeCopy(forecast.series, forecast.start_age, 59.5)
+  // Null means nothing in the portfolio is gated, so there is no
+  // bridge to cross and the card has nothing to say.
+  const gateAge = forecast.first_unlock_age
+  const bridge =
+    gateAge == null ? null : bridgeCopy(forecast.series, forecast.start_age, gateAge)
   const columns = chartColumns(forecast.series, {
     baseline: forecast.baseline.series,
     purchases: forecast.purchases,
@@ -759,18 +763,24 @@ function Forecast() {
             </p>
           )}
         </div>
-        <div
-          data-testid="forecast-bridge"
-          className="flex flex-col justify-center rounded-card border border-card-border bg-card p-6"
-        >
-          <p className="text-[11px] font-semibold text-muted-2">BRIDGE TO 401(k) @ 59½</p>
-          <p className="mt-[7px] text-[13.5px]">
-            Need to cover <b>{59.5 - forecast.start_age} yrs</b>
-          </p>
-          <p className={`text-[13.5px] ${bridge.ok ? 'text-accent' : 'text-red'}`}>
-            Taxable buckets last <b>{bridge.years}</b> {bridge.ok ? '✓' : '⚠'}
-          </p>
-        </div>
+        {bridge != null && gateAge != null && (
+          <div
+            data-testid="forecast-bridge"
+            className="flex flex-col justify-center rounded-card border border-card-border bg-card p-6"
+          >
+            <p className="text-[11px] font-semibold text-muted-2">
+              BRIDGE TO 401(k) @ {formatGateAge(gateAge)}
+            </p>
+            {/* Rounded up, so the years to cover never understate the
+                bridge and agree with the years the buckets last. */}
+            <p className="mt-[7px] text-[13.5px]">
+              Need to cover <b>{Math.ceil(gateAge - forecast.start_age)} yrs</b>
+            </p>
+            <p className={`text-[13.5px] ${bridge.ok ? 'text-accent' : 'text-red'}`}>
+              Taxable buckets last <b>{bridge.years}</b> {bridge.ok ? '✓' : '⚠'}
+            </p>
+          </div>
+        )}
       </div>
 
       <div
@@ -819,7 +829,12 @@ function Forecast() {
         <div className="mt-3.5 flex gap-[18px] text-[11.5px] text-[#5b6058]">
           <LegendSwatch color="bg-accent" label="ETH (first)" />
           <LegendSwatch color="bg-sidebar" label="Taxable brokerage" />
-          <LegendSwatch color="bg-amber" label="401(k) · locked to 59½" />
+          <LegendSwatch
+            color="bg-amber"
+            label={
+              gateAge == null ? '401(k)' : `401(k) · locked to ${formatGateAge(gateAge)}`
+            }
+          />
           <LegendSwatch color="bg-hsa" label="HSA · drawn last" />
           <LegendSwatch
             color="bg-ss-blue"

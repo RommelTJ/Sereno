@@ -17,6 +17,13 @@ export function hasWithdrawalBuckets(accounts: Account[]): boolean {
   )
 }
 
+// Gate ages read the way people say them: 59.5 is "59½", 65 is "65".
+// Only the half is spelled — no other fraction is a real access age.
+export function formatGateAge(age: number): string {
+  const whole = Math.floor(age)
+  return age - whole === 0.5 ? `${whole}½` : String(age)
+}
+
 const MARKERS = ['①', '②', '③']
 
 export function stepMarker(index: number): string {
