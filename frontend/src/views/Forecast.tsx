@@ -670,12 +670,12 @@ function Forecast() {
   }
 
   if (forecast === undefined || accounts === undefined || savedBands === undefined) {
-    return <div data-testid="view-forecast" className="max-w-[1000px]" />
+    return <div data-testid="view-forecast" className="max-w-[1000px] xl:max-w-none" />
   }
 
   if (forecast === null) {
     return (
-      <div data-testid="view-forecast" className="max-w-[1000px]">
+      <div data-testid="view-forecast" className="max-w-[1000px] xl:max-w-none">
         <div
           data-testid="forecast-empty"
           className="rounded-card border border-card-border bg-card p-[26px] text-[13.5px] text-muted"
@@ -726,7 +726,7 @@ function Forecast() {
   const ssAnnual = (ssYou + ssSpouse) * 12
 
   return (
-    <div data-testid="view-forecast" className="max-w-[1000px]">
+    <div data-testid="view-forecast" className="max-w-[1000px] xl:max-w-none">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div
           data-testid="forecast-verdict"
