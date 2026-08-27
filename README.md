@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.8.0**
+**v3.9.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -1081,6 +1081,23 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.9.0 — The layout uses ultra-wide displays. Every route was capped
+at 1180px and the responsive ladder stopped at `lg:`, so a 3440px
+monitor rendered the same layout as a 1024px laptop and left ~2,000px
+of empty page while the Ledger's table scrolled horizontally inside
+~714px (issue #131). The shell now widens where the viewport can
+supply the width — 1500px at `xl`, 1800px at `2xl`, 2200px at a new
+`3xl` breakpoint (120rem) in the theme — while the design handoff's
+1180px baseline stays exactly as specified below ~1500px viewports.
+Two views ride the new room: the Ledger re-splits at `2xl` to pin the
+balance-form column at its designed 440px so the table absorbs every
+further pixel (no horizontal scroll at typical account counts), and
+the Forecast sheds its own 1000px cap above `xl` so the year-bar
+chart gets ~33px per year instead of ~15px. Prose- and form-heavy
+views (Settings, Funds, Guardrails, Mortgage, Withdrawals) keep their
+designed measure on purpose — stretching a form to 2200px hurts
+readability. Frontend-only: no API change.
 
 v3.8.0 — The Ledger stops growing without a ceiling. Nothing in the
 ledger path was bounded: `GET /api/ledger` selected every row of
