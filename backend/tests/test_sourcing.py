@@ -345,3 +345,36 @@ class TestAccessGate:
         assert result.draws[1].gross == pytest.approx(37_000)
         assert result.draws[1].tax == 0
         assert result.shortfall == 0
+
+
+def tax_free(balance=500_000.0, access_age=None):
+    return Bucket(
+        name="HSA", balance=balance, basis=0.0, treatment="TAX_FREE", access_age=access_age
+    )
+
+
+class TestTaxFreeStep:
+    """A Roth or an HSA spent on qualified expenses comes out whole:
+    no gain to realize, and nothing to stack on ordinary income."""
+
+    def test_the_draw_is_delivered_untaxed(self):
+        result = run(age=70, buckets=[tax_free()], ordinary_brackets=BRACKETS)
+        draw = result.draws[0]
+        assert draw.treatment == "TAX_FREE"
+        assert draw.gross == pytest.approx(37_000)
+        assert draw.tax == 0
+        assert draw.net == pytest.approx(37_000)
+        assert result.shortfall == 0
+
+    def test_the_balance_caps_the_draw(self):
+        result = run(age=70, buckets=[tax_free(balance=10_000)], ordinary_brackets=BRACKETS)
+        assert result.draws[0].gross == pytest.approx(10_000)
+        assert result.shortfall == pytest.approx(27_000)
+
+    def test_it_spends_none_of_the_capital_gains_headroom(self):
+        # 20,000 comes out tax-free; the brokerage behind it still meets
+        # the whole 0% headroom rather than one the draw ate into.
+        result = run(age=70, buckets=[tax_free(balance=20_000), brokerage()])
+        assert result.draws[0].net == pytest.approx(20_000)
+        assert result.draws[1].gross == pytest.approx(17_000)
+        assert result.draws[1].tax == 0
