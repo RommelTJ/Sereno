@@ -36,12 +36,26 @@ def execute(sql, params):
         conn.close()
 
 
-def insert_spend_plan(annual_target=45000, initial_rate=0.0294, guardrail_band=0.20):
+def insert_spend_plan(
+    annual_target=45000, initial_rate=0.0294, guardrail_band=0.20, drawdown_start=None
+):
     return execute(
-        "INSERT INTO spend_plan (effective_date, annual_target, initial_rate, guardrail_band)"
-        " VALUES (?, ?, ?, ?)",
-        (TODAY.isoformat(), annual_target, initial_rate, guardrail_band),
+        "INSERT INTO spend_plan"
+        " (effective_date, annual_target, initial_rate, guardrail_band, drawdown_start)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (TODAY.isoformat(), annual_target, initial_rate, guardrail_band, drawdown_start),
     )
+
+
+def fetch_plans():
+    conn = connect()
+    try:
+        return conn.execute(
+            "SELECT effective_date, annual_target, initial_rate, guardrail_band,"
+            " drawdown_start, initial_rate_stamped FROM spend_plan ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
 
 
 def insert_account(name, kind, *, is_investable=0):
@@ -235,3 +249,97 @@ class TestTrailingSpend:
         body = client.get("/api/guardrails").json()
         assert body["spend_source"] == "target"
         assert body["spend_months"] == 0
+
+
+FIRST_OF_MONTH = TODAY.replace(day=1).isoformat()
+
+
+class TestInitialRateStamp:
+    """Once drawdown_start arrives, the first guardrails read appends a
+    stamped spend_plan row whose initial_rate is the actual rate as of
+    that date — the anchor captured from reality at the moment it starts
+    functioning as one, replacing the hand-set constant. Set once: the
+    stamp never repeats and a later hand revision stands."""
+
+    def test_the_first_read_after_drawdown_begins_stamps_the_anchor(self, client):
+        seed_portfolio()
+        insert_spend_plan(initial_rate=0.05, drawdown_start=FIRST_OF_MONTH)
+        for months_back in range(1, 13):
+            insert_expense(3000, month_str(months_back))
+        body = client.get("/api/guardrails").json()
+        stamped_rate = 36000 / 1_500_000
+        assert body["initial_rate"] == stamped_rate
+        assert body["lower"] == stamped_rate * 0.80
+        assert body["upper"] == stamped_rate * 1.20
+        original, stamp = fetch_plans()
+        assert original["initial_rate_stamped"] == 0
+        # The stamp lands effective the day it is observed — the rate is
+        # as of drawdown_start, but backdating the row would leave it
+        # shadowed by the plan row that scheduled the drawdown.
+        assert stamp["effective_date"] == TODAY.isoformat()
+        assert stamp["initial_rate"] == stamped_rate
+        assert stamp["initial_rate_stamped"] == 1
+        assert stamp["annual_target"] == 45000
+        assert stamp["guardrail_band"] == 0.20
+        assert stamp["drawdown_start"] == FIRST_OF_MONTH
+
+    def test_the_stamp_lands_once(self, client):
+        seed_portfolio()
+        insert_spend_plan(drawdown_start=FIRST_OF_MONTH)
+        for months_back in range(1, 13):
+            insert_expense(3000, month_str(months_back))
+        client.get("/api/guardrails")
+        client.get("/api/guardrails")
+        assert len(fetch_plans()) == 2
+
+    def test_a_future_drawdown_start_stamps_nothing(self, client):
+        seed_portfolio()
+        future = f"{month_str(-2)}-01"
+        insert_spend_plan(drawdown_start=future)
+        body = client.get("/api/guardrails").json()
+        assert body["initial_rate"] == 0.0294
+        assert body["drawdown_start"] == future
+        assert len(fetch_plans()) == 1
+
+    def test_a_later_hand_revision_never_restamps(self, client):
+        seed_portfolio()
+        insert_spend_plan(drawdown_start=FIRST_OF_MONTH)
+        for months_back in range(1, 13):
+            insert_expense(3000, month_str(months_back))
+        client.get("/api/guardrails")
+        insert_spend_plan(initial_rate=0.05, drawdown_start=FIRST_OF_MONTH)
+        body = client.get("/api/guardrails").json()
+        assert body["initial_rate"] == 0.05
+        assert len(fetch_plans()) == 3
+
+    def test_a_short_history_stamps_from_the_target(self, client):
+        seed_portfolio()
+        insert_spend_plan(annual_target=45000, initial_rate=0.05, drawdown_start=FIRST_OF_MONTH)
+        insert_expense(3000, month_str(1))
+        body = client.get("/api/guardrails").json()
+        assert body["initial_rate"] == 45000 / 1_500_000
+
+    def test_the_stamp_reads_actuals_as_of_the_drawdown_date(self, client):
+        # Drawdown began last month; the stamp reads the window and the
+        # portfolio as of that date, so the anchor comes out the same
+        # however late the server first looks. Last month's 9,000 spend
+        # and today's higher balance stay out of the stamped rate.
+        account = insert_account("Brokerage", "fund", is_investable=1)
+        insert_balance(account, 1_000_000, f"{month_str(2)}-15")
+        insert_balance(account, 1_500_000)
+        insert_spend_plan(initial_rate=0.05, drawdown_start=f"{month_str(1)}-01")
+        for months_back in range(2, 14):
+            insert_expense(3000, month_str(months_back))
+        insert_expense(9000, month_str(1))
+        body = client.get("/api/guardrails").json()
+        assert body["initial_rate"] == 36000 / 1_000_000
+
+    def test_the_stamp_waits_for_balances_as_of_drawdown(self, client):
+        # Every balance postdates the drawdown month, so there is no
+        # portfolio to anchor against yet: the hand-set rate stands and
+        # nothing is appended.
+        seed_portfolio()
+        insert_spend_plan(drawdown_start=f"{month_str(1)}-01")
+        body = client.get("/api/guardrails").json()
+        assert body["initial_rate"] == 0.0294
+        assert len(fetch_plans()) == 1
