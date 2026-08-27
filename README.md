@@ -31,8 +31,12 @@ whole thing in plain SQL.
 ### Plan
 
 - **Spending guardrails** — Guyton-Klinger withdrawal-rate bands (Cut / Hold / Raise)
-  around your at-retirement anchor rate, with a live spend slider and explicit
-  raise/cut trigger portfolios.
+  around your at-retirement anchor rate, measured against the trailing year of
+  *actual* spending once a year of history exists (the planned target stands in
+  until then, labeled), with a live spend slider and explicit raise/cut trigger
+  portfolios. A drawdown-start date turns the zone from a readiness check into
+  a live control and stamps the anchor rate from actuals the moment real
+  drawdown begins.
 - **Withdrawal sourcing** — a tax-aware sequencing waterfall: fill the spending gap from
   ETH first inside the 0% long-term-capital-gains headroom, then taxable brokerage, then
   401(k) after 59½. Solves for *net spendable*, not a naive 4%-per-bucket draw.
@@ -440,7 +444,10 @@ The config slice (the one input source for the Plan engines):
   `ordinary_brackets` parsed into typed `{rate, upto}` pairs.
 - `POST /api/assumptions` / `/api/spend-plan` / `/api/social-security` —
   appends a new effective-dated row; config rows are never updated, so
-  every raise, cut, and revised estimate stays queryable history.
+  every raise, cut, and revised estimate stays queryable history. The
+  spend plan also carries an optional `drawdown_start` — the date real
+  drawdown begins, set once and usually staged ahead, which gates the
+  guardrails' readiness-vs-live status and the initial-rate stamp.
 - `POST /api/tax-params` — loads a new tax year (a duplicate year is a
   409). `PUT /api/tax-params/{year}` revises that year in place —
   `tax_param` is keyed by year, the one config table that replaces
@@ -496,8 +503,31 @@ The guardrails slice (the first Plan engine):
   upper rail, `raise` below the lower, else `hold` — the ±band is the
   trigger, the ~10% change is the response, never a reset to the band),
   the raise/cut trigger portfolios, and the 4% rate as a sanity
-  ceiling, not a binding rule. `?spend=` evaluates a what-if level
-  instead of the plan's annual target. `null` until a spend plan with
+  ceiling, not a binding rule. Guardrails are a *monitoring* tool, so
+  the default tested spend is the trailing twelve complete months of
+  actual spending — discretionary lines plus fund outflows, never fund
+  contributions (outflows are the realisation of the plan the
+  contributions describe; counting both would double-count), and
+  funding source is deliberately ignored so the measure stays
+  continuous when spending shifts from a pre-funded cash buffer to
+  portfolio sales, where literal withdrawals would read 0% and then
+  spike. Until twelve complete months of history exist the plan's
+  `annual_target` stands in; `spend_source` (`actual` / `target` /
+  `what_if`) and `spend_months` label the figure so a short window is
+  never dressed up as a year of data. `?spend=` evaluates a what-if
+  level. The denominator excludes non-investable cash on purpose:
+  sinking-fund balances are earmarked obligations, not retirement
+  assets, so a buffer set aside for near-term spending never counts as
+  backing that spending — and the raise/cut triggers (spend ÷ rail)
+  now drift as actual spending moves, damped by the trailing window
+  and expected rather than a bug. The spend plan's effective-dated
+  `drawdown_start` (set once, usually staged ahead) marks when real
+  drawdown begins: before it the zone is a readiness metric, and the
+  first read on or after the date appends a stamped plan row whose
+  `initial_rate` is the actual rate *as of that date* — deterministic
+  however late the server first looks, effective the day it lands so
+  it out-resolves the row that scheduled it, exactly once, with a
+  later hand revision always winning. `null` until a spend plan with
   an initial rate and at least one balance month exist.
 
 The sourcing slice (the second Plan engine):
@@ -640,7 +670,10 @@ The forecast slice (the third Plan engine):
   "No activity yet" state. The feed refreshes on
   every visit as items are added elsewhere. The Spend guardrail card
   shows the live withdrawal rate, mini band, and zone status from
-  `GET /api/guardrails` (muted until a spend plan exists), and the
+  `GET /api/guardrails` (muted until a spend plan exists) — the status
+  wearing a muted "· readiness" suffix until drawdown begins, since
+  before that date the zone reports where you'd land, not a live
+  trigger — and the
   Longevity card shows the live verdict, the resolved spend, and the
   projected age-100 balance from `GET /api/forecast` (muted until the
   forecast's inputs exist) — every dashboard card now reads the API.
@@ -796,15 +829,22 @@ The forecast slice (the third Plan engine):
   `POST /api/fund-entries`, and refetches the list.
 - **Guardrails** (<http://localhost:5173/guardrails>) — the "how much
   can we spend?" view, every figure from `GET /api/guardrails`: KPIs
-  (investable portfolio, planned spend, and the withdrawal rate —
-  colored by zone — beside the ±band and 4% ceiling), the three-zone
-  Cut / Hold / Raise band with a marker at the current rate, the
-  recommendation banner (trim ~10% above the upper guardrail, raise
-  ~10% below the lower, hold steady inside), a spend slider that
-  re-evaluates everything server-side at each level, and raise/cut
-  trigger cards naming the portfolio levels where the next rule fires.
-  The slider's bounds derive from the band edges, so both rails are
-  always reachable whatever the portfolio and plan sizes are. Until a
+  (investable portfolio, the tested spend, and the withdrawal rate —
+  colored by zone — beside the ±band, the 4% ceiling, and the drawdown
+  status), the three-zone Cut / Hold / Raise band with a marker at the
+  current rate, the recommendation banner (trim ~10% above the upper
+  guardrail, raise ~10% below the lower, hold steady inside), a spend
+  slider that re-evaluates everything server-side at each level, and
+  raise/cut trigger cards naming the portfolio levels where the next
+  rule fires. The spend KPI is labeled by what it measures — "Trailing
+  12-mo spend" over actual spending, "Planned spend" with an
+  N-of-12-months note while history is still short, "What-if spend"
+  while the slider is dragged — and the header names the drawdown
+  status: "Readiness — drawdown hasn't started" before the plan's
+  drawdown date (the zone is a report card, not a live trigger),
+  "Live — drawdown since …" after. The slider's bounds derive from the
+  band edges and widen to the resolved spend, so both rails stay
+  reachable whatever the portfolio, plan, and actuals are. Until a
   spend plan and balances exist, the view links to the Assumptions card
   under Settings & data, where the annual target, the at-retirement
   initial rate, and the guardrail band are all set — and when no account
@@ -946,7 +986,12 @@ The forecast slice (the third Plan engine):
   stored fractions and preview the derived guardrails — initial rate ×
   (1 ± band) — live under the fields; a blank rate clears the anchor
   (Guardrails returns to its empty state), and a blank band falls back
-  to the ±20% default. The Mortgage card
+  to the ±20% default. Its Drawdown start date field schedules the
+  moment real drawdown begins — set once, usually years ahead: until
+  then Guardrails reports a readiness zone, and when the date arrives
+  the anchor rate is stamped from actuals. An unrelated save carries
+  the stored date forward, and blanking it clears the schedule. The
+  Mortgage card
   links the liability account — only liabilities are offered, since an
   asset carries no loan — and takes the rate as a percentage for the
   stored fraction; Save appends a revision only when a term actually
