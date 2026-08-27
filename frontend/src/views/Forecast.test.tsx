@@ -136,6 +136,49 @@ describe('bridge card', () => {
     expect(bridge).toHaveTextContent('14 yrs')
   })
 
+  it('names the gate age from the accounts', async () => {
+    render(<Forecast />)
+
+    const bridge = await screen.findByTestId('forecast-bridge')
+    expect(bridge).toHaveTextContent('BRIDGE TO 401(k) @ 59½')
+    expect(bridge).toHaveTextContent('Need to cover 22 yrs')
+    expect(screen.getByTestId('forecast-chart')).toHaveTextContent(
+      '401(k) · locked to 59½',
+    )
+  })
+
+  it("follows a later gate when the first unlock is a spouse's", async () => {
+    stubApi({
+      '/api/forecast': { ...FORECAST, first_unlock_age: 62.5 },
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
+    })
+    render(<Forecast />)
+
+    const bridge = await screen.findByTestId('forecast-bridge')
+    expect(bridge).toHaveTextContent('BRIDGE TO 401(k) @ 62½')
+    expect(bridge).toHaveTextContent('Need to cover 25 yrs')
+    expect(screen.getByTestId('forecast-chart')).toHaveTextContent(
+      '401(k) · locked to 62½',
+    )
+  })
+
+  it('drops the card when no bucket is gated', async () => {
+    stubApi({
+      '/api/forecast': { ...FORECAST, first_unlock_age: null },
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
+    })
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    expect(screen.queryByTestId('forecast-bridge')).not.toBeInTheDocument()
+    expect(screen.getByTestId('forecast-chart')).toHaveTextContent('401(k)')
+    expect(screen.getByTestId('forecast-chart')).not.toHaveTextContent(
+      /401\(k\) · locked/,
+    )
+  })
+
   it('derives the bridge years and chart range from the start age', async () => {
     stubApi({
       '/api/forecast': { ...FORECAST, start_age: 40 },
