@@ -983,4 +983,11 @@ describe('responsive layout', () => {
       'sm:grid-cols-3',
     )
   })
+
+  it('rides the shell width above xl instead of its own cap', async () => {
+    render(<Forecast />)
+
+    const view = await screen.findByTestId('view-forecast')
+    expect(view).toHaveClass('max-w-[1000px]', 'xl:max-w-none')
+  })
 })

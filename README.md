@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.8.0**
+**v3.9.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -730,7 +730,10 @@ The forecast slice (the third Plan engine):
   month, never an entry's exact date) with one
   column per active account — assets then liabilities, liabilities negative
   in red — plus the net-worth column, horizontally scrollable as accounts
-  grow. The table opens on the twelve newest months and loads older ones a
+  grow. On wide screens the balance form's column pins at its designed
+  width and the table takes every further pixel the widened shell
+  supplies, so the columns fit without scrolling at typical account
+  counts. The table opens on the twelve newest months and loads older ones a
   page at a time: a sentinel row below the last month, watched with an
   `IntersectionObserver` against the viewport, so a touch flick pages the
   same as a wheel. A loading row shows while a page is in flight, and both
@@ -931,7 +934,9 @@ The forecast slice (the third Plan engine):
   Security income sliver at the base, enlarged to a 7px minimum so
   the income stays visible against multi-million balances; hovering
   a bar shows the age, its calendar year, and the exact per-bucket
-  dollar breakdown. The tooltip leads with that year's portfolio
+  dollar breakdown. On wide screens the view sheds its designed cap
+  and rides the widened shell, so the sixty-odd year columns get real
+  width instead of slivers. The tooltip leads with that year's portfolio
   total — ETH + brokerage + 401(k), with the change against the
   previous year beside it ("$1,600,000.00 (+$45,000.00)"), and
   nothing beside it on the first simulated year, which has no prior
@@ -1076,6 +1081,23 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.9.0 — The layout uses ultra-wide displays. Every route was capped
+at 1180px and the responsive ladder stopped at `lg:`, so a 3440px
+monitor rendered the same layout as a 1024px laptop and left ~2,000px
+of empty page while the Ledger's table scrolled horizontally inside
+~714px (issue #131). The shell now widens where the viewport can
+supply the width — 1500px at `xl`, 1800px at `2xl`, 2200px at a new
+`3xl` breakpoint (120rem) in the theme — while the design handoff's
+1180px baseline stays exactly as specified below ~1500px viewports.
+Two views ride the new room: the Ledger re-splits at `2xl` to pin the
+balance-form column at its designed 440px so the table absorbs every
+further pixel (no horizontal scroll at typical account counts), and
+the Forecast sheds its own 1000px cap above `xl` so the year-bar
+chart gets ~33px per year instead of ~15px. Prose- and form-heavy
+views (Settings, Funds, Guardrails, Mortgage, Withdrawals) keep their
+designed measure on purpose — stretching a form to 2200px hurts
+readability. Frontend-only: no API change.
 
 v3.8.0 — The Ledger stops growing without a ceiling. Nothing in the
 ledger path was bounded: `GET /api/ledger` selected every row of
