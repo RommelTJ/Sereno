@@ -121,7 +121,7 @@ describe('bridge card', () => {
 
     const bridge = await screen.findByTestId('forecast-bridge')
     expect(bridge).toHaveTextContent('21.5 yrs')
-    expect(bridge).toHaveTextContent('31+ yrs')
+    expect(bridge).toHaveTextContent('22+ yrs')
   })
 
   it('reports how long the taxable buckets last when they break early', async () => {

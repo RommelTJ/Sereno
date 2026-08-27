@@ -240,15 +240,23 @@ export interface BridgeCopy {
   ok: boolean
 }
 
-// How long the taxable buckets (ETH + brokerage) last before the
-// 401(k) unlocks: the first pre-60 year they sit empty broke the
-// bridge that many years after the start age.
-export function bridgeCopy(series: ForecastPoint[], startAge: number): BridgeCopy {
-  const broke = series.find((point) => point.age < 60 && point.eth + point.brokerage <= 0)
+// How long the taxable buckets (ETH + brokerage) last before the locked
+// money opens: the first year before gateAge that they sit empty broke
+// the bridge that many years after the start age. The gate comes from
+// the accounts, so both the window searched and the years to cover
+// follow it rather than a literal.
+export function bridgeCopy(
+  series: ForecastPoint[],
+  startAge: number,
+  gateAge: number,
+): BridgeCopy {
+  const broke = series.find(
+    (point) => point.age < gateAge && point.eth + point.brokerage <= 0,
+  )
   if (broke != null) {
     return { years: `${broke.age - startAge} yrs`, ok: false }
   }
-  return { years: '31+ yrs', ok: true }
+  return { years: `${Math.ceil(gateAge - startAge)}+ yrs`, ok: true }
 }
 
 export interface SensitivityRowCopy {

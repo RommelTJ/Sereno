@@ -702,7 +702,7 @@ function Forecast() {
 
   const outcome = verdict(forecast.run_out_age)
   const delta = verdictDelta(forecast)
-  const bridge = bridgeCopy(forecast.series, forecast.start_age)
+  const bridge = bridgeCopy(forecast.series, forecast.start_age, 59.5)
   const columns = chartColumns(forecast.series, {
     baseline: forecast.baseline.series,
     purchases: forecast.purchases,
