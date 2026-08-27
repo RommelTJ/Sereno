@@ -119,6 +119,17 @@ describe('Responsive shell', () => {
 
     expect(screen.getByRole('banner')).toHaveClass('px-4', 'sm:px-9')
   })
+
+  it('widens the main column on wide screens', () => {
+    render(<App />)
+
+    expect(screen.getByRole('main')).toHaveClass(
+      'max-w-[1180px]',
+      'xl:max-w-[1500px]',
+      '2xl:max-w-[1800px]',
+      '3xl:max-w-[2200px]',
+    )
+  })
 })
 
 describe('Mobile nav drawer', () => {
