@@ -208,6 +208,12 @@ describe('ledgerRows', () => {
     expect(ledgerRows(LEDGER, columns)[0].deltas[subtotal]).toBe(16_000)
   })
 
+  it('carries the net worth column its own delta', () => {
+    const rows = ledgerRows(LEDGER, columns)
+    expect(rows[0].netWorthDelta).toBe(26_700)
+    expect(rows[1].netWorthDelta).toBeNull()
+  })
+
   it('suppresses the subtotal delta when a member is new', () => {
     const months = [
       month('2026-06', [

@@ -205,8 +205,16 @@ describe('Month-over-month deltas', () => {
     render(<Ledger />)
 
     const rows = await screen.findAllByTestId('ledger-row')
-    expect(within(rows[1]).getAllByText('—')).toHaveLength(11)
+    expect(within(rows[1]).getAllByText('—')).toHaveLength(12)
     expect(within(rows[1]).queryByText('$0.00')).not.toBeInTheDocument()
+  })
+
+  it('shows the net worth change beside the net worth figure', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('$1,744,000.00')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('+$26,700.00')).toHaveClass('text-accent')
   })
 
   it('carries a delta on the brokerage subtotal', async () => {
