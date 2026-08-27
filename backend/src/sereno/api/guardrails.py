@@ -36,7 +36,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from sereno.api.config import get_spend_plan
+from sereno.api.config import SpendPlan, get_spend_plan
 from sereno.db.connection import get_db
 from sereno.engine.guardrails import Zone, evaluate_guardrails
 from sereno.money import to_dollars
@@ -68,8 +68,13 @@ class Guardrails(BaseModel):
     four_percent_spend: float
 
 
-def _latest_investable(db: sqlite3.Connection) -> float | None:
-    row = db.execute("SELECT investable FROM v_net_worth ORDER BY month DESC LIMIT 1").fetchone()
+def _latest_investable(db: sqlite3.Connection, on_or_before: str | None = None) -> float | None:
+    """The latest v_net_worth month's investable total, optionally capped
+    at a month — the portfolio as it stood then, carry-forward included."""
+    row = db.execute(
+        "SELECT investable FROM v_net_worth WHERE month <= ? ORDER BY month DESC LIMIT 1",
+        (on_or_before or "9999-12",),
+    ).fetchone()
     return to_dollars(row["investable"]) if row else None
 
 
@@ -109,25 +114,75 @@ def _trailing_spend(db: sqlite3.Connection, window_start: str, window_end: str) 
     return to_dollars(total)
 
 
+def _spend_basis(
+    db: sqlite3.Connection, plan: SpendPlan, anchor: date
+) -> tuple[float, Literal["actual", "target"], int]:
+    """The default numerator as of the anchor date: trailing actual spend
+    over the twelve complete months before the anchor's month once that
+    much history exists, the plan's annual target until then."""
+    anchor_month = _month_str(anchor, 0)
+    months = _months_available(db, anchor_month)
+    if months >= TRAILING_MONTHS:
+        window_start = _month_str(anchor, TRAILING_MONTHS)
+        return _trailing_spend(db, window_start, anchor_month), "actual", months
+    return plan.annual_target, "target", months
+
+
+def _stamp_initial_rate(db: sqlite3.Connection, plan: SpendPlan) -> SpendPlan:
+    """Capture the anchor from actuals once real drawdown has begun: the
+    first read on or after drawdown_start appends a stamped plan row whose
+    initial_rate is the resolved rate *as of that date* — deterministic
+    however late the server first looks — effective today, since a row
+    backdated to drawdown_start would be shadowed by the plan row that
+    scheduled it. Set once: the append is fenced on no stamped row since
+    drawdown_start (atomically, so racing reads stamp a single row), and
+    a later hand revision out-resolves the stamp by insertion order. With
+    no balance month on or before drawdown_start yet, the stamp waits."""
+    today = date.today()
+    if plan.drawdown_start is None or plan.drawdown_start > today:
+        return plan
+    start = plan.drawdown_start.isoformat()
+    already = db.execute(
+        "SELECT 1 FROM spend_plan WHERE initial_rate_stamped = 1 AND effective_date >= ?",
+        (start,),
+    ).fetchone()
+    if already:
+        return plan
+    investable = _latest_investable(db, _month_str(plan.drawdown_start, 0))
+    if not investable or investable <= 0:
+        return plan
+    spend, _, _ = _spend_basis(db, plan, plan.drawdown_start)
+    db.execute(
+        "INSERT INTO spend_plan (effective_date, annual_target, initial_rate,"
+        " guardrail_band, drawdown_start, initial_rate_stamped)"
+        " SELECT ?, ?, ?, ?, ?, 1 WHERE NOT EXISTS"
+        " (SELECT 1 FROM spend_plan WHERE initial_rate_stamped = 1 AND effective_date >= ?)",
+        (
+            today.isoformat(),
+            plan.annual_target,
+            spend / investable,
+            plan.guardrail_band,
+            start,
+            start,
+        ),
+    )
+    db.commit()
+    return get_spend_plan(db) or plan
+
+
 @router.get("/guardrails")
 def get_guardrails(db: Db, spend: Spend = None) -> Guardrails | None:
     plan = get_spend_plan(db)
-    if plan is None or plan.initial_rate is None:
+    if plan is None:
+        return None
+    plan = _stamp_initial_rate(db, plan)
+    if plan.initial_rate is None:
         return None
     investable = _latest_investable(db)
     if not investable or investable <= 0:
         return None
-    current_month = _month_str(date.today(), 0)
-    spend_months = _months_available(db, current_month)
-    source: Literal["actual", "target", "what_if"]
-    if spend_months >= TRAILING_MONTHS:
-        resolved_spend = _trailing_spend(
-            db, _month_str(date.today(), TRAILING_MONTHS), current_month
-        )
-        source = "actual"
-    else:
-        resolved_spend = plan.annual_target
-        source = "target"
+    resolved_spend, basis, spend_months = _spend_basis(db, plan, date.today())
+    source: Literal["actual", "target", "what_if"] = basis
     if spend is not None:
         tested_spend, source = spend, "what_if"
     else:
