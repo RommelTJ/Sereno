@@ -1,6 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { ACCOUNTS, LEDGER, QUICK_LINKS, balance } from '../test/fixtures.ts'
+import {
+  ACCOUNTS,
+  LEDGER,
+  LEDGER_PAGE,
+  QUICK_LINKS,
+  balance,
+  ledgerPage,
+} from '../test/fixtures.ts'
 import { stubApi } from '../test/stubs.ts'
 import Ledger from './Ledger.tsx'
 
@@ -8,7 +15,7 @@ describe('Ledger monthly balance table', () => {
   beforeEach(() => {
     stubApi({
       '/api/accounts': ACCOUNTS,
-      '/api/ledger': LEDGER,
+      '/api/ledger': LEDGER_PAGE,
       '/api/quick-links': [],
     })
   })
@@ -42,7 +49,7 @@ describe('Ledger monthly balance table', () => {
         ...ACCOUNTS,
         { ...ACCOUNTS[8], id: 11, name: 'Old boat', active: false },
       ],
-      '/api/ledger': LEDGER,
+      '/api/ledger': LEDGER_PAGE,
       '/api/quick-links': [],
     })
     render(<Ledger />)
@@ -104,7 +111,7 @@ describe("Update this month's balances form", () => {
   beforeEach(() => {
     stubApi({
       '/api/accounts': ACCOUNTS,
-      '/api/ledger': LEDGER,
+      '/api/ledger': LEDGER_PAGE,
       '/api/quick-links': [],
     })
   })
@@ -136,7 +143,7 @@ describe("Update this month's balances form", () => {
         ...ACCOUNTS,
         { ...ACCOUNTS[8], id: 11, name: 'Old boat', active: false },
       ],
-      '/api/ledger': LEDGER,
+      '/api/ledger': LEDGER_PAGE,
       '/api/quick-links': [],
     })
     render(<Ledger />)
@@ -174,7 +181,7 @@ describe("Update this month's balances form", () => {
         ...ACCOUNTS,
         { ...ACCOUNTS[0], id: 11, name: 'ETH Wallet' },
       ],
-      '/api/ledger': [
+      '/api/ledger': ledgerPage([
         {
           ...LEDGER[0],
           balances: [
@@ -183,7 +190,7 @@ describe("Update this month's balances form", () => {
           ],
         },
         LEDGER[1],
-      ],
+      ]),
       '/api/quick-links': [],
     })
     render(<Ledger />)
@@ -200,7 +207,7 @@ describe("Update this month's balances form", () => {
         ...ACCOUNTS,
         { ...ACCOUNTS[0], id: 11, name: 'ETH Wallet' },
       ],
-      '/api/ledger': [
+      '/api/ledger': ledgerPage([
         LEDGER[0],
         {
           ...LEDGER[1],
@@ -209,7 +216,7 @@ describe("Update this month's balances form", () => {
             balance(11, '2026-05-01', 17_000, 5, 3_400),
           ],
         },
-      ],
+      ]),
       '/api/quick-links': [],
     })
     render(<Ledger />)
@@ -294,7 +301,7 @@ describe('Responsive layout', () => {
   beforeEach(() => {
     stubApi({
       '/api/accounts': ACCOUNTS,
-      '/api/ledger': LEDGER,
+      '/api/ledger': LEDGER_PAGE,
       '/api/quick-links': [],
     })
   })
@@ -324,7 +331,7 @@ describe('Saving balances', () => {
   beforeEach(() => {
     routes = {
       '/api/accounts': ACCOUNTS,
-      '/api/ledger': LEDGER,
+      '/api/ledger': LEDGER_PAGE,
       '/api/quick-links': [],
       '/api/balance-entries': { id: 999 },
     }
@@ -404,7 +411,7 @@ describe('Saving balances', () => {
     await screen.findAllByTestId('ledger-row')
 
     // The server now has a July entry; saving should refetch and show it.
-    routes['/api/ledger'] = [
+    routes['/api/ledger'] = ledgerPage([
       {
         month: '2026-07',
         net_worth: 1_754_000,
@@ -414,7 +421,7 @@ describe('Saving balances', () => {
         ],
       },
       ...LEDGER,
-    ]
+    ])
     fireEvent.click(screen.getByRole('button', { name: 'Save balance' }))
 
     await waitFor(() =>
@@ -430,7 +437,7 @@ describe('Quick links card', () => {
   it('renders each link below the balance form, opening in a new tab', async () => {
     stubApi({
       '/api/accounts': ACCOUNTS,
-      '/api/ledger': LEDGER,
+      '/api/ledger': LEDGER_PAGE,
       '/api/quick-links': QUICK_LINKS,
     })
     render(<Ledger />)
@@ -449,7 +456,7 @@ describe('Quick links card', () => {
   it('is hidden while no links exist', async () => {
     stubApi({
       '/api/accounts': ACCOUNTS,
-      '/api/ledger': LEDGER,
+      '/api/ledger': LEDGER_PAGE,
       '/api/quick-links': [],
     })
     render(<Ledger />)

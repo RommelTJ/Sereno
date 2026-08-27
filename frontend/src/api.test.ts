@@ -9,11 +9,13 @@ import {
   deleteExpense,
   deleteIncome,
   fetchForecast,
+  fetchLedger,
   fetchMaxAffordable,
   fetchSpendBands,
   updateExpense,
   updateIncome,
 } from './api.ts'
+import { LEDGER, ledgerPage } from './test/fixtures.ts'
 import { stubApi } from './test/stubs.ts'
 
 describe('fetchForecast', () => {
@@ -209,5 +211,32 @@ describe('fetchMaxAffordable', () => {
     expect(url).toContain('spend=95000')
     expect(url).toContain('last_to_age=95')
     expect(url).toContain('purchase=2041%3A70000')
+  })
+})
+
+// The ledger's wire format: one page at a time. The newest page asks for
+// nothing, an older one carries the page's oldest month as the cursor, and
+// the has_more signal rides back untouched so the caller knows to stop.
+describe('fetchLedger', () => {
+  it('requests the newest page with no cursor', async () => {
+    const fetchMock = stubApi({ '/api/ledger': ledgerPage([]) })
+    await fetchLedger()
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/ledger')
+  })
+
+  it('sends the cursor month as before', async () => {
+    const fetchMock = stubApi({ '/api/ledger?before=2025-09': ledgerPage([]) })
+    await fetchLedger('2025-09')
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/ledger?before=2025-09')
+  })
+
+  it('passes the page months and its has_more signal through', async () => {
+    stubApi({ '/api/ledger': ledgerPage(LEDGER, true) })
+    const page = await fetchLedger()
+    expect(page.months.map((month) => month.month)).toEqual([
+      '2026-06',
+      '2026-05',
+    ])
+    expect(page.has_more).toBe(true)
   })
 })
