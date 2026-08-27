@@ -4,6 +4,10 @@
 @theme {
   --font-sans: 'Hanken Grotesk', system-ui, sans-serif;
 
+  /* Ultra-wide tier above Tailwind's 2xl (96rem); the shell and the
+     table-heavy views widen through it instead of capping at 1180px. */
+  --breakpoint-3xl: 120rem;
+
   --color-paper: #efece5;
   --color-header: #f6f3ee;
   --color-card: #ffffff;

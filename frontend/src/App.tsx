@@ -42,7 +42,7 @@ function App() {
           )}
           <div className="flex min-w-0 flex-1 flex-col">
             <Header onMenuOpen={() => setMenuOpen(true)} />
-            <main className="mx-auto w-full max-w-[1180px] px-4 pt-[30px] pb-[60px] sm:px-9">
+            <main className="mx-auto w-full max-w-[1180px] px-4 pt-[30px] pb-[60px] sm:px-9 xl:max-w-[1500px] 2xl:max-w-[1800px] 3xl:max-w-[2200px]">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/ledger" element={<Ledger />} />
