@@ -4,8 +4,11 @@ income leaves a gap, filled bucket by bucket in the caller's order —
 ETH inside the 0% LTCG headroom, then taxable brokerage, then 401(k).
 The headroom is measured in gain dollars (the 0% ceiling minus taxable
 ordinary income) and converts to sale proceeds through each bucket's
-gain fraction. The engine solves for net spendable — never a flat 4%
-per bucket. Pure math over the caller's numbers; loading balances,
+gain fraction. A tax-free bucket — a Roth, or an HSA spent on
+qualified expenses — is neither taxed as gain nor stacked on ordinary
+income, so it comes out whole. Any bucket may carry an access_age,
+which gates it whatever its treatment. The engine solves for net
+spendable — never a flat 4% per bucket. Pure math over the caller's numbers; loading balances,
 basis, and tax parameters is the API layer's job.
 
 v1 simplifications, on purpose: federal only (state_treatment and the
@@ -19,7 +22,7 @@ ordinary income.
 from dataclasses import dataclass
 from typing import Literal
 
-BucketTreatment = Literal["LTCG", "ORDINARY"]
+BucketTreatment = Literal["LTCG", "ORDINARY", "TAX_FREE"]
 
 # The federal rate above the 0% bracket. Flat by design: a gap big
 # enough to push realized gains past the 15% → 20% threshold
@@ -98,6 +101,15 @@ def _draw_ltcg(bucket: Bucket, needed: float, headroom: float) -> tuple[BucketDr
     return draw, headroom - free_gross * gain_fraction
 
 
+def _draw_tax_free(bucket: Bucket, needed: float) -> BucketDraw:
+    """A Roth or an HSA spent on qualified expenses: the withdrawal
+    realizes no gain and stacks on no ordinary income, so gross is net
+    and the balance is the only limit. It leaves the 0% LTCG headroom
+    untouched for the buckets behind it."""
+    gross = max(0.0, min(needed, bucket.balance))
+    return BucketDraw(name=bucket.name, treatment="TAX_FREE", gross=gross, tax=0.0, net=gross)
+
+
 def _gross_up_ordinary(
     needed: float,
     balance: float,
@@ -169,6 +181,8 @@ def source_withdrawals(
             )
         elif bucket.treatment == "LTCG":
             draw, remaining_headroom = _draw_ltcg(bucket, remaining, remaining_headroom)
+        elif bucket.treatment == "TAX_FREE":
+            draw = _draw_tax_free(bucket, remaining)
         else:
             gross, tax = _gross_up_ordinary(
                 remaining, bucket.balance, ordinary_running, std_deduction, ordinary_brackets

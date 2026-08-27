@@ -69,7 +69,7 @@ _OPEN_LOT_BASIS = (
 
 class SourcingStep(BaseModel):
     name: str
-    treatment: Literal["LTCG", "ORDINARY"]
+    treatment: Literal["LTCG", "ORDINARY", "TAX_FREE"]
     gross: float
     tax: float
     net: float
