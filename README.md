@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.9.0**
+**v3.10.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -1099,6 +1099,28 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.10.0 — The Ledger says which way the money went. The table showed
+absolute balances only, so telling whether an account grew or shrank —
+and by how much — meant reading two rows and subtracting by hand, and
+the three brokerage funds, held as one position, had to be added up by
+eye across three columns (issue #132). Every figure now carries its
+change from the previous month inside the same cell — no new columns,
+which would have taken the table from 17 to roughly 32 — smaller and
+lighter than the balance it annotates, green favorable and red
+unfavorable. The subtraction happens on the already-signed display
+value, so one rule covers an asset that grew and a debt that shrank: a
+mortgage paid down reads as a green rise beside a balance that keeps
+its liability red, since that red means "this is a liability", not
+"this got worse". No-change and no-data stay visually apart — a muted
+$0.00 where a balance carried forward untouched, a faint em dash where
+there is no prior entry, so an account's first month is never a
+full-value gain. A derived Brokerage subtotal joins the columns after
+the last fund, summing by `kind = 'brokerage_fund'` rather than by the
+three fund names; the table's columns became a discriminated union so a
+derived column cannot be mistaken for an account, and net worth is
+untouched — it is summed server-side from real account rows.
+Frontend-only: no API change.
 
 v3.9.0 — The layout uses ultra-wide displays. Every route was capped
 at 1180px and the responsive ladder stopped at `lg:`, so a 3440px
