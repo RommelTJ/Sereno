@@ -12,6 +12,7 @@ import {
   LEDGER,
   LEDGER_PAGE,
   QUICK_LINKS,
+  UNCLASSIFIED_ACCOUNTS,
   balance,
   ledgerPage,
 } from '../test/fixtures.ts'
@@ -40,6 +41,7 @@ describe('Ledger monthly balance table', () => {
       'VFIAX',
       'VTIAX',
       'VGSH',
+      'Brokerage',
       'Retirement',
       'Home',
       'Chase checking',
@@ -48,6 +50,28 @@ describe('Ledger monthly balance table', () => {
       'Mortgage',
       'Net worth',
     ])
+  })
+
+  it('sums the three brokerage funds into the subtotal cell', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('$1,080,000.00')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('$1,064,000.00')).toBeInTheDocument()
+  })
+
+  it('gives a fresh install no subtotal column', async () => {
+    stubApi({
+      '/api/accounts': UNCLASSIFIED_ACCOUNTS,
+      '/api/ledger': LEDGER_PAGE,
+      '/api/quick-links': [],
+    })
+    render(<Ledger />)
+
+    await screen.findByRole('table')
+    expect(
+      screen.queryByRole('columnheader', { name: 'Brokerage' }),
+    ).not.toBeInTheDocument()
   })
 
   it('gives an inactive account no column', async () => {
@@ -111,6 +135,94 @@ describe('Ledger monthly balance table', () => {
     const rows = await screen.findAllByTestId('ledger-row')
     expect(rows[0]).toHaveClass('bg-[#f3f6f3]')
     expect(rows[1]).not.toHaveClass('bg-[#f3f6f3]')
+  })
+})
+
+// The delta beside each balance answers "is this going the right way".
+// It is taken on the displayed figure, so a shrinking debt is green like
+// a growing asset — and three states stay apart: a change, no change at
+// all, and no previous entry to compare against.
+describe('Month-over-month deltas', () => {
+  beforeEach(() => {
+    stubApi({
+      '/api/accounts': ACCOUNTS,
+      '/api/ledger': LEDGER_PAGE,
+      '/api/quick-links': [],
+    })
+  })
+
+  it('shows the change beside each balance, green when favorable', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('+$10,000.00')).toHaveClass('text-accent')
+    expect(within(rows[0]).getByText('+$5,000.00')).toHaveClass('text-accent')
+  })
+
+  it('colors an unfavorable change red', async () => {
+    stubApi({
+      '/api/accounts': ACCOUNTS,
+      '/api/ledger': ledgerPage([
+        {
+          month: '2026-06',
+          net_worth: 1_736_000,
+          balances: [balance(1, '2026-06-01', 60_000, 20, 3_000)],
+        },
+        {
+          month: '2026-05',
+          net_worth: 1_744_000,
+          balances: [balance(1, '2026-05-01', 68_000, 20, 3_400)],
+        },
+      ]),
+      '/api/quick-links': [],
+    })
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    const ethereum = within(rows[0]).getAllByRole('cell')[1]
+    expect(within(ethereum).getByText('-$8,000.00')).toHaveClass('text-red')
+  })
+
+  it('keeps a liability figure red while its own delta reads green', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('-$150,000.00')).toHaveClass(
+      'text-red-text',
+    )
+    expect(within(rows[0]).getByText('+$700.00')).toHaveClass('text-accent')
+  })
+
+  it('shows a carried-forward balance as a muted zero', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    const unchanged = within(rows[0]).getAllByText('$0.00')
+    expect(unchanged).toHaveLength(2)
+    unchanged.forEach((delta) => expect(delta).toHaveClass('text-muted-2'))
+  })
+
+  it('shows an em dash where there is no previous month', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[1]).getAllByText('—')).toHaveLength(12)
+    expect(within(rows[1]).queryByText('$0.00')).not.toBeInTheDocument()
+  })
+
+  it('shows the net worth change beside the net worth figure', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('$1,744,000.00')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('+$26,700.00')).toHaveClass('text-accent')
+  })
+
+  it('carries a delta on the brokerage subtotal', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('+$16,000.00')).toHaveClass('text-accent')
   })
 })
 

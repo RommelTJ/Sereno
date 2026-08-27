@@ -1,10 +1,32 @@
 import { useCallback } from 'react'
-import type { Account } from '../api.ts'
-import type { LedgerRow } from '../ledger.ts'
-import { formatUsd } from '../ledger.ts'
+import type { LedgerColumn, LedgerRow } from '../ledger.ts'
+import { deltaClass, formatDelta, formatUsd } from '../ledger.ts'
+
+// The derived column reads as derived: a lighter header than the
+// accounts beside it and a tint that sits over whichever row it lands
+// in, highlighted newest month included.
+const SUBTOTAL_TINT = 'bg-black/[0.02]'
+
+const columnKey = (column: LedgerColumn) =>
+  column.kind === 'account' ? column.account.id : column.label
+
+// The change from the previous month, annotating the figure it sits
+// beside: smaller and lighter, never competing with the balance. An em
+// dash where there is nothing to subtract from — an opening balance is
+// not a full-value gain, and no data is not no change.
+function Delta({ delta }: { delta: number | null }) {
+  if (delta === null) {
+    return <span className="ml-1.5 text-[11px] text-faint">—</span>
+  }
+  return (
+    <span className={`ml-1.5 text-[11px] font-medium ${deltaClass(delta)}`}>
+      {formatDelta(delta)}
+    </span>
+  )
+}
 
 interface LedgerTableProps {
-  columns: Account[]
+  columns: LedgerColumn[]
   rows: LedgerRow[]
   hasMore: boolean
   loading: boolean
@@ -51,12 +73,18 @@ function LedgerTable({
           <thead>
             <tr className="bg-[#faf8f3] text-muted-2">
               <th className="px-3.5 py-2.5 text-left font-semibold">Date</th>
-              {columns.map((account) => (
+              {columns.map((column) => (
                 <th
-                  key={account.id}
-                  className="px-3.5 py-2.5 text-right font-semibold"
+                  key={columnKey(column)}
+                  className={`px-3.5 py-2.5 text-right ${
+                    column.kind === 'account'
+                      ? 'font-semibold'
+                      : `font-medium ${SUBTOTAL_TINT}`
+                  }`}
                 >
-                  {account.name}
+                  {column.kind === 'account'
+                    ? column.account.name
+                    : column.label}
                 </th>
               ))}
               <th className="px-3.5 py-2.5 text-right font-bold text-ink">
@@ -78,18 +106,27 @@ function LedgerTable({
                 <td className="px-3.5 py-[11px] text-left font-semibold">
                   {row.date}
                 </td>
-                {row.values.map((value, cell) => (
-                  <td
-                    key={columns[cell].id}
-                    className={`px-3.5 py-[11px] text-right${
-                      columns[cell].is_liability ? ' text-red-text' : ''
-                    }`}
-                  >
-                    {formatUsd(value)}
-                  </td>
-                ))}
+                {row.values.map((value, cell) => {
+                  const column = columns[cell]
+                  const liability =
+                    column.kind === 'account' && column.account.is_liability
+                  return (
+                    <td
+                      key={columnKey(column)}
+                      className={`px-3.5 py-[11px] text-right${
+                        column.kind === 'subtotal' ? ` ${SUBTOTAL_TINT}` : ''
+                      }`}
+                    >
+                      <span className={liability ? 'text-red-text' : undefined}>
+                        {formatUsd(value)}
+                      </span>
+                      <Delta delta={row.deltas[cell]} />
+                    </td>
+                  )
+                })}
                 <td className="px-3.5 py-[11px] text-right font-bold">
-                  {formatUsd(row.netWorth)}
+                  <span>{formatUsd(row.netWorth)}</span>
+                  <Delta delta={row.netWorthDelta} />
                 </td>
               </tr>
             ))}

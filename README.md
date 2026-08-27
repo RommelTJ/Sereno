@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.9.0**
+**v3.10.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -22,7 +22,9 @@ whole thing in plain SQL.
   screen and older ones loaded as you scroll. Pick any active account and
   enter its value (ETH as quantity × price, auto-translated to USD); the latest entry
   in a month wins, earlier rows are kept as history, and balances carry forward until
-  the next entry.
+  the next entry. Every figure carries its change from the previous month
+  beside it — green where the month went the right way, red where it
+  didn't — and the brokerage funds carry a derived subtotal column.
 - **Safe-to-spend** — total cash − bills due − money in funds. Monthly category envelopes
   with progress bars; overspending is allowed and simply reduces the headline number.
 - **Funds & goals** — sinking funds and dated goals as one concept. Notes are
@@ -730,7 +732,23 @@ The forecast slice (the third Plan engine):
   month, never an entry's exact date) with one
   column per active account — assets then liabilities, liabilities negative
   in red — plus the net-worth column, horizontally scrollable as accounts
-  grow. On wide screens the balance form's column pins at its designed
+  grow. Every figure in the table carries its change from the previous
+  month inside the same cell, smaller and lighter than the balance it
+  annotates: green where the month went the right way, red where it
+  didn't. The subtraction happens on the displayed figure, after
+  liabilities are negated, so a mortgage paid from 500,000 down to
+  495,000 reads as a green +$5,000.00 beside a balance that stays red —
+  the red says "this is a liability", not "this got worse". Three states
+  stay apart: a signed, colored change; a muted $0.00 where the balance
+  genuinely carried forward untouched; and a faint em dash where there is
+  no previous month loaded or no earlier entry for that account, since an
+  opening balance is not a full-value gain. Directly after the last
+  brokerage fund sits a derived **Brokerage** subtotal — the three funds
+  are one position mentally and three columns on screen — summing every
+  account classified `brokerage_fund`, so a fourth fund joins it on its
+  own; it is lighter-headed and tinted to read as derived rather than as
+  a holding, and it is invisible to net worth, which the `v_net_worth`
+  view sums server-side from real account rows. On wide screens the balance form's column pins at its designed
   width and the table takes every further pixel the widened shell
   supplies, so the columns fit without scrolling at typical account
   counts. The table opens on the twelve newest months and loads older ones a
@@ -1081,6 +1099,28 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.10.0 — The Ledger says which way the money went. The table showed
+absolute balances only, so telling whether an account grew or shrank —
+and by how much — meant reading two rows and subtracting by hand, and
+the three brokerage funds, held as one position, had to be added up by
+eye across three columns (issue #132). Every figure now carries its
+change from the previous month inside the same cell — no new columns,
+which would have taken the table from 17 to roughly 32 — smaller and
+lighter than the balance it annotates, green favorable and red
+unfavorable. The subtraction happens on the already-signed display
+value, so one rule covers an asset that grew and a debt that shrank: a
+mortgage paid down reads as a green rise beside a balance that keeps
+its liability red, since that red means "this is a liability", not
+"this got worse". No-change and no-data stay visually apart — a muted
+$0.00 where a balance carried forward untouched, a faint em dash where
+there is no prior entry, so an account's first month is never a
+full-value gain. A derived Brokerage subtotal joins the columns after
+the last fund, summing by `kind = 'brokerage_fund'` rather than by the
+three fund names; the table's columns became a discriminated union so a
+derived column cannot be mistaken for an account, and net worth is
+untouched — it is summed server-side from real account rows.
+Frontend-only: no API change.
 
 v3.9.0 — The layout uses ultra-wide displays. Every route was capped
 at 1180px and the responsive ladder stopped at `lg:`, so a 3440px
