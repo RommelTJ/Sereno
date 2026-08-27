@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.6.0**
+**v3.7.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -118,6 +118,45 @@ Both containers hot-reload when you edit source files. Stop with `Ctrl-C` or
 Both services carry `restart: unless-stopped`, so a long-running deployment
 comes back on its own after a crash or a host reboot — and stays down once you
 stop it deliberately with `docker compose down` or `docker compose stop`.
+
+### Deploying behind a reverse proxy
+
+A long-running deployment is a plain clone of this repo, updated with
+`git pull && docker compose up -d --build`. Everything host-specific lives
+in `compose.override.yaml` — gitignored, and merged automatically by
+Compose — so `git status` on the deploy box stays clean, real drift stays
+visible, and a reflexive `git reset --hard` can't delete the deployment's
+config. A typical override drops the host port mappings and joins the
+frontend to the proxy's shared network:
+
+```yaml
+services:
+  frontend:
+    ports: !reset []
+    networks:
+      - default
+      - proxy
+    environment:
+      SERENO_PUBLIC_HOST: finance.example.com
+
+  backend:
+    ports: !reset []
+
+networks:
+  proxy:
+    external: true
+```
+
+- `SERENO_PUBLIC_HOST` is the public hostname the proxy serves the app as.
+  `frontend/vite.config.ts` reads it to allow the host (Vite's
+  DNS-rebinding protection answers unknown hosts with a 403) and to point
+  HMR at it over `wss` on 443, where the proxy terminates TLS. Unset — the
+  local-dev and CI case — the server config is exactly what it was before
+  the variable existed.
+- `!reset []` drops the base file's port mappings, so the services are
+  reachable only through the proxy. The tag needs Compose >= 2.24.
+- Environment maps merge per key, so the base file's `SERENO_API_URL`
+  survives the override untouched.
 
 ### Seeding sample data
 
@@ -1025,6 +1064,24 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.7.0 — The deploy checkout's `git status` is clean. A reverse-proxied
+deployment needed two settings this repo deliberately doesn't carry — a
+compose override joining the frontend to the proxy's network, and the
+public hostname in `vite.config.ts`'s `allowedHosts` and HMR config — so
+the deploy box always showed an untracked file and a modified tracked
+one. That noise hid real drift, and it made `git reset --hard`, the
+natural reflex when a pull complains about local changes, a site-down
+event twice over: a 502 once the frontend left the proxy network, then a
+403 from Vite's host check once the 502 was fixed (2026-08-26). The
+hostname now arrives through the `SERENO_PUBLIC_HOST` env var, read by a
+tested pure helper that adds `allowedHosts` and a `wss`:443 HMR host
+when set and nothing at all when unset — local dev and CI byte-identical
+to before — and `compose.override.yaml`, the conventional Compose name
+for local-only overrides, is gitignored. Only ignored files differ on
+the deploy box now, and the README's new deployment section documents
+both halves. Minor: an additive configuration interface, nothing changed
+when unset.
 
 v3.6.0 — Guardrails measured intent, not behaviour: the withdrawal
 rate was computed from the spend plan's annual target, so spending
