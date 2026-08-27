@@ -4,8 +4,8 @@ import { Link } from 'react-router'
 import ActivityFeed from '../components/ActivityFeed.tsx'
 import { fundsMini, stsBarPct, ytdSummary } from '../dashboard.ts'
 import { totalParked } from '../funds.ts'
-import { formatRate, markerLeftPct, zoneCopy } from '../guardrails.ts'
-import { formatUsd } from '../ledger.ts'
+import { formatRate, isReadiness, markerLeftPct, zoneCopy } from '../guardrails.ts'
+import { formatUsd, todayIso } from '../ledger.ts'
 import { useNetWorth } from '../netWorth.ts'
 import type {
   BudgetMonth,
@@ -165,9 +165,16 @@ function GuardrailCard({ guardrails }: { guardrails: Guardrails | null }) {
           guardrails != null ? (cut ? 'text-red' : 'text-accent') : 'text-muted-2'
         }`}
       >
-        {guardrails != null
-          ? zoneCopy(guardrails.zone, guardrails.spend).status
-          : 'no spend plan yet'}
+        {guardrails != null ? (
+          <>
+            <span>{zoneCopy(guardrails.zone, guardrails.spend).status}</span>
+            {isReadiness(guardrails.drawdown_start, todayIso()) && (
+              <span className="font-normal text-muted-2"> · readiness</span>
+            )}
+          </>
+        ) : (
+          'no spend plan yet'
+        )}
       </p>
     </CardLink>
   )

@@ -160,6 +160,7 @@ class TestGetSpendPlan:
             "annual_target": 45000,
             "initial_rate": 0.0294,
             "guardrail_band": 0.2,
+            "drawdown_start": None,
         }
 
     def test_a_future_dated_row_does_not_win_yet(self, client):
@@ -286,6 +287,29 @@ class TestPostSpendPlan:
         assert created["guardrail_band"] == 0.2  # schema default carried by the API
         assert client.get("/api/spend-plan").json() == created
         assert count_rows("spend_plan") == 2
+
+    def test_stores_a_drawdown_start(self, client):
+        # The effective-dated moment real drawdown begins — set once, and
+        # future-dated on purpose: it is staged years ahead of the date.
+        response = client.post(
+            "/api/spend-plan",
+            json={
+                "effective_date": TODAY.isoformat(),
+                "annual_target": 48000,
+                "drawdown_start": "2028-01-01",
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["drawdown_start"] == "2028-01-01"
+        assert client.get("/api/spend-plan").json()["drawdown_start"] == "2028-01-01"
+
+    def test_an_omitted_drawdown_start_stays_null(self, client):
+        response = client.post(
+            "/api/spend-plan",
+            json={"effective_date": TODAY.isoformat(), "annual_target": 48000},
+        )
+        assert response.status_code == 201
+        assert response.json()["drawdown_start"] is None
 
 
 class TestPostSocialSecurity:

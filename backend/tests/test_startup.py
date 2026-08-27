@@ -34,6 +34,7 @@ def test_startup_applies_migrations(monkeypatch, tmp_path):
         "0013_money_in_cents.sql",
         "0014_mortgage.sql",
         "0015_spend_band.sql",
+        "0016_drawdown_start.sql",
     ]
 
 

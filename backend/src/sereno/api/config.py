@@ -35,6 +35,9 @@ class SpendPlan(BaseModel):
     annual_target: float
     initial_rate: float | None
     guardrail_band: float
+    # The effective-dated moment real drawdown begins, set once — staged
+    # ahead of the date; NULL means drawdown has not been scheduled.
+    drawdown_start: date | None
 
 
 class SocialSecurity(BaseModel):
@@ -57,6 +60,7 @@ class SpendPlanCreate(BaseModel):
     annual_target: float
     initial_rate: float | None = None
     guardrail_band: float = 0.20
+    drawdown_start: date | None = None
 
 
 class SocialSecurityCreate(BaseModel):
@@ -144,7 +148,9 @@ def get_assumptions(db: Db) -> Assumption | None:
 @router.get("/spend-plan")
 def get_spend_plan(db: Db) -> SpendPlan | None:
     row = effective_row(
-        db, "spend_plan", "id, effective_date, annual_target, initial_rate, guardrail_band"
+        db,
+        "spend_plan",
+        "id, effective_date, annual_target, initial_rate, guardrail_band, drawdown_start",
     )
     return SpendPlan(**dict(row)) if row else None
 
@@ -185,18 +191,20 @@ def create_assumption(assumption: AssumptionCreate, db: Db) -> Assumption:
 @router.post("/spend-plan", status_code=201)
 def create_spend_plan(plan: SpendPlanCreate, db: Db) -> SpendPlan:
     cursor = db.execute(
-        "INSERT INTO spend_plan (effective_date, annual_target, initial_rate, guardrail_band)"
-        " VALUES (?, ?, ?, ?)",
+        "INSERT INTO spend_plan"
+        " (effective_date, annual_target, initial_rate, guardrail_band, drawdown_start)"
+        " VALUES (?, ?, ?, ?, ?)",
         (
             plan.effective_date.isoformat(),
             plan.annual_target,
             plan.initial_rate,
             plan.guardrail_band,
+            plan.drawdown_start.isoformat() if plan.drawdown_start else None,
         ),
     )
     db.commit()
     row = db.execute(
-        "SELECT id, effective_date, annual_target, initial_rate, guardrail_band"
+        "SELECT id, effective_date, annual_target, initial_rate, guardrail_band, drawdown_start"
         " FROM spend_plan WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()

@@ -188,17 +188,20 @@ function EditField({
   label,
   value,
   onChange,
+  type = 'text',
 }: {
   id: string
   label: string
   value: string
   onChange: (value: string) => void
+  type?: 'text' | 'date'
 }) {
   return (
     <label htmlFor={id} className="block">
       <FieldLabel text={label} />
       <input
         id={id}
+        type={type}
         className="num mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2 text-sm"
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -980,6 +983,13 @@ function AssumptionsCard({
             value={values.bandPct}
             onChange={set('bandPct')}
           />
+          <EditField
+            id="assumption-drawdown-start"
+            label="Drawdown start"
+            type="date"
+            value={values.drawdownStart}
+            onChange={set('drawdownStart')}
+          />
           {preview && (
             <p
               data-testid="band-preview"
@@ -1022,6 +1032,11 @@ function AssumptionsCard({
           <ConfigLine
             label="Guardrail band"
             value={spendPlan ? `±${formatRate(spendPlan.guardrail_band)}` : '—'}
+          />
+          <ConfigLine
+            label="Drawdown start"
+            value={spendPlan?.drawdown_start ?? '—'}
+            hint="· stamps the anchor from actuals"
           />
         </div>
       )}

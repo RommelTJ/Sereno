@@ -3,13 +3,15 @@ import { Link } from 'react-router'
 import type { Account, Guardrails as GuardrailsData } from '../api.ts'
 import { fetchAccounts, fetchGuardrails } from '../api.ts'
 import {
+  drawdownStatus,
   formatRate,
   hasInvestableAccount,
   markerLeftPct,
   sliderBounds,
+  spendBasisCopy,
   zoneCopy,
 } from '../guardrails.ts'
-import { formatUsd } from '../ledger.ts'
+import { formatUsd, todayIso } from '../ledger.ts'
 
 function Kpi({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -106,6 +108,7 @@ function Guardrails() {
   const cut = guardrails.zone === 'cut'
   const copy = zoneCopy(guardrails.zone, guardrails.spend)
   const bounds = sliderBounds(guardrails)
+  const basis = spendBasisCopy(guardrails)
 
   return (
     <div data-testid="view-guardrails" className="max-w-[860px]">
@@ -116,10 +119,13 @@ function Guardrails() {
               {formatUsd(guardrails.investable)}
             </p>
           </Kpi>
-          <Kpi label="Planned spend">
+          <Kpi label={basis.label}>
             <p className="num text-[26px] font-extrabold">
               {formatUsd(guardrails.spend)}
             </p>
+            {basis.note && (
+              <p className="text-[10.5px] text-muted-2">{basis.note}</p>
+            )}
           </Kpi>
           <Kpi label="Withdrawal rate">
             <p
@@ -132,6 +138,7 @@ function Guardrails() {
           <div className="ml-auto self-center text-right text-[11.5px] text-muted-2">
             <p>Guyton-Klinger ±{Math.round(guardrails.band * 100)}%</p>
             <p>4% ceiling {formatUsd(guardrails.four_percent_spend)}</p>
+            <p>{drawdownStatus(guardrails.drawdown_start, todayIso())}</p>
           </div>
         </div>
 

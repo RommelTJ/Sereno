@@ -147,6 +147,28 @@ describe('Spend guardrail card', () => {
     expect(within(card).getByText('no spend plan yet')).toBeInTheDocument()
     expect(within(card).queryByTestId('guardrail-marker')).not.toBeInTheDocument()
   })
+
+  it('marks a pre-drawdown zone as readiness', async () => {
+    // The fixture has no drawdown scheduled, so the status must not
+    // imply a live trigger.
+    stubDashboard()
+    renderDashboard()
+
+    const card = screen.getByRole('link', { name: /spend guardrail/i })
+    await within(card).findByText('Hold steady')
+    expect(within(card).getByText('· readiness')).toBeInTheDocument()
+  })
+
+  it('drops the readiness mark once drawdown is live', async () => {
+    stubDashboard({
+      '/api/guardrails': { ...GUARDRAILS, drawdown_start: '2026-01-01' },
+    })
+    renderDashboard()
+
+    const card = screen.getByRole('link', { name: /spend guardrail/i })
+    await within(card).findByText('Hold steady')
+    expect(within(card).queryByText('· readiness')).not.toBeInTheDocument()
+  })
 })
 
 describe('Longevity card', () => {

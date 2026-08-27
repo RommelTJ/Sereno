@@ -129,6 +129,69 @@ describe('spend slider', () => {
   })
 })
 
+describe('spend basis', () => {
+  it('labels the target fallback with its months of history', async () => {
+    render(<Guardrails />)
+
+    expect(await screen.findByText('Planned spend')).toBeInTheDocument()
+    expect(
+      screen.getByText('2 of 12 months of spending history'),
+    ).toBeInTheDocument()
+  })
+
+  it('labels a trailing-actual figure', async () => {
+    stubApi({
+      '/api/guardrails': {
+        ...GUARDRAILS,
+        spend: 36_000,
+        rate: 0.024,
+        spend_source: 'actual',
+        spend_months: 12,
+      },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Guardrails />)
+
+    expect(await screen.findByText('Trailing 12-mo spend')).toBeInTheDocument()
+    expect(screen.getByText('actual spending, last 12 months')).toBeInTheDocument()
+  })
+
+  it('labels a what-if evaluation with no history note', async () => {
+    stubApi({
+      '/api/guardrails': { ...GUARDRAILS_AT_60K, spend_source: 'what_if' },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Guardrails />)
+
+    expect(await screen.findByText('What-if spend')).toBeInTheDocument()
+    expect(
+      screen.queryByText(/months of spending history/),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('drawdown status', () => {
+  it('marks a pre-drawdown zone as a readiness check', async () => {
+    render(<Guardrails />)
+
+    expect(
+      await screen.findByText("Readiness — drawdown hasn't started"),
+    ).toBeInTheDocument()
+  })
+
+  it('marks a live zone with its start date', async () => {
+    stubApi({
+      '/api/guardrails': { ...GUARDRAILS, drawdown_start: '2026-01-01' },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Guardrails />)
+
+    expect(
+      await screen.findByText('Live — drawdown since 2026-01-01'),
+    ).toBeInTheDocument()
+  })
+})
+
 describe('empty state', () => {
   it('points at the Assumptions card until a plan and balances exist', async () => {
     stubApi({ '/api/guardrails': null, '/api/accounts': ACCOUNTS })

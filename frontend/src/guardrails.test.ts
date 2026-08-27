@@ -6,9 +6,12 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  drawdownStatus,
   formatRate,
+  isReadiness,
   markerLeftPct,
   sliderBounds,
+  spendBasisCopy,
   zoneCopy,
 } from './guardrails.ts'
 
@@ -53,6 +56,7 @@ describe('sliderBounds', () => {
     upper: UPPER,
     investable: 1_500_000,
     annual_target: 45_000,
+    spend: 45_000,
   }
 
   it('spans half the raise-edge spend to 1.5x the cut-edge spend', () => {
@@ -72,6 +76,63 @@ describe('sliderBounds', () => {
     expect(sliderBounds({ ...guardrails, investable: 10_000, annual_target: 1_000 }).min).toBe(
       1_000,
     )
+  })
+
+  it('widens to include a trailing spend above the derived max', () => {
+    // The resolved spend is trailing actuals now, so it can land outside
+    // the target-derived range — both must stay reachable.
+    expect(sliderBounds({ ...guardrails, spend: 90_500 }).max).toBe(91_000)
+  })
+
+  it('widens to include a trailing spend below the derived min', () => {
+    expect(sliderBounds({ ...guardrails, spend: 12_400 }).min).toBe(12_000)
+  })
+})
+
+describe('spendBasisCopy', () => {
+  it('labels a trailing-actual figure', () => {
+    expect(spendBasisCopy({ spend_source: 'actual', spend_months: 12 })).toEqual({
+      label: 'Trailing 12-mo spend',
+      note: 'actual spending, last 12 months',
+    })
+  })
+
+  it('labels the target fallback with the history that exists', () => {
+    expect(spendBasisCopy({ spend_source: 'target', spend_months: 2 })).toEqual({
+      label: 'Planned spend',
+      note: '2 of 12 months of spending history',
+    })
+  })
+
+  it('labels a what-if level with no note', () => {
+    expect(spendBasisCopy({ spend_source: 'what_if', spend_months: 12 })).toEqual({
+      label: 'What-if spend',
+      note: null,
+    })
+  })
+})
+
+describe('isReadiness', () => {
+  it('is readiness while no drawdown date is set', () => {
+    expect(isReadiness(null, '2026-08-26')).toBe(true)
+  })
+
+  it('is readiness before the drawdown date', () => {
+    expect(isReadiness('2028-01-01', '2026-08-26')).toBe(true)
+  })
+
+  it('goes live on the drawdown date', () => {
+    expect(isReadiness('2026-08-26', '2026-08-26')).toBe(false)
+  })
+})
+
+describe('drawdownStatus', () => {
+  it('names the readiness state', () => {
+    expect(drawdownStatus(null, '2026-08-26')).toBe("Readiness — drawdown hasn't started")
+  })
+
+  it('names the live state with its start date', () => {
+    expect(drawdownStatus('2026-01-01', '2026-08-26')).toBe('Live — drawdown since 2026-01-01')
   })
 })
 

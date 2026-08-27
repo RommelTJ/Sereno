@@ -286,6 +286,7 @@ export interface AssumptionsFormValues {
   spend: string
   initialRatePct: string
   bandPct: string
+  drawdownStart: string
 }
 
 export function assumptionsFormValues(
@@ -305,6 +306,7 @@ export function assumptionsFormValues(
         ? toPercent(spendPlan.initial_rate)
         : '',
     bandPct: spendPlan ? toPercent(spendPlan.guardrail_band) : '',
+    drawdownStart: spendPlan?.drawdown_start ?? '',
   }
 }
 
@@ -344,17 +346,20 @@ export function assumptionsEdits(
   const spend = parseNumber(values.spend)
   const initialRate = toFraction(values.initialRatePct) ?? null
   const band = toFraction(values.bandPct)
+  const drawdownStart = values.drawdownStart || null
   const planChanged =
     !spendPlan ||
     spend !== spendPlan.annual_target ||
     initialRate !== spendPlan.initial_rate ||
-    (band ?? 0.2) !== spendPlan.guardrail_band
+    (band ?? 0.2) !== spendPlan.guardrail_band ||
+    drawdownStart !== spendPlan.drawdown_start
   if (spend != null && planChanged) {
     edit.spendPlan = {
       effective_date: today,
       annual_target: spend,
       ...(initialRate != null && { initial_rate: initialRate }),
       ...(band != null && { guardrail_band: band }),
+      ...(drawdownStart != null && { drawdown_start: drawdownStart }),
     }
   }
   return edit

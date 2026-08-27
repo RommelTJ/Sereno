@@ -379,6 +379,23 @@ def test_spend_band_tables_hold_a_versioned_schedule(conn):
     ]
 
 
+def test_drawdown_start_joins_the_spend_plan(conn):
+    # 0016 adds drawdown_start — the effective-dated moment real drawdown
+    # begins, set once — and initial_rate_stamped, marking the plan row
+    # whose anchor rate was captured from actuals rather than hand-set.
+    # Both are additive: existing rows read as hand-set, no drawdown date.
+    migrate(conn)
+    conn.execute(
+        "INSERT INTO spend_plan (effective_date, annual_target, initial_rate, drawdown_start)"
+        " VALUES ('2026-08-26', 45000, 0.0294, '2028-01-01')"
+    )
+    row = conn.execute(
+        "SELECT effective_date, annual_target, initial_rate, guardrail_band,"
+        " drawdown_start, initial_rate_stamped FROM spend_plan"
+    ).fetchone()
+    assert tuple(row) == ("2026-08-26", 45000, 0.0294, 0.2, "2028-01-01", 0)
+
+
 def test_spend_band_rows_require_a_real_version_and_the_core_fields(conn):
     conn.execute("PRAGMA foreign_keys = ON")
     migrate(conn)
