@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { LedgerColumn, LedgerRow } from '../ledger.ts'
-import { formatUsd } from '../ledger.ts'
+import { deltaClass, formatDelta, formatUsd } from '../ledger.ts'
 
 // The derived column reads as derived: a lighter header than the
 // accounts beside it and a tint that sits over whichever row it lands
@@ -9,6 +9,21 @@ const SUBTOTAL_TINT = 'bg-black/[0.02]'
 
 const columnKey = (column: LedgerColumn) =>
   column.kind === 'account' ? column.account.id : column.label
+
+// The change from the previous month, annotating the figure it sits
+// beside: smaller and lighter, never competing with the balance. An em
+// dash where there is nothing to subtract from — an opening balance is
+// not a full-value gain, and no data is not no change.
+function Delta({ delta }: { delta: number | null }) {
+  if (delta === null) {
+    return <span className="ml-1.5 text-[11px] text-faint">—</span>
+  }
+  return (
+    <span className={`ml-1.5 text-[11px] font-medium ${deltaClass(delta)}`}>
+      {formatDelta(delta)}
+    </span>
+  )
+}
 
 interface LedgerTableProps {
   columns: LedgerColumn[]
@@ -99,10 +114,13 @@ function LedgerTable({
                     <td
                       key={columnKey(column)}
                       className={`px-3.5 py-[11px] text-right${
-                        liability ? ' text-red-text' : ''
-                      }${column.kind === 'subtotal' ? ` ${SUBTOTAL_TINT}` : ''}`}
+                        column.kind === 'subtotal' ? ` ${SUBTOTAL_TINT}` : ''
+                      }`}
                     >
-                      {formatUsd(value)}
+                      <span className={liability ? 'text-red-text' : undefined}>
+                        {formatUsd(value)}
+                      </span>
+                      <Delta delta={row.deltas[cell]} />
                     </td>
                   )
                 })}

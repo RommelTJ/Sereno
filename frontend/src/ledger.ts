@@ -72,6 +72,21 @@ export function formatUsd(value: number): string {
   return value < 0 ? `-$${digits}` : `$${digits}`
 }
 
+// A delta annotates the figure beside it, so it carries its sign:
+// "+$2,400.00" grew, "-$28.40" shrank, and a month that carried forward
+// unchanged is a plain "$0.00" — no sign to read into.
+export function formatDelta(delta: number): string {
+  return delta > 0 ? `+${formatUsd(delta)}` : formatUsd(delta)
+}
+
+// Favorable green, unfavorable red, unchanged muted. The figure is
+// already signed for display, so a liability needs no special case:
+// a debt paid down is a rise like any other.
+export function deltaClass(delta: number): string {
+  if (delta === 0) return 'text-muted-2'
+  return delta > 0 ? 'text-accent' : 'text-red'
+}
+
 // The row represents the month, so its "YYYY-MM" key formats as
 // "July 2026" — never an entry's exact date, which shifts as the
 // month gets updated.
