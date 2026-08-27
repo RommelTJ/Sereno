@@ -734,3 +734,35 @@ class TestSeriesByTier:
         seed_portfolio()
         seed_config()
         assert client.get("/api/forecast").json()["series"][0]["hsa"] == 0.0
+
+
+class TestFirstUnlockAge:
+    """The bridge card counts the years until the first locked bucket
+    opens, measured on your own age axis — a younger owner's gate lands
+    later there than the age she will actually be."""
+
+    def test_it_is_the_earliest_gate_on_your_age_axis(self, client):
+        seed_portfolio()
+        seed_config()
+        assert client.get("/api/forecast").json()["first_unlock_age"] == 59.5
+
+    def test_a_spouse_only_gate_lands_three_years_out(self, client):
+        eth = insert_account("Ethereum", "eth", priority=1)
+        insert_balance(eth, 400_000, cost_basis=4_000)
+        hers = insert_account(
+            "Her 401(k)",
+            "401k",
+            tax_treatment="ORDINARY",
+            priority=3,
+            access_age=59.5,
+            owner="spouse",
+        )
+        insert_balance(hers, 500_000)
+        seed_config()
+        assert client.get("/api/forecast").json()["first_unlock_age"] == 62.5
+
+    def test_it_is_null_when_no_bucket_is_gated(self, client):
+        eth = insert_account("Ethereum", "eth", priority=1)
+        insert_balance(eth, 400_000, cost_basis=4_000)
+        seed_config()
+        assert client.get("/api/forecast").json()["first_unlock_age"] is None
