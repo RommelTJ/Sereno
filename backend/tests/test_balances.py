@@ -348,6 +348,27 @@ class TestUpdateAccount:
         )
         assert row == {"withdrawal_priority": 3, "access_age": 59.5}
 
+    def test_classifies_an_hsa_into_the_fourth_withdrawal_tier(self, client):
+        # HSAs are their own tier: tax-free, gated later than a 401(k),
+        # and drawn after it.
+        created = self.create(client, "Fidelity HSA")
+        response = client.put(
+            f"/api/accounts/{created['id']}",
+            json={
+                "kind": "hsa",
+                "tax_treatment": "TAX_FREE",
+                "is_investable": True,
+                "withdrawal_priority": 4,
+                "access_age": 65,
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["withdrawal_priority"] == 4
+        (row,) = query(
+            "SELECT withdrawal_priority, access_age FROM account WHERE id = ?", created["id"]
+        )
+        assert row == {"withdrawal_priority": 4, "access_age": 65.0}
+
     def test_classification_can_be_cleared_back_to_net_worth_only(self, client):
         created = self.create(client, "Coinbase ETH")
         classified = client.put(f"/api/accounts/{created['id']}", json=self.CLASSIFICATION)

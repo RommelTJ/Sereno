@@ -389,3 +389,22 @@ class TestBucketGrouping:
         insert_tax_param()
         steps = client.get("/api/sourcing", params={"age": 62}).json()["steps"]
         assert [step["note"] for step in steps] == [None, "locked until age 65"]
+
+
+class TestHsaTier:
+    """HSAs are the fourth withdrawal tier: tax-free, gated later than a
+    401(k), and drawn only once everything ahead of them is spent."""
+
+    def test_the_fourth_tier_is_labelled_and_drawn_last(self, client):
+        retirement = insert_account(
+            "401(k)", "401k", tax_treatment="ORDINARY", priority=3, access_age=59.5
+        )
+        insert_balance(retirement, 100_000)
+        hsa = insert_account("Fidelity HSA", "hsa", tax_treatment="TAX_FREE", priority=4)
+        insert_balance(hsa, 500_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 66, "spend": 200_000}).json()["steps"]
+        assert [step["name"] for step in steps] == ["401(k)", "HSA"]
+        assert steps[1]["treatment"] == "TAX_FREE"
+        assert steps[1]["gross"] > 0
