@@ -730,7 +730,10 @@ The forecast slice (the third Plan engine):
   month, never an entry's exact date) with one
   column per active account — assets then liabilities, liabilities negative
   in red — plus the net-worth column, horizontally scrollable as accounts
-  grow. The table opens on the twelve newest months and loads older ones a
+  grow. On wide screens the balance form's column pins at its designed
+  width and the table takes every further pixel the widened shell
+  supplies, so the columns fit without scrolling at typical account
+  counts. The table opens on the twelve newest months and loads older ones a
   page at a time: a sentinel row below the last month, watched with an
   `IntersectionObserver` against the viewport, so a touch flick pages the
   same as a wheel. A loading row shows while a page is in flight, and both
@@ -931,7 +934,9 @@ The forecast slice (the third Plan engine):
   Security income sliver at the base, enlarged to a 7px minimum so
   the income stays visible against multi-million balances; hovering
   a bar shows the age, its calendar year, and the exact per-bucket
-  dollar breakdown. The tooltip leads with that year's portfolio
+  dollar breakdown. On wide screens the view sheds its designed cap
+  and rides the widened shell, so the sixty-odd year columns get real
+  width instead of slivers. The tooltip leads with that year's portfolio
   total — ETH + brokerage + 401(k), with the change against the
   previous year beside it ("$1,600,000.00 (+$45,000.00)"), and
   nothing beside it on the first simulated year, which has no prior
