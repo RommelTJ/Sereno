@@ -408,3 +408,50 @@ class TestHsaTier:
         assert [step["name"] for step in steps] == ["401(k)", "HSA"]
         assert steps[1]["treatment"] == "TAX_FREE"
         assert steps[1]["gross"] > 0
+
+
+def seed_two_owners_401k(access_age=59.5):
+    for owner in ("you", "spouse"):
+        account = insert_account(
+            f"{owner} 401(k)",
+            "401k",
+            tax_treatment="ORDINARY",
+            priority=3,
+            access_age=access_age,
+            owner=owner,
+        )
+        insert_balance(account, 300_000)
+    insert_spend_plan()
+    insert_tax_param()
+
+
+class TestOwnerAges:
+    """?age= is your age. Your spouse's slides with it, three sanitized
+    years behind, so one age axis carries both people's gates."""
+
+    def test_a_spouse_owned_bucket_is_still_locked_when_yours_opens(self, client):
+        seed_two_owners_401k()
+        steps = client.get("/api/sourcing", params={"age": 60}).json()["steps"]
+        assert [step["name"] for step in steps] == ["401(k) · you", "401(k) · spouse"]
+        assert steps[0]["note"] is None
+        assert steps[1]["note"] == "locked until age 59.5"
+
+    def test_it_unlocks_once_she_reaches_the_gate(self, client):
+        seed_two_owners_401k()
+        steps = client.get("/api/sourcing", params={"age": 63}).json()["steps"]
+        assert [step["note"] for step in steps] == [None, None]
+
+    def test_a_joint_bucket_is_gated_on_your_own_age(self, client):
+        account = insert_account(
+            "Joint 401(k)",
+            "401k",
+            tax_treatment="ORDINARY",
+            priority=3,
+            access_age=59.5,
+            owner="joint",
+        )
+        insert_balance(account, 300_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 60}).json()["steps"]
+        assert steps[0]["note"] is None
