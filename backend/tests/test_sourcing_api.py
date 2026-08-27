@@ -66,11 +66,11 @@ def insert_tax_param(tax_year=None, ltcg_0_ceiling=96_700, std_deduction=30_000)
     )
 
 
-def insert_account(name, kind, *, tax_treatment="LTCG", priority=None, access_age=None):
+def insert_account(name, kind, *, tax_treatment="LTCG", priority=None, access_age=None, owner=None):
     return execute(
         "INSERT INTO account (name, kind, tax_treatment, owner, is_liability, is_investable,"
-        " withdrawal_priority, access_age) VALUES (?, ?, ?, NULL, 0, 1, ?, ?)",
-        (name, kind, tax_treatment, priority, access_age),
+        " withdrawal_priority, access_age) VALUES (?, ?, ?, ?, 0, 1, ?, ?)",
+        (name, kind, tax_treatment, owner, priority, access_age),
     )
 
 
@@ -317,3 +317,75 @@ class TestTaxFreeBucket:
         assert step["tax"] == 0
         assert step["net"] == pytest.approx(200_000)
         assert body["shortfall"] == 0
+
+
+class TestBucketGrouping:
+    """One bucket per withdrawal_priority cannot hold two people's
+    accounts, or two tax treatments: the gate and the tax rate are
+    properties of the account, not of the tier it sits in."""
+
+    def test_gated_accounts_split_by_owner(self, client):
+        yours = insert_account(
+            "Your 401(k)",
+            "401k",
+            tax_treatment="ORDINARY",
+            priority=3,
+            access_age=59.5,
+            owner="you",
+        )
+        insert_balance(yours, 300_000)
+        hers = insert_account(
+            "Her 401(k)",
+            "401k",
+            tax_treatment="ORDINARY",
+            priority=3,
+            access_age=59.5,
+            owner="spouse",
+        )
+        insert_balance(hers, 200_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 40}).json()["steps"]
+        assert [step["name"] for step in steps] == ["401(k) · you", "401(k) · spouse"]
+
+    def test_ungated_accounts_do_not_split_by_owner(self, client):
+        # Without a gate the owner cannot change the answer, so it must
+        # not fragment the tier either.
+        yours = insert_account("VFIAX", "brokerage_fund", priority=2, owner="you")
+        insert_balance(yours, 400_000)
+        hers = insert_account("VTIAX", "brokerage_fund", priority=2, owner="spouse")
+        insert_balance(hers, 200_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 40}).json()["steps"]
+        assert [step["name"] for step in steps] == ["Brokerage"]
+        assert steps[0]["gross"] == pytest.approx(45_000)
+
+    def test_a_tier_holding_two_treatments_splits(self, client):
+        # These used to collapse onto whichever row SQLite returned
+        # last, so the tier's tax treatment was a matter of luck.
+        wallet = insert_account("ETH Wallet", "eth", tax_treatment="ORDINARY", priority=1)
+        insert_balance(wallet, 100_000, cost_basis=10_000)
+        staked = insert_account("ETH Staked", "eth", tax_treatment="LTCG", priority=1)
+        insert_balance(staked, 300_000, cost_basis=30_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 40}).json()["steps"]
+        assert [step["name"] for step in steps] == ["ETH · capital gains", "ETH · ordinary"]
+        assert [step["treatment"] for step in steps] == ["LTCG", "ORDINARY"]
+
+    def test_a_tier_holding_two_gate_ages_splits(self, client):
+        # 401(k)s at 59.5 beside HSAs at 65: one access_age for the tier
+        # is wrong for half the money whichever one wins.
+        early = insert_account(
+            "401(k)", "401k", tax_treatment="ORDINARY", priority=3, access_age=59.5, owner="you"
+        )
+        insert_balance(early, 300_000)
+        late = insert_account(
+            "HSA", "hsa", tax_treatment="ORDINARY", priority=3, access_age=65, owner="you"
+        )
+        insert_balance(late, 200_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 62}).json()["steps"]
+        assert [step["note"] for step in steps] == [None, "locked until age 65"]
