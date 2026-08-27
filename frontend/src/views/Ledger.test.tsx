@@ -138,6 +138,85 @@ describe('Ledger monthly balance table', () => {
   })
 })
 
+// The delta beside each balance answers "is this going the right way".
+// It is taken on the displayed figure, so a shrinking debt is green like
+// a growing asset — and three states stay apart: a change, no change at
+// all, and no previous entry to compare against.
+describe('Month-over-month deltas', () => {
+  beforeEach(() => {
+    stubApi({
+      '/api/accounts': ACCOUNTS,
+      '/api/ledger': LEDGER_PAGE,
+      '/api/quick-links': [],
+    })
+  })
+
+  it('shows the change beside each balance, green when favorable', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('+$10,000.00')).toHaveClass('text-accent')
+    expect(within(rows[0]).getByText('+$5,000.00')).toHaveClass('text-accent')
+  })
+
+  it('colors an unfavorable change red', async () => {
+    stubApi({
+      '/api/accounts': ACCOUNTS,
+      '/api/ledger': ledgerPage([
+        {
+          month: '2026-06',
+          net_worth: 1_736_000,
+          balances: [balance(1, '2026-06-01', 60_000, 20, 3_000)],
+        },
+        {
+          month: '2026-05',
+          net_worth: 1_744_000,
+          balances: [balance(1, '2026-05-01', 68_000, 20, 3_400)],
+        },
+      ]),
+      '/api/quick-links': [],
+    })
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('-$8,000.00')).toHaveClass('text-red')
+  })
+
+  it('keeps a liability figure red while its own delta reads green', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('-$150,000.00')).toHaveClass(
+      'text-red-text',
+    )
+    expect(within(rows[0]).getByText('+$700.00')).toHaveClass('text-accent')
+  })
+
+  it('shows a carried-forward balance as a muted zero', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    const unchanged = within(rows[0]).getAllByText('$0.00')
+    expect(unchanged).toHaveLength(2)
+    unchanged.forEach((delta) => expect(delta).toHaveClass('text-muted-2'))
+  })
+
+  it('shows an em dash where there is no previous month', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[1]).getAllByText('—')).toHaveLength(11)
+    expect(within(rows[1]).queryByText('$0.00')).not.toBeInTheDocument()
+  })
+
+  it('carries a delta on the brokerage subtotal', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(within(rows[0]).getByText('+$16,000.00')).toHaveClass('text-accent')
+  })
+})
+
 describe("Update this month's balances form", () => {
   beforeEach(() => {
     stubApi({
