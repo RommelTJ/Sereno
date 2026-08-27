@@ -315,3 +315,33 @@ class TestUnfillableGap:
         assert result.draws[2].note == "locked until age 59.5"
         assert result.shortfall == pytest.approx(22_000)
         assert result.net_delivered == pytest.approx(23_000)
+
+
+def hsa(balance=500_000.0, access_age=65.0):
+    # A tax-advantaged bucket that is not taxed as ordinary income:
+    # its gate has to hold on the bucket, not on the treatment.
+    return Bucket(name="HSA", balance=balance, basis=0.0, treatment="LTCG", access_age=access_age)
+
+
+class TestAccessGate:
+    """The gate belongs to the bucket, not to its tax treatment — a Roth
+    or an HSA locks exactly the way a traditional 401(k) does."""
+
+    def test_a_capital_gains_bucket_below_its_access_age_is_locked(self):
+        result = run(age=40, buckets=[hsa()])
+        draw = result.draws[0]
+        assert draw.gross == 0
+        assert draw.net == 0
+        assert draw.note == "locked until age 65"
+        assert result.shortfall == pytest.approx(37_000)
+
+    def test_a_locked_bucket_reports_its_own_treatment(self):
+        assert run(age=40, buckets=[hsa()]).draws[0].treatment == "LTCG"
+
+    def test_a_locked_bucket_spends_none_of_the_headroom(self):
+        # The gate runs first, so the brokerage behind it still meets
+        # the full 0% headroom rather than one the locked sale spent.
+        result = run(age=40, buckets=[hsa(), brokerage()])
+        assert result.draws[1].gross == pytest.approx(37_000)
+        assert result.draws[1].tax == 0
+        assert result.shortfall == 0
