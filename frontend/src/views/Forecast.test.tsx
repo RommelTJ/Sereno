@@ -150,6 +150,25 @@ describe('bridge card', () => {
   })
 })
 
+describe('HSA band', () => {
+  it('draws the HSA tier and names it in the tooltip and legend', async () => {
+    stubApi({
+      '/api/forecast': {
+        ...FORECAST,
+        series: FORECAST.series.map((point) => ({ ...point, hsa: 100_000 })),
+      },
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
+    })
+    render(<Forecast />)
+
+    const tip = await screen.findByTestId('forecast-tip-38')
+    expect(tip).toHaveTextContent('HSA $100,000.00')
+    expect(screen.getByTestId('forecast-total-38')).toHaveTextContent('$1.70M')
+    expect(screen.getByTestId('forecast-chart')).toHaveTextContent(/HSA · locked/)
+  })
+})
+
 describe('planned purchases section', () => {
   it('starts empty with only the add control', async () => {
     render(<Forecast />)

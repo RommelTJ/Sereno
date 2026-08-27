@@ -199,11 +199,15 @@ describe('chartColumns', () => {
     })
   })
 
-  it('totals the three balance buckets', () => {
+  it('totals every balance bucket, the HSA tier included', () => {
     const columns = chartColumns(
-      series({ 38: { eth: 100_000, brokerage: 50_000, retirement: 50_000 } }),
+      series({
+        38: { eth: 100_000, brokerage: 50_000, retirement: 50_000, hsa: 25_000 },
+      }),
     )
-    expect(columns[0].totalUsd).toBe(200_000)
+    expect(columns[0].totalUsd).toBe(225_000)
+    expect(columns[0].hsaUsd).toBe(25_000)
+    expect(columns[0].hsa).toBeGreaterThan(0)
   })
 
   it('leaves Social Security out of the total — it is a flow, not a balance', () => {
