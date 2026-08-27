@@ -188,6 +188,7 @@ class TestWaterfall:
                     "tax": 0.0,
                     "net": 42_000.0,
                     "note": None,
+                    "access_age": None,
                 },
                 {
                     "name": "Brokerage",
@@ -196,6 +197,7 @@ class TestWaterfall:
                     "tax": 0.0,
                     "net": 0.0,
                     "note": None,
+                    "access_age": None,
                 },
                 {
                     "name": "401(k)",
@@ -204,6 +206,7 @@ class TestWaterfall:
                     "tax": 0.0,
                     "net": 0.0,
                     "note": "locked until age 59.5",
+                    "access_age": 59.5,
                 },
             ],
             "net_delivered": 45_000.0,
