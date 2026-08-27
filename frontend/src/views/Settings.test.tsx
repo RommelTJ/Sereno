@@ -846,7 +846,31 @@ describe('Assumptions card', () => {
     render(<Settings />)
 
     const card = await screen.findByTestId('assumptions-card')
-    expect(within(card).getAllByText('—')).toHaveLength(6)
+    expect(within(card).getAllByText('—')).toHaveLength(7)
+  })
+
+  it('shows the drawdown start beside the guardrail knobs', async () => {
+    stubApi({
+      ...routes(),
+      '/api/spend-plan': { ...SPEND_PLAN, drawdown_start: '2028-01-01' },
+    })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('assumptions-card')
+    expect(within(card).getByText('Drawdown start')).toBeInTheDocument()
+    expect(within(card).getByText('2028-01-01')).toBeInTheDocument()
+  })
+
+  it('prefills the drawdown start date', async () => {
+    stubApi({
+      ...routes(),
+      '/api/spend-plan': { ...SPEND_PLAN, drawdown_start: '2028-01-01' },
+    })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    expect(within(card).getByLabelText('Drawdown start')).toHaveValue('2028-01-01')
   })
 
   it('prefills the rate and band fields as percentages', async () => {
@@ -1194,6 +1218,99 @@ describe('Editing appends new config rows', () => {
       annual_target: 45_000,
       initial_rate: 0.0294,
       guardrail_band: 0.25,
+    })
+  })
+
+  it('saves an edited drawdown start on a new spend-plan row', async () => {
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/spend-plan': { ...SPEND_PLAN, id: 2, drawdown_start: '2028-01-01' },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Drawdown start'), {
+      target: { value: '2028-01-01' },
+    })
+    r['/api/spend-plan'] = { ...SPEND_PLAN, id: 2, drawdown_start: '2028-01-01' }
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('2028-01-01')).toBeInTheDocument()
+    const body = JSON.parse(
+      postCalls(fetchMock, '/api/spend-plan')[0][1]?.body as string,
+    )
+    expect(body).toEqual({
+      effective_date: todayIso(),
+      annual_target: 45_000,
+      initial_rate: 0.0294,
+      guardrail_band: 0.2,
+      drawdown_start: '2028-01-01',
+    })
+    expect(postCalls(fetchMock, '/api/assumptions')).toHaveLength(0)
+  })
+
+  it('carries a stored drawdown start through an unrelated edit', async () => {
+    // An assumptions save that never touched the date must not clear
+    // it — the payload is a full spend-plan row.
+    const stored = { ...SPEND_PLAN, drawdown_start: '2028-01-01' }
+    const r: Record<string, unknown> = {
+      ...routes(),
+      '/api/spend-plan': stored,
+      'POST /api/spend-plan': { ...stored, id: 2, annual_target: 48_000 },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Spend $ / yr'), {
+      target: { value: '48,000' },
+    })
+    r['/api/spend-plan'] = { ...stored, id: 2, annual_target: 48_000 }
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('$48,000.00 / yr')).toBeInTheDocument()
+    const body = JSON.parse(
+      postCalls(fetchMock, '/api/spend-plan')[0][1]?.body as string,
+    )
+    expect(body).toEqual({
+      effective_date: todayIso(),
+      annual_target: 48_000,
+      initial_rate: 0.0294,
+      guardrail_band: 0.2,
+      drawdown_start: '2028-01-01',
+    })
+  })
+
+  it('clears the drawdown start when the date is blanked', async () => {
+    const stored = { ...SPEND_PLAN, drawdown_start: '2028-01-01' }
+    const r: Record<string, unknown> = {
+      ...routes(),
+      '/api/spend-plan': stored,
+      'POST /api/spend-plan': { ...SPEND_PLAN, id: 2 },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Drawdown start'), {
+      target: { value: '' },
+    })
+    r['/api/spend-plan'] = { ...SPEND_PLAN, id: 2 }
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    await within(card).findByText('$45,000.00 / yr')
+    const body = JSON.parse(
+      postCalls(fetchMock, '/api/spend-plan')[0][1]?.body as string,
+    )
+    expect(body).toEqual({
+      effective_date: todayIso(),
+      annual_target: 45_000,
+      initial_rate: 0.0294,
+      guardrail_band: 0.2,
     })
   })
 

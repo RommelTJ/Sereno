@@ -374,6 +374,7 @@ export const SPEND_PLAN = {
   annual_target: 45_000,
   initial_rate: 0.0294,
   guardrail_band: 0.2,
+  drawdown_start: null,
 }
 
 // GET /api/spend-bands as the seed configures it: a step up through
