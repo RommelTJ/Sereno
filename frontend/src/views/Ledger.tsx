@@ -67,7 +67,7 @@ function Ledger() {
   return (
     <div
       data-testid="view-ledger"
-      className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.6fr_1fr]"
+      className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1.6fr_1fr] 2xl:grid-cols-[1fr_440px]"
     >
       {accounts && months && (
         <>
