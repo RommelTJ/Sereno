@@ -28,6 +28,7 @@ function point(
     brokerage: number
     retirement: number
     ss_income: number
+    hsa: number
   }> = {},
 ) {
   return {
@@ -35,6 +36,7 @@ function point(
     eth: 0,
     brokerage: 0,
     retirement: 0,
+    hsa: 0,
     ss_income: 0,
     ...balances,
   }
@@ -44,7 +46,13 @@ function point(
 function series(
   overrides: Record<
     number,
-    Partial<{ eth: number; brokerage: number; retirement: number; ss_income: number }>
+    Partial<{
+      eth: number
+      brokerage: number
+      retirement: number
+      hsa: number
+      ss_income: number
+    }>
   > = {},
 ) {
   return Array.from({ length: 100 - 38 + 1 }, (_, i) => point(38 + i, overrides[38 + i]))

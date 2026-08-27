@@ -23,9 +23,11 @@ export function stepMarker(index: number): string {
   return MARKERS[index] ?? `${index + 1}`
 }
 
-// LTCG buckets are sold; ordinary buckets are withdrawn.
+// Capital-gains buckets hold positions to sell; a 401(k) or an HSA is
+// withdrawn — there is nothing to realise, and "sell your HSA" reads as
+// a mistake.
 export function stepAction(step: SourcingStep): string {
-  return step.treatment === 'ORDINARY' ? 'withdraw' : 'sell'
+  return step.treatment === 'LTCG' ? 'sell' : 'withdraw'
 }
 
 // The sub-line for a waterfall step: the engine's gate note wins, an

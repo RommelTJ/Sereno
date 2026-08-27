@@ -77,7 +77,7 @@ export interface AccountInput {
 
 // PUT /api/accounts/{id} classifies an account for the planners — kind,
 // tax treatment, the investable flag, withdrawal priority (1 ETH,
-// 2 brokerage, 3 tax-advantaged), and access age — revised in place:
+// 2 brokerage, 3 401(k), 4 HSA), and access age — revised in place:
 // dimension metadata, not an effective-dated fact. A liability can never
 // be investable or hold a priority (422).
 export interface AccountClassificationInput {
@@ -304,11 +304,13 @@ export interface TaxParam {
 // year, a balance, and a spend target exist.
 export interface SourcingStep {
   name: string
-  treatment: 'LTCG' | 'ORDINARY'
+  treatment: 'LTCG' | 'ORDINARY' | 'TAX_FREE'
   gross: number
   tax: number
   net: number
   note: string | null
+  // The owner's own gate age, not one shifted onto your age axis.
+  access_age: number | null
 }
 
 export interface Sourcing {
@@ -336,6 +338,7 @@ export interface ForecastPoint {
   eth: number
   brokerage: number
   retirement: number
+  hsa: number
   ss_income: number
 }
 
@@ -408,6 +411,9 @@ export interface Forecast {
   ss_spouse: number
   ss_start: number
   tax_year: number
+  // When the earliest locked bucket opens, on your own age axis; null
+  // when nothing in the portfolio is gated.
+  first_unlock_age: number | null
   bands: BandOut[]
   purchases: PurchaseOut[]
   series: ForecastPoint[]
