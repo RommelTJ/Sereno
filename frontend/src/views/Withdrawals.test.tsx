@@ -165,6 +165,68 @@ describe('empty state', () => {
   })
 })
 
+describe('bucket rules', () => {
+  it("names a gated tier's lock age from the waterfall", async () => {
+    render(<Withdrawals />)
+
+    const rules = await screen.findByTestId('sourcing-rules')
+    expect(rules).toHaveTextContent('Under 59½ it stays locked')
+  })
+
+  it('leaves out a tier the portfolio does not hold', async () => {
+    render(<Withdrawals />)
+
+    const rules = await screen.findByTestId('sourcing-rules')
+    expect(rules).not.toHaveTextContent('HSA')
+  })
+
+  it('adds the HSA tier and its own gate when the waterfall has one', async () => {
+    stubApi({
+      '/api/sourcing': {
+        ...SOURCING,
+        steps: [
+          ...SOURCING.steps,
+          {
+            name: 'HSA · spouse',
+            treatment: 'TAX_FREE',
+            gross: 0,
+            tax: 0,
+            net: 0,
+            note: 'locked until age 65',
+            access_age: 65,
+          },
+        ],
+      },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const rules = await screen.findByTestId('sourcing-rules')
+    expect(rules).toHaveTextContent('④ HSA')
+    expect(rules).toHaveTextContent('Under 65 it stays locked')
+    expect(rules).toHaveTextContent('Under 59½ it stays locked')
+  })
+
+  it('drops the lock sentence for a tier with no gate', async () => {
+    stubApi({
+      '/api/sourcing': {
+        ...SOURCING,
+        steps: [
+          SOURCING.steps[0],
+          SOURCING.steps[1],
+          { ...SOURCING.steps[2], note: null, access_age: null },
+        ],
+      },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const rules = await screen.findByTestId('sourcing-rules')
+    expect(rules).toHaveTextContent('③ 401(k)')
+    expect(rules).not.toHaveTextContent('stays locked')
+  })
+})
+
 describe('step action derivation', () => {
   it('sells a capital-gains bucket and withdraws every other kind', () => {
     // A 401(k) or an HSA is withdrawn, not sold: there is no position
