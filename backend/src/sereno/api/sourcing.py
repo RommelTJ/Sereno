@@ -15,6 +15,7 @@ Null until a tax year, a balance, and a spend target exist.
 """
 
 import sqlite3
+from dataclasses import dataclass
 from datetime import date
 from typing import Annotated, Literal
 
@@ -60,8 +61,18 @@ _BUCKET_TREATMENTS: dict[str, BucketTreatment] = {
     "TAX_FREE": "TAX_FREE",
 }
 
+_TREATMENT_LABELS: dict[BucketTreatment, str] = {
+    "LTCG": "capital gains",
+    "ORDINARY": "ordinary",
+    "TAX_FREE": "tax-free",
+}
+
+# Display order inside a tier: whose money it is, read the way a person
+# reads it. An unrecognised or missing owner sorts last.
+_OWNER_ORDER = {"you": 0, "spouse": 1, "joint": 2}
+
 _LATEST_BALANCES = """
-    SELECT a.withdrawal_priority AS priority, a.tax_treatment, a.access_age,
+    SELECT a.withdrawal_priority AS priority, a.tax_treatment, a.access_age, a.owner,
            b.balance_usd, b.cost_basis, b.account_id
     FROM account a
     JOIN (
@@ -127,21 +138,92 @@ def _account_basis(db: sqlite3.Connection, account_id: int, cost_basis: float | 
     return cost_basis if cost_basis is not None else 0.0
 
 
+@dataclass(frozen=True)
+class _BucketKey:
+    """What makes two accounts one bucket: the tier they sit in, how the
+    engine prices them, when they unlock, and — only where there is a
+    gate to read against an age — whose they are. Owner is deliberately
+    dropped from the key for an ungated account: it cannot change that
+    account's answer, so it must not fragment the tier either."""
+
+    priority: int
+    treatment: BucketTreatment
+    access_age: float | None
+    owner: str | None
+
+
+def _bucket_key(row: sqlite3.Row) -> _BucketKey:
+    access_age = row["access_age"]
+    return _BucketKey(
+        priority=row["priority"],
+        treatment=_BUCKET_TREATMENTS.get(row["tax_treatment"], "LTCG"),
+        access_age=access_age,
+        owner=row["owner"] if access_age is not None else None,
+    )
+
+
+def _bucket_order(key: _BucketKey) -> tuple[int, float, int, str]:
+    """Tier first, then the money that unlocks soonest — an ungated
+    bucket is reachable now — then the owner, then the treatment so two
+    otherwise identical keys still order deterministically."""
+    return (
+        key.priority,
+        key.access_age if key.access_age is not None else float("-inf"),
+        _OWNER_ORDER.get(key.owner or "", len(_OWNER_ORDER)),
+        key.treatment,
+    )
+
+
+def _bucket_names(keys: list[_BucketKey]) -> dict[_BucketKey, str]:
+    """A tier that yields one bucket keeps its plain label; where it
+    splits, each name carries only the parts that actually differ, so
+    "401(k)" becomes "401(k) · you" and "401(k) · spouse" without
+    naming a treatment or a gate age they share."""
+    by_priority: dict[int, list[_BucketKey]] = {}
+    for key in keys:
+        by_priority.setdefault(key.priority, []).append(key)
+
+    names: dict[_BucketKey, str] = {}
+    for priority, group in by_priority.items():
+        label = _PRIORITY_LABELS.get(priority, f"Priority {priority}")
+        vary_owner = len({key.owner for key in group}) > 1
+        vary_treatment = len({key.treatment for key in group}) > 1
+        vary_access_age = len({key.access_age for key in group}) > 1
+        for key in group:
+            parts = [label]
+            if vary_owner:
+                parts.append(key.owner or "unassigned")
+            if vary_treatment:
+                parts.append(_TREATMENT_LABELS[key.treatment])
+            if vary_access_age:
+                parts.append("no gate" if key.access_age is None else f"from {key.access_age:g}")
+            names[key] = " · ".join(parts)
+    return names
+
+
 def load_buckets(db: sqlite3.Connection) -> list[Bucket]:
-    grouped: dict[int, Bucket] = {}
+    totals: dict[_BucketKey, tuple[float, float]] = {}
     for row in db.execute(_LATEST_BALANCES):
-        priority = row["priority"]
-        basis = _account_basis(db, row["account_id"], row["cost_basis"])
-        existing = grouped.get(priority)
-        grouped[priority] = Bucket(
-            name=_PRIORITY_LABELS.get(priority, f"Priority {priority}"),
-            balance=(existing.balance if existing else 0.0) + to_dollars(row["balance_usd"]),
-            basis=(existing.basis if existing else 0.0) + basis,
-            treatment=_BUCKET_TREATMENTS.get(row["tax_treatment"], "LTCG"),
-            access_age=row["access_age"] if existing is None else existing.access_age,
-            headroom_only=priority == ETH_PRIORITY,
+        key = _bucket_key(row)
+        balance, basis = totals.get(key, (0.0, 0.0))
+        totals[key] = (
+            balance + to_dollars(row["balance_usd"]),
+            basis + _account_basis(db, row["account_id"], row["cost_basis"]),
         )
-    return [grouped[priority] for priority in sorted(grouped)]
+
+    keys = sorted(totals, key=_bucket_order)
+    names = _bucket_names(keys)
+    return [
+        Bucket(
+            name=names[key],
+            balance=totals[key][0],
+            basis=totals[key][1],
+            treatment=key.treatment,
+            access_age=key.access_age,
+            headroom_only=key.priority == ETH_PRIORITY,
+        )
+        for key in keys
+    ]
 
 
 @router.get("/sourcing")
