@@ -41,7 +41,7 @@ class TestSeedPopulatesEveryTable:
         count = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: S608
         assert count > 0, f"{table} was not seeded"
 
-    def test_seeds_the_ten_design_handoff_accounts(self, db):
+    def test_seeds_the_design_handoff_accounts(self, db):
         seed(db)
         names = {row["name"] for row in db.execute("SELECT name FROM account")}
         assert names == {
@@ -50,6 +50,7 @@ class TestSeedPopulatesEveryTable:
             "VTIAX",
             "VGSH",
             "Retirement",
+            "HSA",
             "Home",
             "Chase checking",
             "Vanguard Cash Plus",
@@ -67,6 +68,7 @@ class TestSeedPopulatesEveryTable:
             "VTIAX": "🌍",
             "VGSH": "🏦",
             "Retirement": "🏖️",
+            "HSA": "🩺",
             "Home": "🏠",
             "Chase checking": "💵",
             "Vanguard Cash Plus": "💵",
@@ -211,7 +213,7 @@ class TestMain:
         assert "seeded" in capsys.readouterr().out.lower()
         conn = connect(db_file)
         try:
-            assert conn.execute("SELECT COUNT(*) FROM account").fetchone()[0] == 10
+            assert conn.execute("SELECT COUNT(*) FROM account").fetchone()[0] == 11
         finally:
             conn.close()
 
