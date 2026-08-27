@@ -1698,7 +1698,7 @@ function Settings() {
     ]).then(
       ([
         accounts,
-        ledger,
+        ledgerPage,
         categories,
         quickLinks,
         assumption,
@@ -1710,7 +1710,7 @@ function Settings() {
       ]) =>
         setData({
           accounts,
-          ledger,
+          ledger: ledgerPage.months,
           categories,
           quickLinks,
           assumption,
@@ -1725,12 +1725,14 @@ function Settings() {
 
   const refetchAccounts = async () => {
     // Account changes move net worth, so the header readout refreshes too.
-    const [accounts, ledger] = await Promise.all([
+    const [accounts, ledgerPage] = await Promise.all([
       fetchAccounts(),
       fetchLedger(),
       refresh(),
     ])
-    setData((current) => (current ? { ...current, accounts, ledger } : current))
+    setData((current) =>
+      current ? { ...current, accounts, ledger: ledgerPage.months } : current,
+    )
   }
 
   const addAccount = async (input: AccountInput) => {

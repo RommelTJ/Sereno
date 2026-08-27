@@ -25,14 +25,14 @@ function Ledger() {
 
   useEffect(() => {
     void fetchAccounts().then(setAccounts)
-    void fetchLedger().then(setMonths)
+    void fetchLedger().then((page) => setMonths(page.months))
     void fetchQuickLinks().then(setQuickLinks)
   }, [])
 
   const saveBalance = async (input: BalanceEntryInput) => {
     await createBalanceEntry(input)
-    const [updated] = await Promise.all([fetchLedger(), refresh()])
-    setMonths(updated)
+    const [page] = await Promise.all([fetchLedger(), refresh()])
+    setMonths(page.months)
   }
 
   const columns = accounts ? ledgerColumns(accounts) : []
