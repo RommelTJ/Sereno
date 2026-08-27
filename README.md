@@ -119,6 +119,45 @@ Both services carry `restart: unless-stopped`, so a long-running deployment
 comes back on its own after a crash or a host reboot — and stays down once you
 stop it deliberately with `docker compose down` or `docker compose stop`.
 
+### Deploying behind a reverse proxy
+
+A long-running deployment is a plain clone of this repo, updated with
+`git pull && docker compose up -d --build`. Everything host-specific lives
+in `compose.override.yaml` — gitignored, and merged automatically by
+Compose — so `git status` on the deploy box stays clean, real drift stays
+visible, and a reflexive `git reset --hard` can't delete the deployment's
+config. A typical override drops the host port mappings and joins the
+frontend to the proxy's shared network:
+
+```yaml
+services:
+  frontend:
+    ports: !reset []
+    networks:
+      - default
+      - proxy
+    environment:
+      SERENO_PUBLIC_HOST: finance.example.com
+
+  backend:
+    ports: !reset []
+
+networks:
+  proxy:
+    external: true
+```
+
+- `SERENO_PUBLIC_HOST` is the public hostname the proxy serves the app as.
+  `frontend/vite.config.ts` reads it to allow the host (Vite's
+  DNS-rebinding protection answers unknown hosts with a 403) and to point
+  HMR at it over `wss` on 443, where the proxy terminates TLS. Unset — the
+  local-dev and CI case — the server config is exactly what it was before
+  the variable existed.
+- `!reset []` drops the base file's port mappings, so the services are
+  reachable only through the proxy. The tag needs Compose >= 2.24.
+- Environment maps merge per key, so the base file's `SERENO_API_URL`
+  survives the override untouched.
+
 ### Seeding sample data
 
 For development, populate the database with the sanitized, illustrative values
