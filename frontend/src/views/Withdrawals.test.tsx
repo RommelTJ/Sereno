@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { stepDetail } from '../sourcing.ts'
+import { stepAction, stepDetail } from '../sourcing.ts'
 import {
   ACCOUNTS,
   SOURCING,
@@ -162,6 +162,20 @@ describe('empty state', () => {
     expect(empty).toHaveTextContent(/withdrawal priority/i)
     expect(empty).toHaveTextContent(/Settings & data/)
     expect(empty).not.toHaveTextContent(/Ledger entries/)
+  })
+})
+
+describe('step action derivation', () => {
+  it('sells a capital-gains bucket and withdraws every other kind', () => {
+    // A 401(k) or an HSA is withdrawn, not sold: there is no position
+    // to realise, and "sell your HSA" reads as a mistake.
+    expect(stepAction({ ...SOURCING.steps[0], treatment: 'LTCG' })).toBe('sell')
+    expect(stepAction({ ...SOURCING.steps[0], treatment: 'ORDINARY' })).toBe(
+      'withdraw',
+    )
+    expect(stepAction({ ...SOURCING.steps[0], treatment: 'TAX_FREE' })).toBe(
+      'withdraw',
+    )
   })
 })
 
