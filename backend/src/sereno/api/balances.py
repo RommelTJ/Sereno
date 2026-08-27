@@ -8,7 +8,7 @@ import sqlite3
 from datetime import date, datetime
 from typing import Annotated, Literal, Self
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from sereno.db.connection import get_db
@@ -17,6 +17,13 @@ from sereno.money import to_cents, to_dollars
 router = APIRouter()
 
 Db = Annotated[sqlite3.Connection, Depends(get_db)]
+
+# The ledger's paging cursor and page size. The limit is bounded because an
+# unbounded one is the thing paging exists to close — every extra month is a
+# whole row of accounts over the wire and another pass of the monthly view.
+# 120 is ten years, past any page a person scrolls to.
+Before = Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")]
+Limit = Annotated[int, Query(ge=1, le=120)]
 
 _ACCOUNT_COLUMNS = (
     "id, name, kind, tax_treatment, owner, is_liability, is_investable,"
@@ -113,6 +120,14 @@ class LedgerMonth(BaseModel):
     month: str
     net_worth: float
     balances: list[LedgerBalance]
+
+
+class LedgerPage(BaseModel):
+    """One page of months, newest first. has_more says whether older months
+    remain, so a caller paging backwards knows when to stop asking."""
+
+    months: list[LedgerMonth]
+    has_more: bool
 
 
 class NetWorthPoint(BaseModel):
@@ -244,18 +259,50 @@ def deactivate_account(account_id: int, db: Db) -> Account:
 
 
 @router.get("/ledger")
-def ledger(db: Db) -> list[LedgerMonth]:
+def ledger(db: Db, limit: Limit = 12, before: Before = None) -> LedgerPage:
+    """One page of the monthly ledger, newest month first — the twelve newest
+    by default, older ones by passing the page's oldest month as `before`.
+
+    The page's months come from balance_entry rather than from the view: it is
+    the same set of months (the view builds its month list the same way, and a
+    month with an entry always keeps at least that entry's row), but reading it
+    directly costs one scan instead of a pass of the month x entry join. A page
+    is whole months, never rows — one month is one row per account, so a row
+    limit would cut a month in half — and both reads below are bounded to the
+    page's contiguous month range.
+    """
+    months = [
+        row["ym"]
+        for row in db.execute(
+            "SELECT DISTINCT substr(as_of_date, 1, 7) AS ym FROM balance_entry"
+            " WHERE ? IS NULL OR substr(as_of_date, 1, 7) < ?"
+            " ORDER BY ym DESC LIMIT ?",
+            (before, before, limit + 1),
+        )
+    ]
+    # One month more than asked for is the only "are there older months?"
+    # signal needed — no second count, and no empty page at the end.
+    has_more = len(months) > limit
+    months = months[:limit]
+    if not months:
+        return LedgerPage(months=[], has_more=False)
+    oldest, newest = months[-1], months[0]
     net_worth = {
         row["month"]: to_dollars(row["net_worth"])
-        for row in db.execute("SELECT month, net_worth FROM v_net_worth")
+        for row in db.execute(
+            "SELECT month, net_worth FROM v_net_worth WHERE month BETWEEN ? AND ?",
+            (oldest, newest),
+        )
     }
-    months: dict[str, list[LedgerBalance]] = {}
+    balances: dict[str, list[LedgerBalance]] = {month: [] for month in months}
     rows = db.execute(
         "SELECT month, account_id, as_of_date, balance_usd, quantity, unit_price"
-        " FROM v_account_monthly ORDER BY month DESC, account_id"
+        " FROM v_account_monthly WHERE month BETWEEN ? AND ?"
+        " ORDER BY month DESC, account_id",
+        (oldest, newest),
     )
     for row in rows:
-        months.setdefault(row["month"], []).append(
+        balances[row["month"]].append(
             LedgerBalance(
                 account_id=row["account_id"],
                 as_of_date=row["as_of_date"],
@@ -264,10 +311,13 @@ def ledger(db: Db) -> list[LedgerMonth]:
                 unit_price=row["unit_price"],
             )
         )
-    return [
-        LedgerMonth(month=month, net_worth=net_worth[month], balances=balances)
-        for month, balances in months.items()
-    ]
+    return LedgerPage(
+        months=[
+            LedgerMonth(month=month, net_worth=net_worth[month], balances=balances[month])
+            for month in months
+        ],
+        has_more=has_more,
+    )
 
 
 @router.get("/net-worth")
