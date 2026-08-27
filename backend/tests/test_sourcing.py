@@ -378,3 +378,38 @@ class TestTaxFreeStep:
         assert result.draws[0].net == pytest.approx(20_000)
         assert result.draws[1].gross == pytest.approx(17_000)
         assert result.draws[1].tax == 0
+
+
+def spouse_hsa(age_offset=-3.0):
+    # The caller simulates on one age axis; a bucket owned by someone
+    # younger sits that many years behind it.
+    return Bucket(
+        name="HSA · spouse",
+        balance=500_000.0,
+        basis=0.0,
+        treatment="TAX_FREE",
+        access_age=65.0,
+        age_offset=age_offset,
+    )
+
+
+class TestOwnerAgeOffset:
+    """A gate is measured against its owner's age, which need not be the
+    age the caller passes. The offset carries the difference, so the
+    engine never has to know whose bucket it is."""
+
+    def test_a_younger_owners_bucket_is_locked_past_the_gate_age(self):
+        result = run(age=65, buckets=[spouse_hsa()], ordinary_brackets=BRACKETS)
+        draw = result.draws[0]
+        assert draw.gross == 0
+        assert draw.note == "locked until age 65"
+
+    def test_it_unlocks_when_the_owner_reaches_the_gate(self):
+        result = run(age=68, buckets=[spouse_hsa()], ordinary_brackets=BRACKETS)
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(37_000)
+        assert draw.note is None
+
+    def test_an_unoffset_bucket_keeps_its_gate_on_the_callers_axis(self):
+        result = run(age=65, buckets=[spouse_hsa(age_offset=0.0)], ordinary_brackets=BRACKETS)
+        assert result.draws[0].note is None
