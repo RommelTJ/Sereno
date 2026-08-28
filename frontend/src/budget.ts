@@ -190,7 +190,10 @@ export function expenseUpdateInput(
 // Returns null when the amount doesn't parse — nothing should be posted.
 // A whitespace-only source title or note is omitted from the payload,
 // never sent empty, and so is an unchecked pending — the server defaults
-// it false, which also clears the flag on the full-replace PUT.
+// it false, which also clears the flag on the full-replace PUT. drawnFrom
+// is the Draw-from select's value — a fund id, or '' for none — and an
+// empty pick is omitted the same way, which is how clearing the select
+// reverses the draw on the full replace.
 export function incomeInput(
   rawAmount: string,
   sourceKey: string,
@@ -199,12 +202,14 @@ export function incomeInput(
   rawSourceLabel: string,
   rawNote: string,
   pending = false,
+  drawnFrom = '',
 ): IncomeInput | null {
   const amount = parseAmount(rawAmount)
   const option = SOURCE_OPTIONS.find((source) => source.value === sourceKey)
   if (!amount || !option) return null
   const sourceLabel = rawSourceLabel.trim()
   const note = rawNote.trim()
+  const drawnFundId = Number(drawnFrom)
   return {
     txn_date: txnDate,
     budget_month: budgetMonth,
@@ -213,6 +218,7 @@ export function incomeInput(
     ...(sourceLabel ? { source_label: sourceLabel } : {}),
     ...(note ? { note } : {}),
     ...(pending ? { pending: true } : {}),
+    ...(drawnFundId ? { drawn_from_fund_id: drawnFundId } : {}),
   }
 }
 
@@ -236,8 +242,9 @@ export function sourceOptionFor(
 
 // The full-replace PUT body for an income row: the edited fields plus the
 // row's tax_treatment and account_id riding along unchanged, so the
-// replace can't clobber what the form doesn't edit. Returns null when the
-// amount doesn't parse — nothing should be sent.
+// replace can't clobber what the form doesn't edit. drawnFrom is edited
+// directly — the form's Draw-from select — never a ride-along. Returns
+// null when the amount doesn't parse — nothing should be sent.
 export function incomeUpdateInput(
   item: ActivityItem,
   rawAmount: string,
@@ -247,6 +254,7 @@ export function incomeUpdateInput(
   rawSourceLabel: string,
   rawNote: string,
   pending = false,
+  drawnFrom = '',
 ): IncomeUpdateInput | null {
   const base = incomeInput(
     rawAmount,
@@ -256,6 +264,7 @@ export function incomeUpdateInput(
     rawSourceLabel,
     rawNote,
     pending,
+    drawnFrom,
   )
   if (!base) return null
   return {
