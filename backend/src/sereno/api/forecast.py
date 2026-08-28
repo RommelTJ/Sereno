@@ -173,6 +173,7 @@ class Forecast(BaseModel):
     return_pct: float
     inflation_pct: float
     eth_growth_pct: float | None
+    staking_yield_pct: float | None
     ss_you: float
     ss_spouse: float
     ss_start: float
@@ -364,6 +365,7 @@ def _resolve_inputs(
     return_pct: float | None,
     inflation_pct: float | None,
     eth_growth_pct: float | None,
+    staking_yield_pct: float | None,
     ss_you: float | None,
     ss_spouse: float | None,
     ss_start: float | None,
@@ -389,7 +391,11 @@ def _resolve_inputs(
         if eth_growth_pct is not None
         else (assumptions.eth_growth_pct if assumptions else None)
     )
-    resolved_staking_yield = assumptions.staking_yield_pct if assumptions else None
+    resolved_staking_yield = (
+        staking_yield_pct
+        if staking_yield_pct is not None
+        else (assumptions.staking_yield_pct if assumptions else None)
+    )
     if target is None or resolved_return is None or resolved_inflation is None:
         return None
     tiered = load_tiered_buckets(db)
@@ -461,6 +467,7 @@ def get_forecast(
     return_pct: Rate = None,
     inflation_pct: Rate = None,
     eth_growth_pct: Rate = None,
+    staking_yield_pct: Rate = None,
     ss_you: Monthly = None,
     ss_spouse: Monthly = None,
     ss_start: StartAge = None,
@@ -487,7 +494,15 @@ def get_forecast(
     else:
         bands = _parse_bands(band)
     inputs = _resolve_inputs(
-        db, spend, return_pct, inflation_pct, eth_growth_pct, ss_you, ss_spouse, ss_start
+        db,
+        spend,
+        return_pct,
+        inflation_pct,
+        eth_growth_pct,
+        staking_yield_pct,
+        ss_you,
+        ss_spouse,
+        ss_start,
     )
     if inputs is None:
         return None
@@ -543,6 +558,7 @@ def get_forecast(
         return_pct=inputs.return_pct,
         inflation_pct=inputs.inflation_pct,
         eth_growth_pct=inputs.eth_growth_pct,
+        staking_yield_pct=inputs.staking_yield_pct,
         ss_you=inputs.ss_you,
         ss_spouse=inputs.ss_spouse,
         ss_start=inputs.ss_start,
@@ -579,6 +595,7 @@ def get_max_affordable(
     return_pct: Rate = None,
     inflation_pct: Rate = None,
     eth_growth_pct: Rate = None,
+    staking_yield_pct: Rate = None,
     ss_you: Monthly = None,
     ss_spouse: Monthly = None,
     ss_start: StartAge = None,
@@ -606,7 +623,15 @@ def get_max_affordable(
     else:
         bands = _parse_bands(band)
     inputs = _resolve_inputs(
-        db, spend, return_pct, inflation_pct, eth_growth_pct, ss_you, ss_spouse, ss_start
+        db,
+        spend,
+        return_pct,
+        inflation_pct,
+        eth_growth_pct,
+        staking_yield_pct,
+        ss_you,
+        ss_spouse,
+        ss_start,
     )
     if inputs is None:
         return None
