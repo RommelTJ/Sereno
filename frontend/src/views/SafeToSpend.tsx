@@ -21,7 +21,10 @@ import { formatUsd } from '../ledger.ts'
 
 function Hero({ safeToSpend }: { safeToSpend: number }) {
   return (
-    <div className="rounded-hero bg-sidebar p-[26px] text-center text-white">
+    <div
+      data-testid="sts-hero"
+      className="rounded-hero bg-sidebar p-[26px] text-center text-white md:col-span-2 min-[1560px]:col-span-3"
+    >
       <p className="text-[11px] font-semibold tracking-[1.4px] text-sidebar-muted-2 uppercase">
         Safe-to-spend
       </p>
@@ -102,16 +105,19 @@ function SafeToSpend() {
     setFunds(nextFunds)
   }
 
+  // Three columns only where each one clears 400px: the 248px sidebar and
+  // the shell's 72px of padding leave viewport − 320, and three 400px
+  // columns with two 20px gaps need 1240 of it — so 1560px up.
   return (
     <div
       data-testid="view-safe-to-spend"
-      className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_1fr]"
+      className="grid grid-cols-1 items-start gap-5 md:grid-cols-2 min-[1560px]:grid-cols-3"
     >
       {budget && funds && (
         <>
           <div
             data-testid="month-pager"
-            className="flex items-center justify-between lg:col-span-2"
+            className="flex items-center justify-between md:col-span-2 min-[1560px]:col-span-3"
           >
             <button
               type="button"
@@ -135,8 +141,8 @@ function SafeToSpend() {
               →
             </button>
           </div>
+          <Hero safeToSpend={budget.safe_to_spend} />
           <div className="flex flex-col gap-5">
-            <Hero safeToSpend={budget.safe_to_spend} />
             <EnvelopesCard
               month={budget.month}
               envelopes={budget.categories}
@@ -147,6 +153,31 @@ function SafeToSpend() {
             />
             <FundsCard funds={funds} />
           </div>
+          <section
+            data-testid="sts-activity"
+            className="rounded-card border border-card-border bg-card px-6 py-2"
+          >
+            <div className="flex items-center justify-between border-b border-hairline pt-4 pb-2.5">
+              <p className="text-sm font-bold">Activity</p>
+              {filterEnvelope && (
+                <button
+                  type="button"
+                  data-testid="activity-filter-chip"
+                  onClick={() => setFilterId(null)}
+                  className="cursor-pointer rounded-pill border border-input-border bg-tile px-3 py-[5px] text-[11.5px] font-semibold text-muted"
+                >
+                  Filtering: {envelopeView(filterEnvelope).label} ✕
+                </button>
+              )}
+            </div>
+            <ActivityFeed
+              current={budget}
+              funds={funds}
+              onChanged={refresh}
+              filter={filterEnvelope}
+              pager={false}
+            />
+          </section>
           <div className="flex flex-col gap-5">
             <SpendingForm
               key={`spend-${budget.month}`}
@@ -161,31 +192,6 @@ function SafeToSpend() {
               month={budget.month}
               onAdd={addIncome}
             />
-            <section
-              data-testid="sts-activity"
-              className="rounded-card border border-card-border bg-card px-6 py-2"
-            >
-              <div className="flex items-center justify-between border-b border-hairline pt-4 pb-2.5">
-                <p className="text-sm font-bold">Activity</p>
-                {filterEnvelope && (
-                  <button
-                    type="button"
-                    data-testid="activity-filter-chip"
-                    onClick={() => setFilterId(null)}
-                    className="cursor-pointer rounded-pill border border-input-border bg-tile px-3 py-[5px] text-[11.5px] font-semibold text-muted"
-                  >
-                    Filtering: {envelopeView(filterEnvelope).label} ✕
-                  </button>
-                )}
-              </div>
-              <ActivityFeed
-                current={budget}
-                funds={funds}
-                onChanged={refresh}
-                filter={filterEnvelope}
-                pager={false}
-              />
-            </section>
           </div>
         </>
       )}
