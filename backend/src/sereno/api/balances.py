@@ -92,13 +92,19 @@ def _account(db: sqlite3.Connection, account_id: int | None) -> Account:
 
 class BalanceEntryCreate(BaseModel):
     """Either balance_usd alone (USD accounts), or quantity + unit_price (ETH-style,
-    balance_usd derived server-side as quantity × unit_price)."""
+    balance_usd derived server-side as quantity × unit_price).
+
+    cost_basis is the account's aggregate basis in dollars — the annual
+    snapshot the sourcing waterfall prices gains against. It is optional,
+    and omitting it means unknown rather than zero: the bucket keeps the
+    last basis it was told."""
 
     account_id: int
     as_of_date: date
     balance_usd: float | None = None
     quantity: float | None = None
     unit_price: float | None = None
+    cost_basis: Annotated[float, Field(ge=0)] | None = None
 
     @model_validator(mode="after")
     def one_form_only(self) -> Self:
@@ -150,6 +156,7 @@ class BalanceEntry(BaseModel):
     balance_usd: float
     quantity: float | None
     unit_price: float | None
+    cost_basis: float | None
     created_at: datetime
 
 
@@ -350,20 +357,22 @@ def create_balance_entry(entry: BalanceEntryCreate, db: Db) -> BalanceEntry:
         else to_cents(entry.balance_usd)
     )
     cursor = db.execute(
-        "INSERT INTO balance_entry (account_id, as_of_date, balance_usd, quantity, unit_price)"
-        " VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO balance_entry"
+        " (account_id, as_of_date, balance_usd, quantity, unit_price, cost_basis)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
         (
             entry.account_id,
             entry.as_of_date.isoformat(),
             balance_cents,
             entry.quantity,
             entry.unit_price,
+            entry.cost_basis,
         ),
     )
     db.commit()
     row = db.execute(
-        "SELECT id, account_id, as_of_date, balance_usd, quantity, unit_price, created_at"
-        " FROM balance_entry WHERE id = ?",
+        "SELECT id, account_id, as_of_date, balance_usd, quantity, unit_price, cost_basis,"
+        " created_at FROM balance_entry WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
     return BalanceEntry(**(dict(row) | {"balance_usd": to_dollars(row["balance_usd"])}))

@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.14.1**
+**v3.15.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -22,9 +22,12 @@ whole thing in plain SQL.
   screen and older ones loaded as you scroll. Pick any active account and
   enter its value (ETH as quantity × price, auto-translated to USD); the latest entry
   in a month wins, earlier rows are kept as history, and balances carry forward until
-  the next entry. Every figure carries its change from the previous month
-  beside it — green where the month went the right way, red where it
-  didn't — and the brokerage funds carry a derived subtotal column.
+  the next entry. The accounts taxed on their gain also take a cost basis —
+  an annual figure, recorded once the year's tax documents are final, which
+  likewise stands until a newer entry replaces it. Every figure carries its
+  change from the previous month beside it — green where the month went the
+  right way, red where it didn't — and the brokerage funds carry a derived
+  subtotal column.
 - **Safe-to-spend** — total cash − bills due − money in funds. Monthly category envelopes
   with progress bars; overspending is allowed and simply reduces the headline number.
 - **Funds & goals** — sinking funds and dated goals as one concept. Notes are
@@ -42,8 +45,9 @@ whole thing in plain SQL.
   drawdown begins.
 - **Withdrawal sourcing** — a tax-aware sequencing waterfall: fill the spending gap by
   selling ETH to exhaustion first — tax-free inside the 0% long-term-capital-gains
-  headroom, then at 15% on the gain — then taxable brokerage, then the 401(k), then
-  HSAs last and untaxed. Every gate is the account's own `access_age`,
+  headroom, then at 15% on the gain, measured against the basis the ledger
+  recorded rather than against the whole sale — then taxable brokerage, then
+  the 401(k), then HSAs last and untaxed. Every gate is the account's own `access_age`,
   read against its owner's age, so two people of different ages unlock on different
   years. Solves for *net spendable*, not a naive 4%-per-bucket draw.
 - **Mortgage** — the loan's terms as effective-dated config, and the payoff date

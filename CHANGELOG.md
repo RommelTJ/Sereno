@@ -4,6 +4,38 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.15.0 — Balance entries record a cost basis, so a taxable bucket
+stops reading as 100% gain. `balance_entry.cost_basis` has been in the
+schema since the first migration and the sourcing loader has always read
+it, but nothing outside the seed could write one: the POST dropped the
+field, and there is no `tax_lot` endpoint. Both of the loader's basis
+sources were therefore empty in the real database, every bucket resolved
+to zero basis, and the waterfall priced every sale as pure gain — the
+most pessimistic reading available. Every taxable draw was grossed up at
+the full 15%, and the ETH bucket's tax-free proceeds sat at their floor
+(issue #138).
+
+The field now rides along on the balance entry, in dollars, and appears
+on the form for the accounts whose gains are actually priced: Ethereum
+and the three brokerage funds. A negative one is a 422 — it would put
+the gain fraction above 1.0 and tax more gain than a sale can hold.
+
+Basis also carries forward. The loader takes the balance from an
+account's newest entry and the basis from its newest entry that recorded
+one, which is rarely the same row: basis is settled once a year, when
+the tax documents are, while balances are entered monthly. Reading both
+off the newest row would have dropped the figure the month after it was
+typed, silently — nothing on screen would say so, only the projection
+would move. Null still means unknown rather than zero; the unknown is
+now answered with the last thing known, the way a balance carries
+forward until the next entry supersedes it. Between snapshots the basis
+is stale against a grown balance, which overstates gain and overstates
+tax — the conservative direction, and the right one for a forecast
+rather than a return.
+
+Recording real basis is worth roughly 8% of the age-100 balance for the
+brokerage alone, and more with ETH's basis entered.
+
 v3.14.1 — The three-column Safe-to-spend actually reaches three
 columns. v3.14.0 gated the split on min-[1560px], an arbitrary Tailwind
 variant — and Tailwind emits every arbitrary variant ahead of the

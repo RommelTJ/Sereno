@@ -76,8 +76,11 @@ serves them at <http://localhost:5173>.
   row and observer go away once the oldest month is on screen. Beside it, the "Update this month's balances" form: an account picker
   over the active accounts with a single value input prefilled from the
   newest month (the ETH account swaps to quantity + $/ETH inputs with a live
-  quantity × price readout), an "As of" date defaulting to today — pick an
-  earlier date to backfill history or catch up a missed month, and the date
+  quantity × price readout), a "Cost basis" input on the accounts taxed on
+  their gain — Ethereum and the brokerage funds — which seeds blank because
+  the server keeps the last figure standing, an "As of" date defaulting to
+  today — pick an earlier date to backfill history or catch up a missed
+  month, and the date
   sticks across saves so a backfill month can be entered account by
   account — and a live net-worth figure that tracks the
   draft before anything is saved. Saving appends one dated row via

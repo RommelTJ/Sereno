@@ -48,7 +48,7 @@ function BalanceForm({ accounts, months, onSave }: BalanceFormProps) {
   const [draft, setDraft] = useState<BalanceDraft>(() =>
     account
       ? draftFor(account, months, accounts)
-      : { value: '', qty: '', price: '' },
+      : { value: '', qty: '', price: '', basis: '' },
   )
   // The as-of date survives saves and account switches: backfilling a
   // historical month means entering it once, then walking the accounts.
@@ -145,6 +145,23 @@ function BalanceForm({ accounts, months, onSave }: BalanceFormProps) {
             value={draft.value}
             onChange={setField('value')}
           />
+        )}
+
+        {/* Basis is only ever read where a sale realizes a gain: the
+            LTCG buckets. It is an annual figure on a monthly form, so
+            the hint says what leaving it alone does. */}
+        {account.tax_treatment === 'LTCG' && (
+          <div>
+            <Field
+              id="balance-cost-basis"
+              label="Cost basis"
+              value={draft.basis}
+              onChange={setField('basis')}
+            />
+            <p className="mt-1 text-[11px] text-muted-2">
+              Blank leaves the last recorded basis in place.
+            </p>
+          </div>
         )}
 
         <Field

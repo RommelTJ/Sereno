@@ -59,10 +59,14 @@ export interface NetWorth {
 
 // Either balance_usd alone (USD accounts), or quantity + unit_price
 // (ETH-style; the server derives balance_usd as quantity × unit_price).
-export type BalanceEntryInput = { account_id: number; as_of_date: string } & (
-  | { balance_usd: number }
-  | { quantity: number; unit_price: number }
-)
+// cost_basis is the account's aggregate basis in dollars, sent only for
+// the LTCG buckets whose gains the waterfall prices. Leaving it out
+// means unchanged — the last basis recorded still stands.
+export type BalanceEntryInput = {
+  account_id: number
+  as_of_date: string
+  cost_basis?: number
+} & ({ balance_usd: number } | { quantity: number; unit_price: number })
 
 // POST /api/accounts inserts the dimension row (kind 'other',
 // net-worth-only) plus an initial balance_entry dated today — later values

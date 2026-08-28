@@ -5,9 +5,10 @@
 // sign outside the dollar sign: "-$1,234.56".
 
 import { describe, expect, it } from 'vitest'
-import type { LedgerColumn } from './ledger.ts'
+import type { BalanceDraft, LedgerColumn } from './ledger.ts'
 import {
   draftFor,
+  entryInput,
   formatAmount,
   formatQty,
   formatUsd,
@@ -87,6 +88,64 @@ describe('draftFor', () => {
       },
     ]
     expect(draftFor(eth, months, ACCOUNTS).qty).toBe('12.34560')
+  })
+
+  it('leaves the cost basis blank rather than seeding a stale one', () => {
+    expect(draftFor(vfiax, LEDGER, ACCOUNTS).basis).toBe('')
+    expect(draftFor(eth, LEDGER, ACCOUNTS).basis).toBe('')
+  })
+})
+
+// The basis a taxable bucket's gains are measured against: an annual
+// figure on a monthly form. A blank one means "unchanged", so it must
+// never post as zero — zero is a bucket that is all gain.
+describe('entryInput', () => {
+  const [eth, vfiax, , , retirement] = ACCOUNTS
+  const draft = (overrides: Partial<BalanceDraft> = {}): BalanceDraft => ({
+    value: '600,000.00',
+    qty: '20.00000',
+    price: '3,500.00',
+    basis: '',
+    ...overrides,
+  })
+
+  it('sends the cost basis for a taxable account', () => {
+    expect(
+      entryInput(vfiax, draft({ basis: '480,000' }), '2026-06-28'),
+    ).toEqual({
+      account_id: 2,
+      as_of_date: '2026-06-28',
+      balance_usd: 600_000,
+      cost_basis: 480_000,
+    })
+  })
+
+  it('sends the cost basis alongside an ETH quantity and price', () => {
+    expect(entryInput(eth, draft({ basis: '4,000' }), '2026-06-28')).toEqual({
+      account_id: 1,
+      as_of_date: '2026-06-28',
+      quantity: 20,
+      unit_price: 3_500,
+      cost_basis: 4_000,
+    })
+  })
+
+  it('omits a blank cost basis rather than posting zero', () => {
+    expect(entryInput(vfiax, draft(), '2026-06-28')).toEqual({
+      account_id: 2,
+      as_of_date: '2026-06-28',
+      balance_usd: 600_000,
+    })
+  })
+
+  it('omits the cost basis where the draw is not an LTCG sale', () => {
+    expect(
+      entryInput(retirement, draft({ basis: '400,000' }), '2026-06-28'),
+    ).toEqual({
+      account_id: 5,
+      as_of_date: '2026-06-28',
+      balance_usd: 600_000,
+    })
   })
 })
 
