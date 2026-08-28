@@ -135,7 +135,7 @@ describe('bucket rules', () => {
     render(<Withdrawals />)
 
     await screen.findByTestId('sourcing-waterfall')
-    expect(screen.getByText(/Harvest up to the 0% LTCG ceiling/)).toBeInTheDocument()
+    expect(screen.getByText(/Sold to exhaustion first/)).toBeInTheDocument()
     expect(screen.getByText(/Lot-level basis/)).toBeInTheDocument()
     expect(
       screen.getByTestId('sourcing-rules'),
