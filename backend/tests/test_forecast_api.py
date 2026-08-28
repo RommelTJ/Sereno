@@ -64,11 +64,12 @@ def insert_spend_plan(annual_target=45_000):
     )
 
 
-def insert_assumption(return_pct=7, inflation_pct=3, eth_growth_pct=None):
+def insert_assumption(return_pct=7, inflation_pct=3, eth_growth_pct=None, staking_yield_pct=None):
     return execute(
-        "INSERT INTO assumption (effective_date, return_pct, inflation_pct, eth_growth_pct)"
-        " VALUES (?, ?, ?, ?)",
-        (TODAY.isoformat(), return_pct, inflation_pct, eth_growth_pct),
+        "INSERT INTO assumption"
+        " (effective_date, return_pct, inflation_pct, eth_growth_pct, staking_yield_pct)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (TODAY.isoformat(), return_pct, inflation_pct, eth_growth_pct, staking_yield_pct),
     )
 
 
@@ -116,9 +117,14 @@ def seed_portfolio(eth_balance=400_000):
     insert_balance(retirement, 500_000)
 
 
-def seed_config(eth_growth_pct=None):
+def seed_config(eth_growth_pct=None, staking_yield_pct=None):
     insert_spend_plan(annual_target=45_000)
-    insert_assumption(return_pct=7, inflation_pct=3, eth_growth_pct=eth_growth_pct)
+    insert_assumption(
+        return_pct=7,
+        inflation_pct=3,
+        eth_growth_pct=eth_growth_pct,
+        staking_yield_pct=staking_yield_pct,
+    )
     insert_tax_param()
 
 
@@ -258,6 +264,21 @@ class TestForecast:
         assert body["ss_start"] == 62.0
         assert body["series"][61 - START_AGE]["ss_income"] == 0.0
         assert body["series"][62 - START_AGE]["ss_income"] == pytest.approx(34_800)
+
+    def test_the_stored_staking_yield_funds_part_of_the_gap(self, client):
+        # 3% of the grown ETH bucket pays part of the 45,000 target, so
+        # ETH covers only the remainder of the gap.
+        seed_portfolio()
+        seed_config(staking_yield_pct=3)
+        body = client.get("/api/forecast").json()
+        grown = 400_000 * 1.04
+        assert body["series"][1]["eth"] == pytest.approx(grown - (45_000 - grown * 0.03))
+
+    def test_no_stored_yield_models_no_staking_income(self, client):
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast").json()
+        assert body["series"][1]["eth"] == pytest.approx(400_000 * 1.04 - 45_000)
 
     def test_eth_growth_echoes_null_without_a_stored_value(self, client):
         seed_portfolio()

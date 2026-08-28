@@ -60,6 +60,7 @@ def run(
     return_pct: float = 7.0,
     inflation_pct: float = 3.0,
     eth_growth_pct: float | None = None,
+    staking_yield_pct: float | None = None,
     buckets: list[Bucket] | None = None,
     social_security: Sequence[SocialSecurityBenefit] = (),
     purchases: Sequence[PlannedPurchase] = (),
@@ -73,6 +74,7 @@ def run(
         return_pct=return_pct,
         inflation_pct=inflation_pct,
         eth_growth_pct=eth_growth_pct,
+        staking_yield_pct=staking_yield_pct,
         buckets=buckets if buckets is not None else [brokerage(2_000_000)],
         social_security=social_security,
         purchases=purchases,
@@ -277,6 +279,38 @@ class TestSocialSecurity:
 
 
 class TestStaking:
+    def test_the_yield_pays_a_share_of_the_years_need(self):
+        # Zero real rate keeps the stack flat: 3% of the 100,000 stake
+        # pays 3,000 of the 40,000 need, so the draw is 37,000.
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            staking_yield_pct=3,
+            buckets=[eth(100_000), brokerage(1_000_000)],
+        )
+        assert result.series[39 - 38].balances[0] == pytest.approx(63_000)
+
+    def test_the_income_decays_with_the_stack(self):
+        # The second year yields 3% of what is left — 1,890, not the
+        # first year's 3,000 — so the draw grows as the stake shrinks
+        # instead of holding flat until a threshold drops it to zero.
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            staking_yield_pct=3,
+            buckets=[eth(100_000), brokerage(1_000_000)],
+        )
+        assert result.series[40 - 38].balances[0] == pytest.approx(63_000 - (40_000 - 1_890))
+
+    def test_a_null_yield_models_no_staking_income(self):
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            staking_yield_pct=None,
+            buckets=[eth(100_000), brokerage(1_000_000)],
+        )
+        assert result.series[39 - 38].balances[0] == pytest.approx(60_000)
+
     def test_staking_income_flows_while_eth_stays_meaningful(self):
         # ETH above 50,000 stakes 3,000/yr, so the draw is 37,000 —
         # until the stake is spent below the threshold at age 40.
