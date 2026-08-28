@@ -786,6 +786,18 @@ describe('balance-by-bucket chart', () => {
     expect(tip).toHaveTextContent('Soc. Sec. $34,800.00/yr')
   })
 
+  it('names the first column Today rather than by year', async () => {
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-chart')
+    // Every column is that year's January 1, but the first one holds
+    // the balances held right now — a date only "Today" names.
+    expect(screen.getByTestId('forecast-tip-38')).toHaveTextContent('Age 38 · Today')
+    expect(screen.getByTestId('forecast-tip-39')).toHaveTextContent(
+      `Age 39 · ${new Date().getFullYear() + 1}`,
+    )
+  })
+
   it('answers the year with a portfolio total that leaves Social Security out', async () => {
     render(<Forecast />)
 
