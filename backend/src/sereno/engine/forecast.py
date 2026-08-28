@@ -1,11 +1,14 @@
 """The longevity forecast: a year-by-year simulation from the caller's
 start age to 100 in today's dollars, composing the sourcing engine.
-Each year the
+Each year records its
+opening balances — the January 1 snapshot, so the first point is the
+caller's own balances rather than a value with no nameable date —
+then the
 buckets grow by the real rate (return minus inflation) — except the
 ETH bucket, which grows at its own nominal rate minus inflation when
 eth_growth_pct is given (null keeps the blended rate, so the stored
-column stays optional) — the balances
-are recorded, and the year's spending need is withdrawn through the
+column stays optional) — and the year's spending need is withdrawn
+through the
 sourcing waterfall — so the 0% LTCG headroom, the gross-ups, and the
 59½ gate all apply per simulated year. ETH drains before the brokerage
 is touched: its draw is bounded by its balance, not by the headroom. Growth is all gain (the basis
@@ -118,13 +121,18 @@ def simulate_forecast(
     run_out_age: int | None = None
     unaffordable: list[UnaffordablePurchase] = []
     for age in range(start_age, END_AGE + 1):
-        current = [_grow(bucket, eth_rate if bucket.is_eth else real_rate) for bucket in current]
         ss_income = sum(
             12 * benefit.monthly_amount for benefit in social_security if age >= benefit.start_age
         )
+        # Recorded before the year's growth: with a Jan-1 birthdate an
+        # age is exactly one calendar year, so this is that year's
+        # January 1 — and the first point is the balances actually
+        # held. Only the snapshot moves; growth and the withdrawal
+        # still happen in that order below.
         series.append(
             ForecastPoint(age=age, balances=tuple(b.balance for b in current), ss_income=ss_income)
         )
+        current = [_grow(bucket, eth_rate if bucket.is_eth else real_rate) for bucket in current]
         eth_balance = sum(b.balance for b in current if b.is_eth)
         staking_income = STAKING_INCOME if eth_balance > STAKING_MIN_ETH_BALANCE else 0.0
         lump = sum(p.amount for p in purchases if p.age == age)
@@ -165,6 +173,8 @@ def simulate_forecast(
         if run_out_age is None and year.shortfall > _SHORTFALL_TOLERANCE:
             run_out_age = age
 
+    # The age-100 opening balance, so the headline figure is exactly
+    # the last point of the series the chart draws.
     balance_at_100 = sum(sum(point.balances) for point in series if point.age == BALANCE_CHECK_AGE)
     return ForecastResult(
         series=tuple(series),
