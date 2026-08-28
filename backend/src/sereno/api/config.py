@@ -27,6 +27,9 @@ class Assumption(BaseModel):
     return_pct: float
     inflation_pct: float
     eth_growth_pct: float | None
+    # Applied to the staked balance each simulated year; null models no
+    # staking income at all.
+    staking_yield_pct: float | None
 
 
 class SpendPlan(BaseModel):
@@ -53,6 +56,7 @@ class AssumptionCreate(BaseModel):
     return_pct: float
     inflation_pct: float
     eth_growth_pct: float | None = None
+    staking_yield_pct: float | None = None
 
 
 class SpendPlanCreate(BaseModel):
@@ -140,7 +144,9 @@ def _brackets_json(brackets: list[Bracket] | None) -> str | None:
 @router.get("/assumptions")
 def get_assumptions(db: Db) -> Assumption | None:
     row = effective_row(
-        db, "assumption", "id, effective_date, return_pct, inflation_pct, eth_growth_pct"
+        db,
+        "assumption",
+        "id, effective_date, return_pct, inflation_pct, eth_growth_pct, staking_yield_pct",
     )
     return Assumption(**dict(row)) if row else None
 
@@ -170,19 +176,21 @@ def list_tax_params(db: Db) -> list[TaxParam]:
 @router.post("/assumptions", status_code=201)
 def create_assumption(assumption: AssumptionCreate, db: Db) -> Assumption:
     cursor = db.execute(
-        "INSERT INTO assumption (effective_date, return_pct, inflation_pct, eth_growth_pct)"
-        " VALUES (?, ?, ?, ?)",
+        "INSERT INTO assumption"
+        " (effective_date, return_pct, inflation_pct, eth_growth_pct, staking_yield_pct)"
+        " VALUES (?, ?, ?, ?, ?)",
         (
             assumption.effective_date.isoformat(),
             assumption.return_pct,
             assumption.inflation_pct,
             assumption.eth_growth_pct,
+            assumption.staking_yield_pct,
         ),
     )
     db.commit()
     row = db.execute(
-        "SELECT id, effective_date, return_pct, inflation_pct, eth_growth_pct"
-        " FROM assumption WHERE id = ?",
+        "SELECT id, effective_date, return_pct, inflation_pct, eth_growth_pct,"
+        " staking_yield_pct FROM assumption WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
     return Assumption(**dict(row))

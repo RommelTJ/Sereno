@@ -8,7 +8,9 @@ months ago still sources withdrawals — and its basis from open tax
 lots, falling back to that balance row's cost_basis, then to zero (all
 gain, the conservative read). tax_treatment maps to how the engine
 prices the bucket — ordinary income, capital gains, or tax-free — with
-LTCG the fallback for anything unrecognised. ?age= is your age,
+LTCG the fallback for anything unrecognised. Staking income is the
+assumptions row's yield on the ETH bucket's balance, so it tracks the
+stake it is paid on; a null yield models none. ?age= is your age,
 defaulting to the one derived from the sanitized BIRTHDATE constant (no
 birthdate lives in the schema); your spouse's slides with it, so a
 single axis carries both people's gates. ?spend= tests a what-if level
@@ -24,15 +26,20 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from sereno.api.config import TaxParam, get_social_security, get_spend_plan, list_tax_params
+from sereno.api.config import (
+    TaxParam,
+    get_assumptions,
+    get_social_security,
+    get_spend_plan,
+    list_tax_params,
+)
 from sereno.db.connection import get_db
 from sereno.engine.sourcing import (
-    STAKING_INCOME,
-    STAKING_MIN_ETH_BALANCE,
     Bracket,
     Bucket,
     BucketTreatment,
     source_withdrawals,
+    staking_income,
 )
 from sereno.money import to_dollars
 
@@ -308,7 +315,8 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
         if resolved_age >= entry.start_age
     )
     eth_balance = sum(b.balance for b in buckets if b.is_eth)
-    staking_income = STAKING_INCOME if eth_balance > STAKING_MIN_ETH_BALANCE else 0.0
+    assumptions = get_assumptions(db)
+    staking = staking_income(eth_balance, assumptions.staking_yield_pct if assumptions else None)
 
     brackets = (
         [Bracket(rate=b.rate, upto=b.upto) for b in tax.ordinary_brackets]
@@ -318,8 +326,8 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
     result = source_withdrawals(
         target_spend=target,
         age=resolved_age,
-        income=ss_income + staking_income,
-        ordinary_income=staking_income,
+        income=ss_income + staking,
+        ordinary_income=staking,
         buckets=buckets,
         ltcg_0_ceiling=tax.ltcg_0_ceiling,
         std_deduction=tax.std_deduction or 0.0,
@@ -331,7 +339,7 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
         age=resolved_age,
         tax_year=tax.tax_year,
         ss_income=ss_income,
-        staking_income=staking_income,
+        staking_income=staking,
         income=result.income,
         gap=result.gap,
         headroom=result.headroom,

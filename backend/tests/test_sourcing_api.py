@@ -92,6 +92,14 @@ def insert_tax_lot(account_id, cost_basis, *, closed_on=None):
     )
 
 
+def insert_assumption(return_pct=7.0, inflation_pct=3.0, staking_yield_pct=None):
+    return execute(
+        "INSERT INTO assumption"
+        " (effective_date, return_pct, inflation_pct, staking_yield_pct) VALUES (?, ?, ?, ?)",
+        (TODAY.isoformat(), return_pct, inflation_pct, staking_yield_pct),
+    )
+
+
 def insert_social_security(person="you", start_age=67, monthly_amount=2_500):
     return execute(
         "INSERT INTO social_security (person, effective_date, start_age, monthly_amount)"
@@ -160,13 +168,37 @@ class TestPrerequisites:
         assert client.get("/api/sourcing", params=params).status_code == 422
 
 
+class TestStakingIncome:
+    def test_the_yield_prices_the_staked_balance(self, client):
+        # 3% of the 400,000 ETH bucket, so 12,000 of the 45,000 target
+        # comes from staking and 33,000 from the portfolio.
+        seed_portfolio()
+        insert_spend_plan()
+        insert_tax_param()
+        insert_assumption(staking_yield_pct=3.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["staking_income"] == pytest.approx(12_000.0)
+        assert body["income"] == pytest.approx(12_000.0)
+        assert body["gap"] == pytest.approx(33_000.0)
+
+    def test_no_stored_yield_models_no_staking_income(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_tax_param()
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["staking_income"] == 0.0
+        assert body["gap"] == pytest.approx(45_000.0)
+
+
 class TestWaterfall:
     def test_the_full_waterfall_at_thirty_eight(self, client):
-        # staking (ETH > 50k) is the only income at 38, the whole gap
-        # fits ETH's 0% headroom, and the 401(k) reports its gate
+        # staking — 3% of the 400,000 stake — is the only income at 38,
+        # the whole gap fits ETH's 0% headroom, and the 401(k) reports
+        # its gate
         seed_portfolio()
         insert_spend_plan(annual_target=45_000)
         insert_tax_param()
+        insert_assumption(staking_yield_pct=3.0)
         insert_social_security(start_age=67)
         response = client.get("/api/sourcing", params={"age": 38})
         assert response.status_code == 200
@@ -176,17 +208,17 @@ class TestWaterfall:
             "age": 38.0,
             "tax_year": TODAY.year,
             "ss_income": 0.0,
-            "staking_income": 3_000.0,
-            "income": 3_000.0,
-            "gap": 42_000.0,
+            "staking_income": 12_000.0,
+            "income": 12_000.0,
+            "gap": 33_000.0,
             "headroom": 96_700.0,
             "steps": [
                 {
                     "name": "ETH",
                     "treatment": "LTCG",
-                    "gross": 42_000.0,
+                    "gross": 33_000.0,
                     "tax": 0.0,
-                    "net": 42_000.0,
+                    "net": 33_000.0,
                     "note": None,
                     "access_age": None,
                 },
@@ -248,7 +280,7 @@ class TestWaterfall:
         body = client.get("/api/sourcing", params={"age": 38, "spend": 100_000}).json()
         assert body["target_net"] == 100_000.0
         assert body["annual_target"] == 45_000.0
-        assert body["gap"] == 97_000.0
+        assert body["gap"] == 100_000.0
 
     def test_open_lots_set_the_basis_and_closed_lots_do_not(self, client):
         # zero ceiling forces a taxed sale: with basis 480,000 on
@@ -298,7 +330,7 @@ class TestWaterfall:
         insert_spend_plan()
         insert_tax_param()
         body = client.get("/api/sourcing", params={"age": 38}).json()
-        assert body["steps"][0]["gross"] == pytest.approx(42_000)
+        assert body["steps"][0]["gross"] == pytest.approx(45_000)
         assert body["shortfall"] == 0.0
 
 

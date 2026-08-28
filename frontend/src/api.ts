@@ -192,6 +192,8 @@ export interface Assumption {
   return_pct: number
   inflation_pct: number
   eth_growth_pct: number | null
+  // Applied to the staked balance; null models no staking income.
+  staking_yield_pct: number | null
 }
 
 export interface SpendPlan {
@@ -595,6 +597,7 @@ export interface AssumptionInput {
   return_pct: number
   inflation_pct: number
   eth_growth_pct?: number
+  staking_yield_pct?: number
 }
 
 export interface SpendPlanInput {

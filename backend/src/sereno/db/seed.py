@@ -250,9 +250,12 @@ def seed(conn: sqlite3.Connection) -> bool:
         ),
     )
 
+    # The staking yield is an illustrative round figure, like every other
+    # number seeded here — a real one belongs in the deployment's database.
     conn.execute(
-        "INSERT INTO assumption (effective_date, return_pct, inflation_pct, eth_growth_pct)"
-        " VALUES ('2026-01-01', 7.0, 3.0, NULL)"
+        "INSERT INTO assumption"
+        " (effective_date, return_pct, inflation_pct, eth_growth_pct, staking_yield_pct)"
+        " VALUES ('2026-01-01', 7.0, 3.0, NULL, 3.0)"
     )
     conn.execute(
         "INSERT INTO spend_plan (effective_date, annual_target, initial_rate, guardrail_band)"

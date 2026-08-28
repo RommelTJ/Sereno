@@ -8,9 +8,10 @@ start_age) and the first point is today's actual balances.
 balance_at_100 is that year's opening balance too, so the headline
 equals the series' last point.
 Spend defaults to the plan's annual
-target, return, inflation, and ETH growth to the assumptions row (a
-null ETH growth keeps the ETH bucket on the blended rate — the column
-is optional, never a prerequisite), and Social
+target, return, inflation, ETH growth, and the staking yield to the
+assumptions row (a null ETH growth keeps the ETH bucket on the blended
+rate, a null yield models no staking income — both columns are
+optional, never prerequisites), and Social
 Security to the per-person stored rows (each on its own start age);
 the query params override each transiently — the Forecast screen's
 sliders are what-ifs, only Settings persists config. Planned
@@ -172,6 +173,7 @@ class Forecast(BaseModel):
     return_pct: float
     inflation_pct: float
     eth_growth_pct: float | None
+    staking_yield_pct: float | None
     ss_you: float
     ss_spouse: float
     ss_start: float
@@ -328,6 +330,7 @@ class _Resolved:
     return_pct: float
     inflation_pct: float
     eth_growth_pct: float | None
+    staking_yield_pct: float | None
     ss_you: float
     ss_spouse: float
     ss_start: float
@@ -346,6 +349,7 @@ class _Resolved:
             return_pct=self.return_pct,
             inflation_pct=self.inflation_pct,
             eth_growth_pct=self.eth_growth_pct,
+            staking_yield_pct=self.staking_yield_pct,
             buckets=self.buckets,
             social_security=self.benefits,
             purchases=purchases,
@@ -361,6 +365,7 @@ def _resolve_inputs(
     return_pct: float | None,
     inflation_pct: float | None,
     eth_growth_pct: float | None,
+    staking_yield_pct: float | None,
     ss_you: float | None,
     ss_spouse: float | None,
     ss_start: float | None,
@@ -385,6 +390,11 @@ def _resolve_inputs(
         eth_growth_pct
         if eth_growth_pct is not None
         else (assumptions.eth_growth_pct if assumptions else None)
+    )
+    resolved_staking_yield = (
+        staking_yield_pct
+        if staking_yield_pct is not None
+        else (assumptions.staking_yield_pct if assumptions else None)
     )
     if target is None or resolved_return is None or resolved_inflation is None:
         return None
@@ -423,6 +433,7 @@ def _resolve_inputs(
         return_pct=resolved_return,
         inflation_pct=resolved_inflation,
         eth_growth_pct=resolved_eth_growth,
+        staking_yield_pct=resolved_staking_yield,
         ss_you=resolved_you,
         ss_spouse=resolved_spouse,
         ss_start=resolved_start,
@@ -456,6 +467,7 @@ def get_forecast(
     return_pct: Rate = None,
     inflation_pct: Rate = None,
     eth_growth_pct: Rate = None,
+    staking_yield_pct: Rate = None,
     ss_you: Monthly = None,
     ss_spouse: Monthly = None,
     ss_start: StartAge = None,
@@ -482,7 +494,15 @@ def get_forecast(
     else:
         bands = _parse_bands(band)
     inputs = _resolve_inputs(
-        db, spend, return_pct, inflation_pct, eth_growth_pct, ss_you, ss_spouse, ss_start
+        db,
+        spend,
+        return_pct,
+        inflation_pct,
+        eth_growth_pct,
+        staking_yield_pct,
+        ss_you,
+        ss_spouse,
+        ss_start,
     )
     if inputs is None:
         return None
@@ -538,6 +558,7 @@ def get_forecast(
         return_pct=inputs.return_pct,
         inflation_pct=inputs.inflation_pct,
         eth_growth_pct=inputs.eth_growth_pct,
+        staking_yield_pct=inputs.staking_yield_pct,
         ss_you=inputs.ss_you,
         ss_spouse=inputs.ss_spouse,
         ss_start=inputs.ss_start,
@@ -574,6 +595,7 @@ def get_max_affordable(
     return_pct: Rate = None,
     inflation_pct: Rate = None,
     eth_growth_pct: Rate = None,
+    staking_yield_pct: Rate = None,
     ss_you: Monthly = None,
     ss_spouse: Monthly = None,
     ss_start: StartAge = None,
@@ -601,7 +623,15 @@ def get_max_affordable(
     else:
         bands = _parse_bands(band)
     inputs = _resolve_inputs(
-        db, spend, return_pct, inflation_pct, eth_growth_pct, ss_you, ss_spouse, ss_start
+        db,
+        spend,
+        return_pct,
+        inflation_pct,
+        eth_growth_pct,
+        staking_yield_pct,
+        ss_you,
+        ss_spouse,
+        ss_start,
     )
     if inputs is None:
         return None

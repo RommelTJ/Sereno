@@ -296,6 +296,7 @@ export interface AssumptionsFormValues {
   returnPct: string
   inflationPct: string
   ethGrowthPct: string
+  stakingYieldPct: string
   spend: string
   initialRatePct: string
   bandPct: string
@@ -312,6 +313,10 @@ export function assumptionsFormValues(
     ethGrowthPct:
       assumption?.eth_growth_pct != null
         ? String(assumption.eth_growth_pct)
+        : '',
+    stakingYieldPct:
+      assumption?.staking_yield_pct != null
+        ? String(assumption.staking_yield_pct)
         : '',
     spend: spendPlan ? String(spendPlan.annual_target) : '',
     initialRatePct:
@@ -343,17 +348,20 @@ export function assumptionsEdits(
   const returnPct = parseNumber(values.returnPct)
   const inflationPct = parseNumber(values.inflationPct)
   const ethGrowthPct = parseNumber(values.ethGrowthPct)
+  const stakingYieldPct = parseNumber(values.stakingYieldPct)
   const assumptionChanged =
     !assumption ||
     returnPct !== assumption.return_pct ||
     inflationPct !== assumption.inflation_pct ||
-    (ethGrowthPct ?? null) !== assumption.eth_growth_pct
+    (ethGrowthPct ?? null) !== assumption.eth_growth_pct ||
+    (stakingYieldPct ?? null) !== assumption.staking_yield_pct
   if (returnPct != null && inflationPct != null && assumptionChanged) {
     edit.assumption = {
       effective_date: today,
       return_pct: returnPct,
       inflation_pct: inflationPct,
       ...(ethGrowthPct != null && { eth_growth_pct: ethGrowthPct }),
+      ...(stakingYieldPct != null && { staking_yield_pct: stakingYieldPct }),
     }
   }
   const spend = parseNumber(values.spend)

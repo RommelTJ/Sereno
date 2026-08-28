@@ -210,6 +210,15 @@ class TestSolver:
         at_less = solve(client, year, spend=30_000)["max_amount"]
         assert at_less > at_plan
 
+    def test_a_staking_yield_lifts_the_ceiling(self, client):
+        # Income the portfolio doesn't have to sell for leaves more of
+        # the stack to buy with.
+        seed_portfolio()
+        seed_config()
+        year = year_at(65)
+        with_staking = solve(client, year, staking_yield_pct=3)["max_amount"]
+        assert with_staking > solve(client, year)["max_amount"]
+
     def test_the_binding_constraint_flips_past_the_401k_gate(self, client):
         # At 59 the 401(k)'s millions are visible but locked: the
         # ceiling is the taxable bridge, and the response says so. At

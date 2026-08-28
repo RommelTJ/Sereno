@@ -850,6 +850,18 @@ describe('Assumptions card', () => {
     expect(within(card).getByText('$45,000.00 / yr')).toBeInTheDocument()
   })
 
+  it('shows the staking yield', async () => {
+    stubApi({
+      ...routes(),
+      '/api/assumptions': { ...ASSUMPTION, staking_yield_pct: 3.5 },
+    })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('assumptions-card')
+    expect(within(card).getByText('Staking yield')).toBeInTheDocument()
+    expect(within(card).getByText('3.5%')).toBeInTheDocument()
+  })
+
   it('shows the initial withdrawal rate and guardrail band', async () => {
     render(<Settings />)
 
@@ -865,7 +877,7 @@ describe('Assumptions card', () => {
     render(<Settings />)
 
     const card = await screen.findByTestId('assumptions-card')
-    expect(within(card).getAllByText('—')).toHaveLength(7)
+    expect(within(card).getAllByText('—')).toHaveLength(8)
   })
 
   it('shows the drawdown start beside the guardrail knobs', async () => {
@@ -1152,6 +1164,34 @@ describe('Editing appends new config rows', () => {
       inflation_pct: 2.8,
     })
     expect(postCalls(fetchMock, '/api/spend-plan')).toHaveLength(0)
+  })
+
+  it('saves an edited staking yield as a new row', async () => {
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'POST /api/assumptions': { ...ASSUMPTION, id: 2, staking_yield_pct: 3.5 },
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('assumptions-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Staking yield %'), {
+      target: { value: '3.5' },
+    })
+    r['/api/assumptions'] = { ...ASSUMPTION, id: 2, staking_yield_pct: 3.5 }
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('3.5%')).toBeInTheDocument()
+    const body = JSON.parse(
+      postCalls(fetchMock, '/api/assumptions')[0][1]?.body as string,
+    )
+    expect(body).toEqual({
+      effective_date: todayIso(),
+      return_pct: 7,
+      inflation_pct: 3,
+      staking_yield_pct: 3.5,
+    })
   })
 
   it('saves an edited planned spend carrying the guardrail knobs forward', async () => {

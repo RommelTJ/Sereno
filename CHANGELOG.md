@@ -4,6 +4,31 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.16.0 — Staking income is a yield on the staked balance. The year's
+income is `staking_yield_pct` applied to the balance actually staked,
+re-evaluated every simulated year, so it moves with the position: it
+falls as the stack is drawn down and stops when the stack does. The
+forecast engine takes the yield per simulated year and the sourcing
+waterfall resolves it from the effective assumptions row, so both readers
+follow one rule (issue #139).
+
+The rate is config rather than source. `assumption.staking_yield_pct`
+joins `return_pct`, `inflation_pct`, and `eth_growth_pct` on the same
+effective-dated, append-only row — a figure describing the actual
+portfolio belongs in the database this repository does not carry, and it
+gets revised over decades with the history kept. Migration 0017 adds the
+column, nullable. Null models no staking income at all, which is what
+every existing database reads until a rate is entered: the same "don't
+model it" contract `eth_growth_pct` already had, not a zero.
+
+`?staking_yield_pct=` overrides it transiently on `GET /api/forecast` and
+on the max-affordable solver, echoed back with the other resolved inputs
+and never written, the way the Forecast screen's other rates already work.
+Settings' Assumptions card sets and clears the rate beside ETH growth.
+That last part is load-bearing rather than cosmetic: every save on that
+card appends a whole new assumptions row, so a card blind to the yield
+would have dropped it the first time anything else there was edited.
+
 v3.15.0 — Balance entries record a cost basis, so a taxable bucket
 stops reading as 100% gain. `balance_entry.cost_basis` has been in the
 schema since the first migration and the sourcing loader has always read

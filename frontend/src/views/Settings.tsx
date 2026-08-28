@@ -974,6 +974,12 @@ function AssumptionsCard({
             onChange={set('ethGrowthPct')}
           />
           <EditField
+            id="assumption-staking"
+            label="Staking yield %"
+            value={values.stakingYieldPct}
+            onChange={set('stakingYieldPct')}
+          />
+          <EditField
             id="assumption-spend"
             label="Spend $ / yr"
             value={values.spend}
@@ -1021,6 +1027,11 @@ function AssumptionsCard({
             label="ETH growth"
             value={formatPct(assumption?.eth_growth_pct)}
             hint="· refined from tracking"
+          />
+          <ConfigLine
+            label="Staking yield"
+            value={formatPct(assumption?.staking_yield_pct)}
+            hint="· on the staked balance"
           />
           <ConfigLine
             label="Planned spend"
