@@ -7,7 +7,8 @@ eth_growth_pct is given (null keeps the blended rate, so the stored
 column stays optional) — the balances
 are recorded, and the year's spending need is withdrawn through the
 sourcing waterfall — so the 0% LTCG headroom, the gross-ups, and the
-59½ gate all apply per simulated year. Growth is all gain (the basis
+59½ gate all apply per simulated year. ETH drains before the brokerage
+is touched: its draw is bounded by its balance, not by the headroom. Growth is all gain (the basis
 stays put); a sale reduces the basis pro-rata, so the gain fraction
 rises as an appreciating bucket is drawn down. Planned purchases add
 their lump to the due year's target and their ongoing delta to every

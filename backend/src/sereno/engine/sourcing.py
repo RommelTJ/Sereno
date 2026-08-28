@@ -1,10 +1,12 @@
 """Tax-aware withdrawal sourcing: the sequencing waterfall from the
 design handoff's Sourcing screen. Target net spend minus non-portfolio
 income leaves a gap, filled bucket by bucket in the caller's order —
-ETH inside the 0% LTCG headroom, then taxable brokerage, then 401(k).
-The headroom is measured in gain dollars (the 0% ceiling minus taxable
-ordinary income) and converts to sale proceeds through each bucket's
-gain fraction. A tax-free bucket — a Roth, or an HSA spent on
+ETH to exhaustion, then taxable brokerage, then 401(k). The headroom
+is measured in gain dollars (the 0% ceiling minus taxable ordinary
+income) and converts to sale proceeds through each bucket's gain
+fraction; it bounds what a bucket sells tax-free, never how much it
+sells, so an LTCG bucket keeps going at 15% on the gain portion once
+the free ceiling is spent. A tax-free bucket — a Roth, or an HSA spent on
 qualified expenses — is neither taxed as gain nor stacked on ordinary
 income, so it comes out whole. Any bucket may carry an access_age,
 which gates it whatever its treatment, read against its owner's age —
@@ -54,9 +56,9 @@ class Bucket:
     # The owner's age minus the caller's: 0 when the bucket is gated on
     # the age passed in, negative when its owner is younger than that.
     age_offset: float = 0.0
-    # Which bucket is ETH: the forecast grows it at the ETH rate,
-    # the staking rule reads its balance, and its draw stops at the
-    # 0% headroom.
+    # Which bucket is ETH: the forecast grows it at the ETH rate and
+    # the staking rule reads its balance. Identity, not draw policy —
+    # the waterfall sells it like any other LTCG bucket.
     is_eth: bool = False
 
 
@@ -89,9 +91,10 @@ def _gain_fraction(bucket: Bucket) -> float:
 
 def _draw_ltcg(bucket: Bucket, needed: float, headroom: float) -> tuple[BucketDraw, float]:
     """Sell inside the 0% headroom first — gain headroom buys headroom/g
-    of proceeds (unbounded when nothing is gain), tax-free — then, unless
-    the bucket is headroom-only, keep selling at 15% on the gain portion:
-    net N costs N / (1 − 0.15·g)."""
+    of proceeds (unbounded when nothing is gain), tax-free — then keep
+    selling at 15% on the gain portion: net N costs N / (1 − 0.15·g).
+    The headroom is where the bucket stops being free, not where it
+    stops: only the balance and the need bound the draw."""
     gain_fraction = _gain_fraction(bucket)
     cap = headroom / gain_fraction if gain_fraction > 0 else float("inf")
     free_gross = max(0.0, min(needed, bucket.balance, cap))
@@ -99,7 +102,7 @@ def _draw_ltcg(bucket: Bucket, needed: float, headroom: float) -> tuple[BucketDr
 
     still_needed = needed - free_gross
     balance_left = bucket.balance - free_gross
-    if not bucket.is_eth and still_needed > 0 and balance_left > 0:
+    if still_needed > 0 and balance_left > 0:
         net_rate = 1.0 - gain_fraction * LTCG_RATE
         taxed_gross = min(still_needed / net_rate, balance_left)
         gross += taxed_gross
