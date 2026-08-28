@@ -1458,6 +1458,28 @@ class TestDeleteIncome:
     def test_unknown_income_returns_404(self, client):
         assert client.delete("/api/income/99").status_code == 404
 
+    def test_a_drawn_income_delete_reverses_the_draw(self, client):
+        # The compensating entry appends, dated today — the paired 'spend'
+        # entry stays, since each entry snapshots the balance and pulling a
+        # mid-chain row would not restore it.
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 5200,
+            "drawn_from_fund_id": fund_id,
+        }
+        income_id = client.post("/api/income", json=payload).json()["id"]
+        assert client.delete(f"/api/income/{income_id}").status_code == 204
+        assert query("SELECT id FROM income_event") == []
+        entries = fetch_fund_entries(fund_id)
+        assert [entry["balance"] for entry in entries] == [60000, 54800, 60000]
+        reversal = entries[-1]
+        assert reversal["contribution"] == 5200
+        assert reversal["source"] == "spend"
+        assert reversal["as_of_date"] == date.today().isoformat()
+
 
 class TestGetBudgetMonth:
     def spend(self, client, amount, txn_date="2026-06-10", **extra):
