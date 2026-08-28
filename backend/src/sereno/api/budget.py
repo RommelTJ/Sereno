@@ -160,8 +160,9 @@ class ActivityItem(BaseModel):
     """Rows carry every column their edit form pre-fills — the feed is the
     only read, so a tap costs no GET-by-id round trip. Expense rows carry
     the first six extras, income rows budget_month / tax_treatment /
-    account_id, both the pending flag behind the feed's ⚠️; fund rows (no
-    edit affordance) carry all-null extras."""
+    account_id plus the drawn fund in fund_id, both the pending flag
+    behind the feed's ⚠️; fund rows (no edit affordance) carry all-null
+    extras."""
 
     type: Literal["expense", "income", "fund"]
     id: int
@@ -685,7 +686,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
     )
     incomes = db.execute(
         "SELECT id, txn_date, amount, source, source_label, note, created_at,"
-        " budget_month, tax_treatment, account_id, pending"
+        " budget_month, tax_treatment, account_id, pending, drawn_from_fund_id AS fund_id"
         " FROM income_event WHERE budget_month = ?",
         (target,),
     )
@@ -702,10 +703,11 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         " WHERE e.source IN ('monthly_plan', 'top_up') AND substr(e.as_of_date, 1, 7) = ?",
         (target,),
     )
+    # fund_id stays out of the shared nulls: income rows carry their drawn
+    # fund there, selected in the query above.
     no_expense_fields = {
         "category_id": None,
         "funded_from": None,
-        "fund_id": None,
         "is_fixed": None,
     }
     no_income_fields = {"tax_treatment": None}
@@ -730,7 +732,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
             | {"type": "fund", "source_label": None, "note": None}
             | no_expense_fields
             | no_income_fields
-            | {"account_id": None, "budget_month": None, "pending": None}
+            | {"fund_id": None, "account_id": None, "budget_month": None, "pending": None}
             | {"amount": to_dollars(row["amount"])}
             for row in fund_entries
         ],
