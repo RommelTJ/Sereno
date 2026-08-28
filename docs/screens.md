@@ -146,15 +146,22 @@ serves them at <http://localhost:5173>.
   the pager — source, an editable Source title
   prefilled from the selected source — the row's bold title, posted as
   `source_label`; switching the source re-prefills it — an optional
-  note, and the same Pending checkbox) posts to `POST /api/income`. A
+  note, and the same Pending checkbox) posts to `POST /api/income`.
+  A transfer-in source alone reveals a Draw-from select — the funds
+  plus "Not from a fund" — so an inflow drawn out of a sinking fund
+  posts `drawn_from_fund_id` and lowers the fund in the same action,
+  with a hint naming what the pick lowers; paychecks, dividends,
+  staking and interest never come out of a fund, so the default form
+  keeps its shape, and switching the source away clears the pick. A
   blank title or note is omitted from the payload, never sent empty,
   and so is an unticked Pending; paging remounts both forms, so their
   defaults re-derive from the month on screen.
   Every submit refetches the viewed budget month, so the hero and
   envelopes always
-  show the API's figures rather than client-side math — and adding a
-  spending item refetches the funds list too, so a fund-funded spend's
-  drawdown lands on the "Money in funds" card immediately. In its own
+  show the API's figures rather than client-side math — and both forms
+  refetch the funds list too, so a fund-funded spend's drawdown or a
+  drawn income's release lands on the "Money in funds" card
+  immediately. In its own
   column, the Activity card renders the viewed month's feed — the same
   uncapped row rendering as the Dashboard's Recent activity, but one
   month with no paging buttons of its own: the view's pager owns month
@@ -162,7 +169,10 @@ serves them at <http://localhost:5173>.
   submits. Here — and only here; the Dashboard's feed stays a
   glanceable read — tapping an expense or income row expands an inline
   edit form pre-filled from the row itself (amount, the same Paid-from
-  optgroups as the create form, budget month — the stored month plus the
+  optgroups as the create form — or, on an income row, the same
+  conditional Draw-from select, prefilled from the row's drawn fund and
+  sent on every save so the full-replace PUT can't silently reverse the
+  draw — budget month — the stored month plus the
   txn month and the next two, so a prepay can be reassigned — date,
   title, note, and the Pending checkbox), the way provisional
   transactions get trued up: Lyft
