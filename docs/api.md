@@ -42,7 +42,12 @@ The balances slice:
 - `POST /api/balance-entries` — appends a dated balance row for an account.
   Send `balance_usd` for USD accounts, or `quantity` + `unit_price` for
   ETH-style holdings (USD is derived as quantity × price). Rows are never
-  updated — history is kept.
+  updated — history is kept. `cost_basis` is optional and in **dollars**,
+  not cents: the account's aggregate basis, which the withdrawal
+  waterfall prices gains against. It is an annual figure — record it
+  once the year's tax documents are final — so omitting it means
+  unchanged rather than zero, and the last one recorded still stands.
+  A negative basis is a 422.
 - `GET /api/ledger` — one page of months, newest first: `months`, one group
   per month with the canonical per-account balances and that month's net
   worth, plus `has_more`. A month's balance for an account is the latest
@@ -423,8 +428,12 @@ The sourcing slice (the second Plan engine):
   is a gate, their owner; a tier that splits names each bucket for the
   part that differs (`401(k) · you`, `401(k) · spouse`). Each account
   contributes its newest balance row from any month and its basis
-  from open tax lots, falling back to the balance row's `cost_basis`,
-  then to zero. `?age=` is *your* age, defaulting to the one derived
+  from open tax lots, falling back to the newest balance row that
+  recorded a `cost_basis` — rarely the same row, since basis is annual
+  and balances are monthly — then to zero. Between snapshots the basis
+  is stale against a grown balance, which overstates the gain and the
+  tax: the conservative direction for a forecast. `?age=` is *your*
+  age, defaulting to the one derived
   from the backend's sanitized `BIRTHDATE` constant (January 1, 1988 —
   deliberately not a real birthday; no birthdate lives in the schema);
   your spouse's age slides with it, three years behind per the
