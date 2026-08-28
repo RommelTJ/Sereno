@@ -4,6 +4,28 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.14.0 — Safe-to-spend spreads across the screen it is given. The
+view was two columns: the hero, envelopes and funds stacked in the
+left, the two add-forms and the activity feed in the right. That put
+three cards' worth of height against two, so the right column ran long
+and the feed — the thing you check after entering a spend — fell below
+the fold, while the headline number sat in a half-width card (issue
+#145).
+
+The hero now spans the full width under the month pager, and the cards
+beneath it take a column each: envelopes and funds, the activity feed,
+the two forms. The columns come out close in height and the feed is
+visible without scrolling.
+
+Three columns wait for the width to earn them rather than for a
+breakpoint chosen by eye. The 248px sidebar and the shell's padding
+take 320px of the viewport, and three 400px columns with their two
+20px gaps need 1240px of what is left — so the split happens at
+1560px, and every column above it is at least 400px wide. Below that
+the view falls to two columns at 768px and one on a phone, where every
+card stacks full width in the order it reads: pager, hero, envelopes,
+funds, activity, spending, income. Frontend-only: no API change.
+
 v3.13.0 — The forecast reports each year's January 1 balance. The
 simulation ran grow → record → withdraw, so every plotted balance was
 last year's close plus a full year of real return, taken before that
