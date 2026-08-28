@@ -405,11 +405,13 @@ The guardrails slice (the first Plan engine):
 The sourcing slice (the second Plan engine):
 
 - `GET /api/sourcing` — the tax-aware withdrawal waterfall: target net
-  spend minus non-portfolio income leaves a gap, filled from ETH
-  inside the 0% long-term-capital-gains headroom (the ceiling minus
-  taxable ordinary income, converted to sale proceeds through each
-  bucket's gain fraction), then taxable brokerage (leftover headroom
-  first, then 15% on the gain portion), then the 401(k) with
+  spend minus non-portfolio income leaves a gap, filled from ETH to
+  exhaustion — tax-free inside the 0% long-term-capital-gains headroom
+  (the ceiling minus taxable ordinary income, converted to sale
+  proceeds through each bucket's gain fraction), then at 15% on the
+  gain portion, so unwinding the concentration outranks the tax saving
+  — then taxable brokerage (leftover headroom first, then 15% on the
+  gain portion), then the 401(k) with
   ordinary-income treatment (the unused standard deduction shelters the
   first dollars, then a walk up the year's brackets), then HSAs, which
   come out whole — no gain to realize, no ordinary income to stack.

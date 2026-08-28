@@ -40,9 +40,10 @@ whole thing in plain SQL.
   portfolios. A drawdown-start date turns the zone from a readiness check into
   a live control and stamps the anchor rate from actuals the moment real
   drawdown begins.
-- **Withdrawal sourcing** — a tax-aware sequencing waterfall: fill the spending gap from
-  ETH first inside the 0% long-term-capital-gains headroom, then taxable brokerage, then
-  the 401(k), then HSAs last and untaxed. Every gate is the account's own `access_age`,
+- **Withdrawal sourcing** — a tax-aware sequencing waterfall: fill the spending gap by
+  selling ETH to exhaustion first — tax-free inside the 0% long-term-capital-gains
+  headroom, then at 15% on the gain — then taxable brokerage, then the 401(k), then
+  HSAs last and untaxed. Every gate is the account's own `access_age`,
   read against its owner's age, so two people of different ages unlock on different
   years. Solves for *net spendable*, not a naive 4%-per-bucket draw.
 - **Mortgage** — the loan's terms as effective-dated config, and the payoff date

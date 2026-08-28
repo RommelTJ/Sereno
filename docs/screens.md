@@ -245,9 +245,10 @@ serves them at <http://localhost:5173>.
   `GET /api/sourcing`. Left, the sequencing waterfall: target net
   spend, minus non-portfolio income (Social Security past its start
   age, staking while the ETH stake stays meaningful), the gap from
-  the portfolio, then one step per bucket — ETH sold tax-free
-  inside the 0% LTCG headroom, brokerage next (inheriting leftover
-  headroom, then 15% on the gain portion), the 401(k) once its gate
+  the portfolio, then one step per bucket — ETH sold to exhaustion
+  (tax-free inside the 0% LTCG headroom, then 15% on the gain),
+  brokerage next (inheriting leftover headroom, then 15% on the gain
+  portion), the 401(k) once its gate
   opens, and HSAs last and untaxed — down to the net delivered, with a
   shortfall banner when the gap goes unfilled. The bucket rule cards
   name each tier's lock age from the waterfall itself, and say nothing
