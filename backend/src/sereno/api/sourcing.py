@@ -82,9 +82,20 @@ _TREATMENT_LABELS: dict[BucketTreatment, str] = {
 # reads it. An unrecognised or missing owner sorts last.
 _OWNER_ORDER = {"you": 0, "spouse": 1, "joint": 2}
 
+# The balance comes from the account's newest entry; the basis from its
+# newest entry that recorded one, which is rarely the same row. Basis is
+# an annual snapshot and a balance is monthly, so reading both off the
+# newest row would drop the basis the month after it was entered — null
+# means unknown, and an unknown is answered by the last thing known, the
+# way a balance carries forward until the next entry supersedes it.
 _LATEST_BALANCES = """
     SELECT a.withdrawal_priority AS priority, a.tax_treatment, a.access_age, a.owner,
-           b.balance_usd, b.cost_basis, b.account_id
+           b.balance_usd, b.account_id,
+           (
+               SELECT cb.cost_basis FROM balance_entry cb
+               WHERE cb.account_id = a.id AND cb.cost_basis IS NOT NULL
+               ORDER BY cb.as_of_date DESC, cb.id DESC LIMIT 1
+           ) AS cost_basis
     FROM account a
     JOIN (
         SELECT *, ROW_NUMBER() OVER (
