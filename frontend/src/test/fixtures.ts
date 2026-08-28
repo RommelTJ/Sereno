@@ -378,6 +378,7 @@ export const ASSUMPTION = {
   return_pct: 7,
   inflation_pct: 3,
   eth_growth_pct: null,
+  staking_yield_pct: null,
 }
 
 export const SPEND_PLAN = {

@@ -877,7 +877,7 @@ describe('Assumptions card', () => {
     render(<Settings />)
 
     const card = await screen.findByTestId('assumptions-card')
-    expect(within(card).getAllByText('—')).toHaveLength(7)
+    expect(within(card).getAllByText('—')).toHaveLength(8)
   })
 
   it('shows the drawdown start beside the guardrail knobs', async () => {
