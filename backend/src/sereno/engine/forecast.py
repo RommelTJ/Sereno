@@ -117,16 +117,14 @@ def simulate_forecast(
     run_out_age: int | None = None
     unaffordable: list[UnaffordablePurchase] = []
     for age in range(start_age, END_AGE + 1):
-        current = [
-            _grow(bucket, eth_rate if bucket.headroom_only else real_rate) for bucket in current
-        ]
+        current = [_grow(bucket, eth_rate if bucket.is_eth else real_rate) for bucket in current]
         ss_income = sum(
             12 * benefit.monthly_amount for benefit in social_security if age >= benefit.start_age
         )
         series.append(
             ForecastPoint(age=age, balances=tuple(b.balance for b in current), ss_income=ss_income)
         )
-        eth_balance = sum(b.balance for b in current if b.headroom_only)
+        eth_balance = sum(b.balance for b in current if b.is_eth)
         staking_income = STAKING_INCOME if eth_balance > STAKING_MIN_ETH_BALANCE else 0.0
         lump = sum(p.amount for p in purchases if p.age == age)
         ongoing = sum(p.ongoing_delta for p in purchases if age >= p.age)

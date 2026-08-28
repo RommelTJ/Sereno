@@ -18,7 +18,7 @@ def eth(balance=400_000.0, basis=4_000.0):
         balance=balance,
         basis=basis,
         treatment="LTCG",
-        headroom_only=True,
+        is_eth=True,
     )
 
 

@@ -54,7 +54,10 @@ class Bucket:
     # The owner's age minus the caller's: 0 when the bucket is gated on
     # the age passed in, negative when its owner is younger than that.
     age_offset: float = 0.0
-    headroom_only: bool = False
+    # Which bucket is ETH: the forecast grows it at the ETH rate,
+    # the staking rule reads its balance, and its draw stops at the
+    # 0% headroom.
+    is_eth: bool = False
 
 
 @dataclass(frozen=True)
@@ -96,7 +99,7 @@ def _draw_ltcg(bucket: Bucket, needed: float, headroom: float) -> tuple[BucketDr
 
     still_needed = needed - free_gross
     balance_left = bucket.balance - free_gross
-    if not bucket.headroom_only and still_needed > 0 and balance_left > 0:
+    if not bucket.is_eth and still_needed > 0 and balance_left > 0:
         net_rate = 1.0 - gain_fraction * LTCG_RATE
         taxed_gross = min(still_needed / net_rate, balance_left)
         gross += taxed_gross
