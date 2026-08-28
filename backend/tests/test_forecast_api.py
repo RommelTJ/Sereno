@@ -280,6 +280,22 @@ class TestForecast:
         body = client.get("/api/forecast").json()
         assert body["series"][1]["eth"] == pytest.approx(400_000 * 1.04 - 45_000)
 
+    def test_staking_yield_echoes_null_without_a_stored_value(self, client):
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast").json()
+        assert body["staking_yield_pct"] is None
+
+    def test_a_staking_yield_query_overrides_the_stored_rate(self, client):
+        # 6% of the grown stake against the stored 3%: twice the income,
+        # so ETH covers that much less of the year's gap.
+        seed_portfolio()
+        seed_config(staking_yield_pct=3)
+        body = client.get("/api/forecast", params={"staking_yield_pct": 6}).json()
+        assert body["staking_yield_pct"] == 6.0
+        grown = 400_000 * 1.04
+        assert body["series"][1]["eth"] == pytest.approx(grown - (45_000 - grown * 0.06))
+
     def test_eth_growth_echoes_null_without_a_stored_value(self, client):
         seed_portfolio()
         seed_config()
