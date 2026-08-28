@@ -849,6 +849,18 @@ describe('Responsive layout', () => {
     )
   })
 
+  it('gives the hero its own full-width row under the month pager', async () => {
+    render(<SafeToSpend />)
+    const view = await screen.findByTestId('view-safe-to-spend')
+
+    const hero = screen.getByTestId('sts-hero')
+    // A row of its own, directly under the pager — not the first card of
+    // the envelopes column.
+    expect(hero.parentElement).toBe(view)
+    expect(screen.getByTestId('month-pager').nextElementSibling).toBe(hero)
+    expect(hero).toHaveClass('md:col-span-2', 'min-[1560px]:col-span-3')
+  })
+
   it('stacks the form field grids into one column on narrow screens', async () => {
     render(<SafeToSpend />)
 
