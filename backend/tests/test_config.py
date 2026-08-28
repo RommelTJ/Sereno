@@ -51,11 +51,18 @@ def count_rows(table):
         conn.close()
 
 
-def insert_assumption(effective_date, return_pct=7.0, inflation_pct=3.0, eth_growth_pct=None):
+def insert_assumption(
+    effective_date,
+    return_pct=7.0,
+    inflation_pct=3.0,
+    eth_growth_pct=None,
+    staking_yield_pct=None,
+):
     return execute(
-        "INSERT INTO assumption (effective_date, return_pct, inflation_pct, eth_growth_pct)"
-        " VALUES (?, ?, ?, ?)",
-        (effective_date, return_pct, inflation_pct, eth_growth_pct),
+        "INSERT INTO assumption"
+        " (effective_date, return_pct, inflation_pct, eth_growth_pct, staking_yield_pct)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (effective_date, return_pct, inflation_pct, eth_growth_pct, staking_yield_pct),
     )
 
 
@@ -120,14 +127,11 @@ class TestGetAssumptions:
             "return_pct": 7.0,
             "inflation_pct": 3.0,
             "eth_growth_pct": None,
+            "staking_yield_pct": None,
         }
 
     def test_reports_the_staking_yield(self, client):
-        execute(
-            "INSERT INTO assumption (effective_date, return_pct, inflation_pct,"
-            " staking_yield_pct) VALUES (?, 7.0, 3.0, 3.5)",
-            (days_ago(30),),
-        )
+        insert_assumption(days_ago(30), staking_yield_pct=3.5)
         response = client.get("/api/assumptions")
         assert response.status_code == 200
         assert response.json()["staking_yield_pct"] == 3.5
@@ -275,6 +279,7 @@ class TestPostAssumptions:
             "return_pct": 6.5,
             "inflation_pct": 2.8,
             "eth_growth_pct": None,
+            "staking_yield_pct": None,
         }
         assert client.get("/api/assumptions").json() == created
         assert count_rows("assumption") == 2  # append-only: the old row remains
