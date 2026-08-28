@@ -4,6 +4,14 @@
 @theme {
   --font-sans: 'Hanken Grotesk', system-ui, sans-serif;
 
+  /* The width a three-column view earns its third column at: the 248px
+     sidebar and the shell's padding take 320px, and three 400px columns
+     with their two 20px gaps need 1240px of what is left. Named rather
+     than written as min-[1560px] so Tailwind sorts it by value and emits
+     it after md — an arbitrary variant lands ahead of every named
+     breakpoint and loses to the ones it overlaps. */
+  --breakpoint-3col: 97.5rem;
+
   /* Ultra-wide tier above Tailwind's 2xl (96rem); the shell and the
      table-heavy views widen through it instead of capping at 1180px. */
   --breakpoint-3xl: 120rem;

@@ -23,7 +23,7 @@ function Hero({ safeToSpend }: { safeToSpend: number }) {
   return (
     <div
       data-testid="sts-hero"
-      className="rounded-hero bg-sidebar p-[26px] text-center text-white md:col-span-2 min-[1560px]:col-span-3"
+      className="rounded-hero bg-sidebar p-[26px] text-center text-white md:col-span-2 3col:col-span-3"
     >
       <p className="text-[11px] font-semibold tracking-[1.4px] text-sidebar-muted-2 uppercase">
         Safe-to-spend
@@ -105,19 +105,18 @@ function SafeToSpend() {
     setFunds(nextFunds)
   }
 
-  // Three columns only where each one clears 400px: the 248px sidebar and
-  // the shell's 72px of padding leave viewport − 320, and three 400px
-  // columns with two 20px gaps need 1240 of it — so 1560px up.
+  // Three columns only where each one clears 400px — the 3col breakpoint
+  // in the theme carries that arithmetic.
   return (
     <div
       data-testid="view-safe-to-spend"
-      className="grid grid-cols-1 items-start gap-5 md:grid-cols-2 min-[1560px]:grid-cols-3"
+      className="grid grid-cols-1 items-start gap-5 md:grid-cols-2 3col:grid-cols-3"
     >
       {budget && funds && (
         <>
           <div
             data-testid="month-pager"
-            className="flex items-center justify-between md:col-span-2 min-[1560px]:col-span-3"
+            className="flex items-center justify-between md:col-span-2 3col:col-span-3"
           >
             <button
               type="button"

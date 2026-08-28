@@ -4,6 +4,23 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.14.1 — The three-column Safe-to-spend actually reaches three
+columns. v3.14.0 gated the split on min-[1560px], an arbitrary Tailwind
+variant — and Tailwind emits every arbitrary variant ahead of the
+theme's named breakpoints. Past 1560px both media queries matched at
+equal specificity, so md:grid-cols-2, sitting later in the stylesheet,
+won every time: the rule existed, generated real CSS, and never once
+applied. An ultra-wide screen got the two-column layout the release
+claimed to replace.
+
+1560px is a named breakpoint now, 3col, which Tailwind sorts by its
+value into the cascade between 2xl and 3xl — after md, where it can win
+the overlap. The arithmetic behind the number lives in the breakpoint's
+own comment rather than the view's. Measured in the browser this time
+and not in the compiled stylesheet alone: two columns at a 1559px
+viewport, three at 1560px, 408px-wide columns at 1600px, and one
+column with no horizontal scroll at an iPhone's 390px.
+
 v3.14.0 — Safe-to-spend spreads across the screen it is given. The
 view was two columns: the hero, envelopes and funds stacked in the
 left, the two add-forms and the activity feed in the right. That put
