@@ -96,9 +96,17 @@ serves them at <http://localhost:5173>.
   activity feed all follow the viewed month, so how the envelopes stood
   in any past month is one tap away — and last month's closing
   Safe-to-spend, the old leftover-line question, is simply the previous
-  month's hero. The dark hero shows the viewed month's headline from
+  month's hero. The dark hero spans the full width under the pager —
+  it is the view's answer, not one card among three — and shows the
+  viewed month's headline from
   `GET /api/budget-month` (stored funding baseline − total spent) with the
-  "total cash − bills due − money in funds" formula pill, above the monthly
+  "total cash − bills due − money in funds" formula pill. Below it the
+  view splits into three columns — envelopes and funds, the activity
+  feed, the two add-forms — but only past 1560px, where each column
+  clears 400px: the 248px sidebar and the shell's padding take 320px,
+  and three 400px columns with their gaps need 1240px of what is left.
+  Under that it falls to two columns at 768px and one below, where
+  every card stacks full width in reading order. First the monthly
   envelopes card: one progress bar per category, "spent · left" while under
   budget, "$spent of $budgeted · $X over" in red once over — overspending
   is allowed and simply trims the headline. Every envelope row is a tap
@@ -143,8 +151,8 @@ serves them at <http://localhost:5173>.
   envelopes always
   show the API's figures rather than client-side math — and adding a
   spending item refetches the funds list too, so a fund-funded spend's
-  drawdown lands on the "Money in funds" card immediately. Below the
-  forms, the Activity card renders the viewed month's feed — the same
+  drawdown lands on the "Money in funds" card immediately. In its own
+  column, the Activity card renders the viewed month's feed — the same
   uncapped row rendering as the Dashboard's Recent activity, but one
   month with no paging buttons of its own: the view's pager owns month
   navigation, and a new item lands in the feed the moment a form
