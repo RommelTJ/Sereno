@@ -552,6 +552,100 @@ describe('Add an income item', () => {
     expect(postBody(fetchMock, '/api/income')).not.toHaveProperty('pending')
   })
 
+  it('reveals the Draw-from funds only for a transfer-in source', async () => {
+    render(<SafeToSpend />)
+
+    // Paychecks, dividends, staking and interest never come out of a
+    // fund, so the default form keeps its shape.
+    const form = await screen.findByTestId('income-form')
+    expect(within(form).queryByLabelText('Draw from')).not.toBeInTheDocument()
+
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'brokerage-withdrawal' },
+    })
+
+    const select = within(form).getByLabelText('Draw from')
+    const options = within(select).getAllByRole('option')
+    expect(
+      options.map((option) => ({
+        value: (option as HTMLOptionElement).value,
+        label: option.textContent,
+      })),
+    ).toEqual([
+      { value: '', label: 'Not from a fund' },
+      { value: '1', label: '🚨 Emergency fund' },
+      { value: '2', label: '🚲 Bike fund' },
+      { value: '3', label: 'Travel fund' },
+    ])
+  })
+
+  it('posts the drawn fund and shows the hint when one is picked', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 8 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('income-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '5,200' },
+    })
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'brokerage-withdrawal' },
+    })
+    fireEvent.change(within(form).getByLabelText('Draw from'), {
+      target: { value: '3' },
+    })
+    expect(
+      within(form).getByText(
+        '↳ Lowers Travel fund by this amount as the month is funded — no separate balance correction needed.',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() => expect(postBody(fetchMock, '/api/income')).toBeDefined())
+    expect(postBody(fetchMock, '/api/income')).toMatchObject({
+      source: 'transfer_in',
+      drawn_from_fund_id: 3,
+    })
+  })
+
+  it('resets and omits the draw when the source leaves transfer-in', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 9 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('income-form')
+
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'brokerage-withdrawal' },
+    })
+    fireEvent.change(within(form).getByLabelText('Draw from'), {
+      target: { value: '3' },
+    })
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'spouse-paycheck' },
+    })
+    expect(within(form).queryByLabelText('Draw from')).not.toBeInTheDocument()
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '120' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() => expect(postBody(fetchMock, '/api/income')).toBeDefined())
+    expect(postBody(fetchMock, '/api/income')).not.toHaveProperty(
+      'drawn_from_fund_id',
+    )
+  })
+
   it('maps every source option onto the API source values', async () => {
     render(<SafeToSpend />)
 
