@@ -527,6 +527,41 @@ class TestPostBalanceEntries:
         assert response.status_code == 201
         assert response.json()["balance_usd"] == 30117.76
 
+    def test_a_cost_basis_is_stored_in_dollars_and_returned(self, client):
+        # Basis is the one ledger figure that stays in dollars (migration
+        # 0013) — the sourcing loader weighs it against a dollar balance.
+        account_id = insert_account(
+            "VFIAX", "brokerage_fund", tax_treatment="LTCG", is_investable=1
+        )
+        response = client.post(
+            "/api/balance-entries",
+            json={
+                "account_id": account_id,
+                "as_of_date": "2026-06-28",
+                "balance_usd": 600_000,
+                "cost_basis": 480_000,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["cost_basis"] == 480_000
+        stored = query(
+            "SELECT balance_usd, cost_basis FROM balance_entry WHERE account_id = ?",
+            account_id,
+        )
+        assert stored == [{"balance_usd": 60_000_000, "cost_basis": 480_000}]
+
+    def test_an_entry_without_a_cost_basis_records_none(self, client):
+        # Null means unknown, not zero: the bucket keeps whatever basis
+        # it already had rather than being restated as all gain.
+        account_id = insert_account("Chase checking", "cash")
+        response = client.post(
+            "/api/balance-entries",
+            json={"account_id": account_id, "as_of_date": "2026-06-28", "balance_usd": 9000},
+        )
+        assert response.status_code == 201
+        assert response.json()["cost_basis"] is None
+        assert query("SELECT cost_basis FROM balance_entry")[0]["cost_basis"] is None
+
     def test_quantity_without_unit_price_is_rejected(self, client):
         account_id = insert_account("Ethereum", "eth")
         response = client.post(
