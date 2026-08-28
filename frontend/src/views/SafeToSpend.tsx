@@ -188,6 +188,7 @@ function SafeToSpend() {
             />
             <IncomeForm
               key={`income-${budget.month}`}
+              funds={funds}
               month={budget.month}
               onAdd={addIncome}
             />
