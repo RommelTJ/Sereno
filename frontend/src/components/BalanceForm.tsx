@@ -48,7 +48,7 @@ function BalanceForm({ accounts, months, onSave }: BalanceFormProps) {
   const [draft, setDraft] = useState<BalanceDraft>(() =>
     account
       ? draftFor(account, months, accounts)
-      : { value: '', qty: '', price: '' },
+      : { value: '', qty: '', price: '', basis: '' },
   )
   // The as-of date survives saves and account switches: backfilling a
   // historical month means entering it once, then walking the accounts.

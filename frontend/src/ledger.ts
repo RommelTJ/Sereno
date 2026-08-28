@@ -100,11 +100,13 @@ export function formatMonth(month: string): string {
 }
 
 // The draft the form edits for one selected account: a USD value, or
-// quantity + price for the ETH-style kind.
+// quantity + price for the ETH-style kind, plus the cost basis the
+// taxable kinds carry.
 export interface BalanceDraft {
   value: string
   qty: string
   price: string
+  basis: string
 }
 
 // An account's newest ledger entry, walking back through the months.
@@ -149,7 +151,10 @@ export function latestEthPrice(
 }
 
 // Prefill the draft from the account's newest ledger entry — except the
-// ETH price, which comes from any eth-kind account's newest entry.
+// ETH price, which comes from any eth-kind account's newest entry, and
+// the basis, which seeds blank: it is an annual figure the server keeps
+// standing between snapshots, so a blank field means "unchanged" rather
+// than a number to re-type every month.
 export function draftFor(
   account: Account,
   months: LedgerMonth[],
@@ -161,9 +166,15 @@ export function draftFor(
       value: '',
       qty: formatQty(balance?.quantity ?? 0),
       price: formatAmount(latestEthPrice(months, accounts) ?? 0),
+      basis: '',
     }
   }
-  return { value: formatAmount(balance?.balance_usd ?? 0), qty: '', price: '' }
+  return {
+    value: formatAmount(balance?.balance_usd ?? 0),
+    qty: '',
+    price: '',
+    basis: '',
+  }
 }
 
 // The draft's USD figure: quantity × price for ETH, else the value.
@@ -190,24 +201,33 @@ export function liveNetWorth(
 }
 
 // The one append-only entry the Save posts: quantity + price for ETH (the
-// server derives its USD value), else the USD value.
+// server derives its USD value), else the USD value. A cost basis rides
+// along only where the waterfall prices a gain — the LTCG buckets — and
+// only when one was typed: parseAmount reads '' as 0, and a zero basis
+// is a bucket that is all gain, not a bucket left alone.
 export function entryInput(
   account: Account,
   draft: BalanceDraft,
   asOfDate: string,
 ): BalanceEntryInput {
+  const basis =
+    account.tax_treatment === 'LTCG' && draft.basis.trim() !== ''
+      ? { cost_basis: parseAmount(draft.basis) }
+      : {}
   if (account.kind === 'eth') {
     return {
       account_id: account.id,
       as_of_date: asOfDate,
       quantity: parseAmount(draft.qty),
       unit_price: parseAmount(draft.price),
+      ...basis,
     }
   }
   return {
     account_id: account.id,
     as_of_date: asOfDate,
     balance_usd: parseAmount(draft.value),
+    ...basis,
   }
 }
 
