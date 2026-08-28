@@ -1291,6 +1291,88 @@ describe('Income item editing', () => {
     )!
     expect(JSON.parse(init?.body as string)).toMatchObject({ pending: true })
   })
+
+  // The Spouse-paycheck income row recast as a fund-drawn transfer, the
+  // way the feed serves one: the drawn fund rides in fund_id.
+  const drawnFeed = {
+    ...BUDGET_MONTH,
+    activity: BUDGET_MONTH.activity.map((item) =>
+      item.id === 2 && item.type === 'income'
+        ? {
+            ...item,
+            source: 'transfer_in',
+            source_label: 'Brokerage withdrawal',
+            fund_id: 1,
+          }
+        : item,
+    ),
+  }
+
+  it('prefills the Draw-from select from the drawn row', async () => {
+    stubApi({ '/api/budget-month': drawnFeed, '/api/funds': FUNDS })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+
+    const form = await screen.findByTestId('income-edit-form')
+    expect(within(form).getByLabelText('Draw from')).toHaveValue('1')
+  })
+
+  it('keeps the draw on a save that leaves the select untouched', async () => {
+    // The PUT is a full replace: a form blind to the draw would silently
+    // reverse it on every unrelated edit.
+    const fetchMock = stubApi({
+      '/api/budget-month': drawnFeed,
+      '/api/funds': FUNDS,
+      'PUT /api/income/2': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+    const form = await screen.findByTestId('income-edit-form')
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '2500' },
+    })
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+      ).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(
+      ([, callInit]) => callInit?.method === 'PUT',
+    )!
+    expect(JSON.parse(init?.body as string)).toMatchObject({
+      source: 'transfer_in',
+      drawn_from_fund_id: 1,
+    })
+  })
+
+  it('clearing the Draw-from select omits the fund, reversing the draw', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': drawnFeed,
+      '/api/funds': FUNDS,
+      'PUT /api/income/2': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+    const form = await screen.findByTestId('income-edit-form')
+    fireEvent.change(within(form).getByLabelText('Draw from'), {
+      target: { value: '' },
+    })
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+      ).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(
+      ([, callInit]) => callInit?.method === 'PUT',
+    )!
+    expect(JSON.parse(init?.body as string)).not.toHaveProperty(
+      'drawn_from_fund_id',
+    )
+  })
 })
 
 describe('Item delete', () => {
