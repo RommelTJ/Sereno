@@ -4,6 +4,33 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.17.0 — Income can draw from a fund, so funding a month out of a
+sinking fund is one action. `POST /api/income` takes an optional
+`drawn_from_fund_id` and appends the paired `'spend'` fund entry in the
+same transaction — the mirror of a fund-funded expense — with the same
+guards: an overdraw is a 422 that writes nothing, an unknown fund a 404.
+Until now the second half was a hand-entered balance correction, and
+skipping it failed silently: the month funded correctly while the fund
+stayed overstated, its runway reading longer than it was. The `'spend'`
+source keeps the entry out of the fund_contributions headline, the feed,
+and the budget-year actual, so the income row stays the only mover of
+safe-to-spend and nothing double-counts.
+
+Edits and deletes reverse through the expense side's compensating-entry
+rules: a same-fund amount change appends one delta entry dated today, a
+cleared or moved draw reverses the old and draws the new, and the guard
+re-applies before anything is written. Migration 0018 adds the nullable
+`income_event.drawn_from_fund_id` column that tells them what to
+reverse.
+
+In the income forms — create and edit — a Draw-from select renders only
+while the source is a transfer-in: paychecks, dividends, staking and
+interest never come out of a fund, so the common case keeps its shape.
+Switching the source away clears the pick, the edit form sends the pick
+on every save (a form blind to it would silently reverse the draw on the
+full-replace PUT), and income submits now refetch the funds card, which
+steps down the moment a drawn income lands (issue #148).
+
 v3.16.0 — Staking income is a yield on the staked balance. The year's
 income is `staking_yield_pct` applied to the balance actually staked,
 re-evaluated every simulated year, so it moves with the position: it
