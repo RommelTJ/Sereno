@@ -21,7 +21,10 @@ import { formatUsd } from '../ledger.ts'
 
 function Hero({ safeToSpend }: { safeToSpend: number }) {
   return (
-    <div className="rounded-hero bg-sidebar p-[26px] text-center text-white">
+    <div
+      data-testid="sts-hero"
+      className="rounded-hero bg-sidebar p-[26px] text-center text-white md:col-span-2 min-[1560px]:col-span-3"
+    >
       <p className="text-[11px] font-semibold tracking-[1.4px] text-sidebar-muted-2 uppercase">
         Safe-to-spend
       </p>
@@ -138,8 +141,8 @@ function SafeToSpend() {
               →
             </button>
           </div>
+          <Hero safeToSpend={budget.safe_to_spend} />
           <div className="flex flex-col gap-5">
-            <Hero safeToSpend={budget.safe_to_spend} />
             <EnvelopesCard
               month={budget.month}
               envelopes={budget.categories}
