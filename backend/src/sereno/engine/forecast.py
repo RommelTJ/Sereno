@@ -7,7 +7,8 @@ eth_growth_pct is given (null keeps the blended rate, so the stored
 column stays optional) — the balances
 are recorded, and the year's spending need is withdrawn through the
 sourcing waterfall — so the 0% LTCG headroom, the gross-ups, and the
-59½ gate all apply per simulated year. Growth is all gain (the basis
+59½ gate all apply per simulated year. ETH drains before the brokerage
+is touched: its draw is bounded by its balance, not by the headroom. Growth is all gain (the basis
 stays put); a sale reduces the basis pro-rata, so the gain fraction
 rises as an appreciating bucket is drawn down. Planned purchases add
 their lump to the due year's target and their ongoing delta to every
@@ -117,16 +118,14 @@ def simulate_forecast(
     run_out_age: int | None = None
     unaffordable: list[UnaffordablePurchase] = []
     for age in range(start_age, END_AGE + 1):
-        current = [
-            _grow(bucket, eth_rate if bucket.headroom_only else real_rate) for bucket in current
-        ]
+        current = [_grow(bucket, eth_rate if bucket.is_eth else real_rate) for bucket in current]
         ss_income = sum(
             12 * benefit.monthly_amount for benefit in social_security if age >= benefit.start_age
         )
         series.append(
             ForecastPoint(age=age, balances=tuple(b.balance for b in current), ss_income=ss_income)
         )
-        eth_balance = sum(b.balance for b in current if b.headroom_only)
+        eth_balance = sum(b.balance for b in current if b.is_eth)
         staking_income = STAKING_INCOME if eth_balance > STAKING_MIN_ETH_BALANCE else 0.0
         lump = sum(p.amount for p in purchases if p.age == age)
         ongoing = sum(p.ongoing_delta for p in purchases if age >= p.age)

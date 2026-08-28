@@ -223,8 +223,8 @@ function Withdrawals() {
           <p className="text-sm font-bold">Bucket rules</p>
           <div className="mt-3.5 flex flex-col gap-[11px] text-[12.5px]">
             <RuleCard title="① ETH" tag="LTCG · drawn first">
-              Harvest up to the 0% LTCG ceiling. Drawn first to unwind
-              concentration.
+              Sold to exhaustion first to unwind concentration — tax-free up to
+              the 0% LTCG ceiling, then 15% on the gain.
             </RuleCard>
             <RuleCard title="② Brokerage" tag="LTCG on gain only">
               Lot-level basis from open tax lots. Dividends and interest are

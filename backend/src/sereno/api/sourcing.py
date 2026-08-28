@@ -266,7 +266,7 @@ def load_tiered_buckets(db: sqlite3.Connection) -> list[tuple[int, Bucket]]:
                 treatment=key.treatment,
                 access_age=key.access_age,
                 age_offset=offset_for(key),
-                headroom_only=key.priority == ETH_PRIORITY,
+                is_eth=key.priority == ETH_PRIORITY,
             ),
         )
         for key in keys
@@ -296,7 +296,7 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
         for entry in get_social_security(db)
         if resolved_age >= entry.start_age
     )
-    eth_balance = sum(b.balance for b in buckets if b.headroom_only)
+    eth_balance = sum(b.balance for b in buckets if b.is_eth)
     staking_income = STAKING_INCOME if eth_balance > STAKING_MIN_ETH_BALANCE else 0.0
 
     brackets = (

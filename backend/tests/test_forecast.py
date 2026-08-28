@@ -32,7 +32,7 @@ def eth(balance: float, basis: float | None = None) -> Bucket:
         balance=balance,
         basis=balance if basis is None else basis,
         treatment="LTCG",
-        headroom_only=True,
+        is_eth=True,
     )
 
 

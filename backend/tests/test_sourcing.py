@@ -2,9 +2,11 @@
 non-portfolio income leaves a gap, filled bucket by bucket in waterfall
 order. The 0% LTCG headroom is measured in gain dollars — the ceiling
 minus taxable ordinary income — and converts to sale proceeds through
-each bucket's gain fraction, so a low-basis bucket can sell little
-before the headroom is spent while a full-basis bucket is unbounded.
-The engine solves for net spendable; it never draws 4% per bucket.
+each bucket's gain fraction, so a low-basis bucket sells little before
+the headroom is spent while a full-basis bucket is unbounded. The
+headroom bounds the tax-free leg, not the bucket: every LTCG bucket
+keeps selling past it at 15% on the gain portion. The engine solves
+for net spendable; it never draws 4% per bucket.
 """
 
 import pytest
@@ -18,7 +20,7 @@ def eth(balance=400_000.0, basis=4_000.0):
         balance=balance,
         basis=basis,
         treatment="LTCG",
-        headroom_only=True,
+        is_eth=True,
     )
 
 
@@ -77,19 +79,22 @@ class TestEthStep:
         assert result.net_delivered == pytest.approx(45_000)
         assert result.shortfall == 0
 
-    def test_the_headroom_caps_proceeds_grossed_up_by_the_gain_fraction(self):
+    def test_sells_past_the_headroom_at_fifteen_percent_on_the_gain(self):
         # basis 200k on 400k → half of every sale is gain, so 10,000 of
-        # gain headroom buys 20,000 of proceeds against a 37,000 gap.
+        # gain headroom buys 20,000 of proceeds tax-free. The remaining
+        # 17,000 of the gap keeps selling at 15% on the gain half:
+        # net N costs N / (1 − 0.15·0.5).
         result = run(
             buckets=[eth(balance=400_000, basis=200_000)],
             ordinary_income=116_700,  # taxable 86,700 → headroom 10,000
         )
         draw = result.draws[0]
         assert result.headroom == pytest.approx(10_000)
-        assert draw.gross == pytest.approx(20_000)
-        assert draw.tax == 0
-        assert result.shortfall == pytest.approx(17_000)
-        assert result.net_delivered == pytest.approx(28_000)
+        assert draw.gross == pytest.approx(20_000 + 17_000 / 0.925)
+        assert draw.tax == pytest.approx(17_000 / 0.925 * 0.075)
+        assert draw.net == pytest.approx(37_000)
+        assert result.shortfall == 0
+        assert result.net_delivered == pytest.approx(45_000)
 
     def test_the_balance_caps_the_draw_before_the_headroom_does(self):
         result = run(buckets=[eth(balance=10_000)])
@@ -107,10 +112,16 @@ class TestEthStep:
         assert draw.tax == 0
         assert result.shortfall == 0
 
-    def test_zero_headroom_blocks_an_appreciated_bucket_entirely(self):
+    def test_zero_headroom_taxes_the_whole_draw_rather_than_blocking_it(self):
+        # 99% of every sale is gain and no headroom shelters any of it,
+        # so the entire 37,000 is grossed up at 15% on that gain.
         result = run(ordinary_income=500_000)
-        assert result.draws[0].gross == 0
-        assert result.shortfall == pytest.approx(37_000)
+        draw = result.draws[0]
+        assert result.headroom == 0
+        assert draw.gross == pytest.approx(37_000 / (1 - 0.99 * 0.15))
+        assert draw.tax == pytest.approx(37_000 / (1 - 0.99 * 0.15) * 0.99 * 0.15)
+        assert draw.net == pytest.approx(37_000)
+        assert result.shortfall == 0
 
     def test_an_empty_bucket_draws_nothing(self):
         result = run(buckets=[eth(balance=0)])
@@ -132,6 +143,23 @@ class TestBrokerageStep:
         assert draw.name == "Brokerage"
         assert draw.gross == pytest.approx(27_000)
         assert draw.tax == 0
+        assert result.shortfall == 0
+
+    def test_eth_drains_before_the_brokerage_is_touched(self):
+        # No headroom shelters either bucket, so nothing is free — but
+        # ETH still empties first and the brokerage covers only what is
+        # left. Unwinding the concentration outranks the tax saving.
+        result = run(
+            buckets=[eth(balance=20_000, basis=200), brokerage()],
+            ordinary_income=500_000,
+        )
+        eth_draw, brokerage_draw = result.draws
+        assert eth_draw.gross == pytest.approx(20_000)
+        assert eth_draw.tax == pytest.approx(20_000 * 0.99 * 0.15)
+        assert eth_draw.net == pytest.approx(20_000 * (1 - 0.99 * 0.15))
+        remaining = 37_000 - 20_000 * (1 - 0.99 * 0.15)
+        assert brokerage_draw.gross == pytest.approx(remaining / 0.97)
+        assert brokerage_draw.net == pytest.approx(remaining)
         assert result.shortfall == 0
 
     def test_grosses_up_at_fifteen_percent_beyond_the_headroom(self):
