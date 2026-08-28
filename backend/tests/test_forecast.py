@@ -1,10 +1,12 @@
 """The longevity forecast engine: a year-by-year simulation from the
-caller's start age to 100 in today's dollars. Each year the buckets
+caller's start age to 100 in today's dollars. Each year records its
+opening balances first — the January 1 snapshot, so the first point is
+the caller's own balances, ungrown — then the buckets
 grow by the real rate
 (return minus inflation) — except the ETH bucket, which grows at its
 own nominal rate minus inflation when eth_growth_pct is given (null
 keeps the blended rate, and a rate at or below −100% real empties the
-bucket rather than inverting it) — the balances are recorded, and the
+bucket rather than inverting it) — and the
 year's
 spending need is withdrawn through the sourcing engine's waterfall —
 so the 59½ gate, the 0% LTCG headroom, and the gross-ups all apply per
@@ -91,26 +93,31 @@ class TestSeries:
         result = run(start_age=40)
         assert result.series[0].age == 40
 
-    def test_buckets_grow_by_the_real_rate_before_recording(self):
-        # 7% return − 3% inflation = 4% real, applied before the first
-        # point is recorded — age 38 already shows one year of growth.
+    def test_each_point_is_that_years_opening_balance(self):
+        # The snapshot precedes the year's growth, so age 38 is the
+        # caller's own balance and the 7% − 3% = 4% real rate first
+        # shows up at 39.
         result = run(spend=0, buckets=[brokerage(100_000)])
-        assert result.series[0].balances == (pytest.approx(104_000),)
-        assert result.series[1].balances == (pytest.approx(104_000 * 1.04),)
+        assert result.series[0].balances == (pytest.approx(100_000),)
+        assert result.series[1].balances == (pytest.approx(104_000),)
+        assert result.series[2].balances == (pytest.approx(100_000 * 1.04**2),)
 
     def test_the_withdrawal_reduces_the_next_years_recorded_balance(self):
-        result = run(buckets=[brokerage(1_000_000)])
-        assert result.series[0].balances == (pytest.approx(1_040_000),)
-        assert result.series[1].balances == (pytest.approx((1_040_000 - 40_000) * 1.04),)
+        # 50,000 rather than the default 40,000: at 4% real a million
+        # against a 40,000 draw is the equilibrium, and the two opening
+        # balances would print the same number by coincidence.
+        result = run(spend=50_000, buckets=[brokerage(1_000_000)])
+        assert result.series[0].balances == (pytest.approx(1_000_000),)
+        assert result.series[1].balances == (pytest.approx(1_040_000 - 50_000),)
 
     def test_earlier_buckets_drain_before_later_ones(self):
-        # ETH's 20,800 goes first; the brokerage covers the remaining
-        # 19,200 of the 40,000 need.
+        # ETH's grown 20,800 goes first; the brokerage covers the
+        # remaining 19,200 of the 40,000 need.
         result = run(buckets=[eth(20_000), brokerage(500_000)])
-        assert result.series[0].balances == (pytest.approx(20_800), pytest.approx(520_000))
+        assert result.series[0].balances == (pytest.approx(20_000), pytest.approx(500_000))
         assert result.series[1].balances == (
             pytest.approx(0),
-            pytest.approx((520_000 - 19_200) * 1.04),
+            pytest.approx(520_000 - 19_200),
         )
 
 
@@ -128,10 +135,10 @@ class TestRunOut:
         assert result.run_out_age is None
 
     def test_balance_at_100_sums_the_buckets_at_age_100(self):
-        # Untouched, the bucket compounds once per simulated age: 63
-        # steps from 38 through 100.
+        # The age-100 point is that year's opening balance, so the
+        # untouched bucket has compounded 62 times: ages 38 through 99.
         result = run(spend=0, buckets=[brokerage(100_000)])
-        assert result.balance_at_100 == pytest.approx(100_000 * 1.04**63)
+        assert result.balance_at_100 == pytest.approx(100_000 * 1.04**62)
 
 
 class TestBasis:
@@ -149,36 +156,38 @@ class TestBasis:
         gain_38 = 1 - 50_000 / bal_38
         gross_38 = 10_000 / (1 - 0.15 * gain_38)
         basis_39 = 50_000 * (1 - gross_38 / bal_38)
-        bal_39 = (bal_38 - gross_38) * 1.04
-        assert result.series[1].balances == (pytest.approx(bal_39),)
+        close_38 = bal_38 - gross_38
+        assert result.series[1].balances == (pytest.approx(close_38),)
 
+        bal_39 = close_38 * 1.04
         gain_39 = 1 - basis_39 / bal_39
         gross_39 = 10_000 / (1 - 0.15 * gain_39)
-        assert result.series[2].balances == (pytest.approx((bal_39 - gross_39) * 1.04),)
+        assert result.series[2].balances == (pytest.approx(bal_39 - gross_39),)
 
 
 class TestEthGrowth:
     def test_the_eth_bucket_grows_at_its_own_real_rate(self):
         # 15% nominal − 3% inflation = 12% real for ETH; the brokerage
-        # keeps the blended 7 − 3 = 4%.
+        # keeps the blended 7 − 3 = 4%. Both land in the age-39 opening
+        # balance.
         result = run(spend=0, eth_growth_pct=15, buckets=[eth(100_000), brokerage(100_000)])
-        assert result.series[0].balances == (pytest.approx(112_000), pytest.approx(104_000))
+        assert result.series[1].balances == (pytest.approx(112_000), pytest.approx(104_000))
 
     def test_eth_growth_is_nominal_and_inflation_subtracts(self):
         # 3% nominal against 3% inflation is 0% real: the bucket holds
         # flat in today's dollars, exactly how return_pct is treated.
         result = run(spend=0, eth_growth_pct=3, buckets=[eth(100_000)])
-        assert result.series[0].balances == (pytest.approx(100_000),)
+        assert result.series[1].balances == (pytest.approx(100_000),)
 
     def test_a_null_eth_growth_keeps_the_blended_rate(self):
         result = run(spend=0, eth_growth_pct=None, buckets=[eth(100_000)])
-        assert result.series[0].balances == (pytest.approx(104_000),)
+        assert result.series[1].balances == (pytest.approx(104_000),)
 
     def test_a_rate_below_minus_one_hundred_real_empties_rather_than_inverts(self):
         # −120 nominal − 3 inflation = −123% real: the multiplier would
         # go negative, so the bucket floors at zero instead.
         result = run(spend=0, eth_growth_pct=-120, buckets=[eth(100_000)])
-        assert result.series[0].balances == (0.0,)
+        assert result.series[1].balances == (0.0,)
 
 
 class TestBridge:

@@ -331,8 +331,9 @@ export interface Sourcing {
 
 // GET /api/forecast: the longevity simulation. Spend, rates, and the
 // Social Security figures resolve from stored config unless a query
-// override stands in; the series carries per-bucket balances and each
-// year's SS income. Null until a tax year, balances, a spend target,
+// override stands in; the series carries each year's opening
+// per-bucket balances — its January 1, the first point being today's
+// — and that year's SS income. Null until a tax year, balances, a spend target,
 // and return/inflation figures exist.
 export interface ForecastPoint {
   age: number

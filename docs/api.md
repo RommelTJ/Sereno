@@ -444,7 +444,9 @@ The forecast slice (the third Plan engine):
 
 - `GET /api/forecast` — the year-by-year longevity simulation, from
   the birthdate-derived current age to 100 in today's dollars. Each
-  year the buckets grow by the real
+  year records its opening balances first — that year's January 1,
+  since the birthdate is January 1, so the first point is today's
+  actual balances — then the buckets grow by the real
   rate (return − inflation) — except the ETH bucket, which grows at
   its own nominal rate minus inflation when the assumptions row's
   `eth_growth_pct` is set (null keeps it on the blended rate) —
@@ -464,7 +466,8 @@ The forecast slice (the third Plan engine):
   (including the derived `start_age`),
   the per-bucket series with each year's SS income, the run-out age
   (the first unmeetable year; null when the money lasts), the age-100
-  balance, and the sensitivity table: whole percentages of the
+  balance — that year's opening balance too, so the headline is
+  exactly the series' last point — and the sensitivity table: whole percentages of the
   latest month's net worth from 2% to 6% — the 4% rule of thumb dead
   center — rounded to the nearest $1,000 and each simulated at the
   same assumptions. The current tax year's parameters apply to every

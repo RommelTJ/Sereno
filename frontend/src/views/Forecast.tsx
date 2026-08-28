@@ -130,7 +130,7 @@ function BandRow({
   )
 }
 
-function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
+function BarColumn({ column, when }: { column: ChartColumn; when: string }) {
   return (
     <div
       data-testid={`forecast-col-${column.age}`}
@@ -141,7 +141,7 @@ function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
         className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 hidden w-max -translate-x-1/2 rounded-[8px] bg-ink px-3 py-2 text-[11px] leading-[1.7] text-white group-hover:block"
       >
         <p className="font-bold">
-          Age {column.age} · {year}
+          Age {column.age} · {when}
         </p>
         {column.purchaseUsd != null && (
           <p className="num">Purchase {formatUsd(column.purchaseUsd)}</p>
@@ -795,7 +795,14 @@ function Forecast() {
             <BarColumn
               key={column.age}
               column={column}
-              year={currentYear + column.age - forecast.start_age}
+              // Each column is that year's January 1 — but the first
+              // holds the balances held right now, a date the calendar
+              // year would misname.
+              when={
+                column.age === forecast.start_age
+                  ? 'Today'
+                  : String(currentYear + column.age - forecast.start_age)
+              }
             />
           ))}
         </div>

@@ -204,10 +204,12 @@ class TestForecast:
         assert body["tax_year"] == TODAY.year
 
         assert [point["age"] for point in body["series"]] == list(range(START_AGE, 101))
+        # The first point is January 1 of this year — today's actual
+        # balances, before any growth.
         first = body["series"][0]
-        assert first["eth"] == pytest.approx(400_000 * 1.04)
-        assert first["brokerage"] == pytest.approx(600_000 * 1.04)
-        assert first["retirement"] == pytest.approx(500_000 * 1.04)
+        assert first["eth"] == pytest.approx(400_000)
+        assert first["brokerage"] == pytest.approx(600_000)
+        assert first["retirement"] == pytest.approx(500_000)
         assert first["ss_income"] == 0.0
         assert body["series"][67 - START_AGE]["ss_income"] == pytest.approx(54_000)
 
@@ -216,21 +218,25 @@ class TestForecast:
         assert body["balance_at_100"] > 0
 
     def test_the_series_reflects_the_sourcing_waterfall(self, client):
-        # Age 38 stakes 3,000 (ETH > 50k) and sells the 42,000 gap out
-        # of ETH inside the headroom; the next point shows it.
+        # Age 38 grows, stakes 3,000 (ETH > 50k), and sells the 42,000
+        # gap out of ETH inside the headroom; age 39 opens on what is
+        # left.
         seed_portfolio()
         seed_config()
         body = client.get("/api/forecast").json()
-        expected = (400_000 * 1.04 - 42_000) * 1.04
-        assert body["series"][1]["eth"] == pytest.approx(expected)
-        assert body["series"][1]["brokerage"] == pytest.approx(600_000 * 1.04**2)
+        assert body["series"][1]["eth"] == pytest.approx(400_000 * 1.04 - 42_000)
+        assert body["series"][1]["brokerage"] == pytest.approx(600_000 * 1.04)
 
     def test_rate_overrides_change_the_simulation(self, client):
         seed_portfolio()
         seed_config()
+        # A 0% real rate holds the untouched brokerage flat into age
+        # 39, where the stored 7 − 3 would have grown it 4%. The first
+        # point is today's balance under any rate, so it cannot tell
+        # the two apart.
         params = {"return_pct": 3, "inflation_pct": 3}
         body = client.get("/api/forecast", params=params).json()
-        assert body["series"][0]["eth"] == pytest.approx(400_000)
+        assert body["series"][1]["brokerage"] == pytest.approx(600_000)
 
     def test_a_heavy_spend_override_runs_the_money_out(self, client):
         seed_portfolio()
@@ -261,22 +267,24 @@ class TestForecast:
 
     def test_the_stored_eth_growth_rate_drives_the_eth_bucket(self, client):
         # 15% nominal − 3% inflation = 12% real for ETH; the brokerage
-        # keeps the blended 4%.
+        # keeps the blended 4%. Age 39 opens on that growth less the
+        # 42,000 gap ETH covered.
         seed_portfolio()
         seed_config(eth_growth_pct=15)
         body = client.get("/api/forecast").json()
         assert body["eth_growth_pct"] == 15.0
-        assert body["series"][0]["eth"] == pytest.approx(400_000 * 1.12)
-        assert body["series"][0]["brokerage"] == pytest.approx(600_000 * 1.04)
+        assert body["series"][1]["eth"] == pytest.approx(400_000 * 1.12 - 42_000)
+        assert body["series"][1]["brokerage"] == pytest.approx(600_000 * 1.04)
 
     def test_an_eth_growth_query_overrides_the_stored_rate(self, client):
-        # 3% nominal against 3% inflation: ETH holds flat this year.
+        # 3% nominal against 3% inflation: ETH holds flat this year, so
+        # age 39 opens on today's balance less the 42,000 gap.
         seed_portfolio()
         seed_config(eth_growth_pct=15)
         params = {"eth_growth_pct": 3}
         body = client.get("/api/forecast", params=params).json()
         assert body["eth_growth_pct"] == 3.0
-        assert body["series"][0]["eth"] == pytest.approx(400_000)
+        assert body["series"][1]["eth"] == pytest.approx(400_000 - 42_000)
 
     def test_without_ss_rows_the_benefits_default_to_zero(self, client):
         seed_portfolio()
@@ -710,8 +718,8 @@ class TestSeriesByTier:
         insert_balance(hsa, 200_000)
         seed_config()
         first = client.get("/api/forecast").json()["series"][0]
-        assert first["hsa"] == pytest.approx(200_000 * 1.04)
-        assert first["retirement"] == pytest.approx(500_000 * 1.04)
+        assert first["hsa"] == pytest.approx(200_000)
+        assert first["retirement"] == pytest.approx(500_000)
 
     def test_two_owners_401k_buckets_report_one_balance(self, client):
         eth = insert_account("Ethereum", "eth", priority=1)
@@ -728,7 +736,7 @@ class TestSeriesByTier:
             insert_balance(account, 250_000)
         seed_config()
         first = client.get("/api/forecast").json()["series"][0]
-        assert first["retirement"] == pytest.approx(500_000 * 1.04)
+        assert first["retirement"] == pytest.approx(500_000)
 
     def test_a_portfolio_without_an_hsa_reports_a_zero_band(self, client):
         seed_portfolio()
