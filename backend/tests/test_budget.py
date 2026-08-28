@@ -1087,6 +1087,98 @@ class TestPostIncome:
         )
         assert response.status_code == 404
 
+    def test_a_draw_from_fund_appends_the_paired_spend_entry(self, client):
+        # The mirror of a fund-funded expense: the income row funds the
+        # month, the appended 'spend' entry releases the earmark — one
+        # action instead of an income row plus a hand-entered correction.
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-05-01", 60000)
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-05-28",
+                "budget_month": "2026-06",
+                "source": "transfer_in",
+                "amount": 5200,
+                "drawn_from_fund_id": fund_id,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["drawn_from_fund_id"] == fund_id
+        rows = query("SELECT drawn_from_fund_id FROM income_event")
+        assert rows == [{"drawn_from_fund_id": fund_id}]
+        assert fetch_fund_entries(fund_id) == [
+            {"as_of_date": "2026-05-01", "balance": 60000, "contribution": 0, "source": None},
+            {
+                "as_of_date": "2026-05-28",
+                "balance": 54800,
+                "contribution": -5200,
+                "source": "spend",
+            },
+        ]
+
+    def test_drawn_from_fund_defaults_to_null(self, client):
+        response = client.post(
+            "/api/income",
+            json={"txn_date": "2026-06-15", "source": "interest", "amount": 12.34},
+        )
+        assert response.status_code == 201
+        assert response.json()["drawn_from_fund_id"] is None
+
+    def test_a_draw_exceeding_the_fund_balance_is_rejected(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-05-01", 1000)
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-05-28",
+                "source": "transfer_in",
+                "amount": 1200,
+                "drawn_from_fund_id": fund_id,
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"] == "income draw exceeds fund balance"
+        assert query("SELECT id FROM income_event") == []
+        assert len(fetch_fund_entries(fund_id)) == 1
+
+    def test_an_unknown_drawn_from_fund_returns_404(self, client):
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-05-28",
+                "source": "transfer_in",
+                "amount": 100,
+                "drawn_from_fund_id": 999,
+            },
+        )
+        assert response.status_code == 404
+
+    def test_a_drawn_income_moves_safe_to_spend_exactly_once(self, client):
+        # The crux of the one-touch draw: the income row is the only thing
+        # moving safe-to-spend. The paired 'spend' entry stays out of the
+        # fund_contributions headline and the feed, so the draw lowers the
+        # fund without double-counting the inflow.
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-06-02",
+                "budget_month": "2026-06",
+                "source": "transfer_in",
+                "amount": 5200,
+                "drawn_from_fund_id": fund_id,
+            },
+        )
+        assert response.status_code == 201
+        assert fetch_fund_entries(fund_id)[-1]["source"] == "spend"
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["baseline"] == 5200
+        assert body["fund_contributions"] == 0
+        assert body["safe_to_spend"] == 5200
+        assert [(item["type"], item["amount"]) for item in body["activity"]] == [("income", 5200)]
+
 
 class TestUpdateIncome:
     def insert_income(self, client, **overrides):
