@@ -275,6 +275,21 @@ class TestWaterfall:
         body = client.get("/api/sourcing", params={"age": 38}).json()
         assert body["steps"][0]["gross"] == pytest.approx(45_000 / 0.97)
 
+    def test_a_newer_entry_without_a_basis_keeps_the_last_one_recorded(self, client):
+        # The annual snapshot: basis is recorded once a year, and the
+        # monthly balance rows after it say nothing about it. Null is
+        # unknown, not zero, so the bucket keeps the 480,000 it was last
+        # told instead of reverting to all gain the month after.
+        brokerage = insert_account("VFIAX", "brokerage_fund", priority=2)
+        insert_balance(brokerage, 550_000, as_of_date=LAST_YEAR, cost_basis=480_000)
+        insert_balance(brokerage, 600_000)
+        insert_spend_plan()
+        insert_tax_param(ltcg_0_ceiling=0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        step = body["steps"][0]
+        assert step["gross"] == pytest.approx(45_000 / 0.97)
+        assert step["tax"] == pytest.approx(45_000 / 0.97 * 0.2 * 0.15)
+
     def test_a_stale_balance_month_still_sources_withdrawals(self, client):
         # unlike guardrails' latest-month investable total, sourcing
         # walks back to each account's newest balance row
