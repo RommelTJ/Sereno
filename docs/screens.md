@@ -276,7 +276,9 @@ serves them at <http://localhost:5173>.
   Security income sliver at the base, enlarged to a 7px minimum so
   the income stays visible against multi-million balances; hovering
   a bar shows the age, its calendar year, and the exact per-bucket
-  dollar breakdown. On wide screens the view sheds its designed cap
+  dollar breakdown. Each bar is that year's January 1 balance, so the
+  first one holds the balances held right now and reads "Today"
+  rather than a year it does not mean. On wide screens the view sheds its designed cap
   and rides the widened shell, so the sixty-odd year columns get real
   width instead of slivers. The tooltip leads with that year's portfolio
   total — ETH + brokerage + 401(k), with the change against the

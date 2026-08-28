@@ -2,6 +2,11 @@
 and the stored planning config. The start age derives from the
 sanitized BIRTHDATE constant (today's date against January 1, 1988)
 and is echoed in the response so the frontend never hardcodes it.
+Each series point is that year's opening balance: the birthdate is a
+January 1, so age N is the January 1 of current_year + (N −
+start_age) and the first point is today's actual balances.
+balance_at_100 is that year's opening balance too, so the headline
+equals the series' last point.
 Spend defaults to the plan's annual
 target, return, inflation, and ETH growth to the assumptions row (a
 null ETH growth keeps the ETH bucket on the blended rate — the column

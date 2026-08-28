@@ -55,7 +55,10 @@ whole thing in plain SQL.
 - **Longevity forecast** — a year-by-year simulation from the current age (derived
   from a sanitized birthdate constant) to 100, charted one bar per year by bucket
   (ETH, brokerage, 401(k), HSA, Social Security) with a hover breakdown per bar, led by
-  that year's portfolio total and its change against the year before. Verdict
+  that year's portfolio total and its change against the year before. Every bar is
+  that year's opening balance — its January 1 — so the first is the money actually
+  held today, labeled "Today", and the projected age-100 figure in the verdict is
+  exactly the rightmost bar. Verdict
   up front: "You don't run out" or "Lasts to age N", plus a sensitivity table across
   spend levels and live sliders for return, ETH growth, inflation, and Social
   Security assumptions. Planned one-off purchases (a house in 2036, a car in 2041)
