@@ -1022,6 +1022,7 @@ class TestPostIncome:
             "source_label": "You paycheck",
             "note": "Includes the spot bonus",
             "pending": False,
+            "drawn_from_fund_id": None,
         }
         rows = query("SELECT budget_month, source, amount, source_label, note FROM income_event")
         assert rows == [
