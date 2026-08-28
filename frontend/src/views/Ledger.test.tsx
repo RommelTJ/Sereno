@@ -292,6 +292,37 @@ describe("Update this month's balances form", () => {
     expect(screen.queryByLabelText('ETH held')).not.toBeInTheDocument()
   })
 
+  it('offers a cost basis field for the accounts taxed on their gain', async () => {
+    render(<Ledger />)
+
+    // Ethereum is selected first, and it is an LTCG bucket like the funds.
+    expect(await screen.findByLabelText('Cost basis')).toBeInTheDocument()
+    expect(
+      screen.getByText('Blank leaves the last recorded basis in place.'),
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Account'), {
+      target: { value: '2' },
+    })
+    expect(screen.getByLabelText('Cost basis')).toBeInTheDocument()
+  })
+
+  it('leaves the cost basis off an account whose draws are not LTCG', async () => {
+    render(<Ledger />)
+
+    // The 401(k) is drawn as ordinary income and the checking account is
+    // not drawn at all — neither reads a basis.
+    fireEvent.change(await screen.findByLabelText('Account'), {
+      target: { value: '5' },
+    })
+    expect(screen.queryByLabelText('Cost basis')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Account'), {
+      target: { value: '7' },
+    })
+    expect(screen.queryByLabelText('Cost basis')).not.toBeInTheDocument()
+  })
+
   it("prefills $ / ETH from another eth account's newer entry in the month", async () => {
     // The price is market-wide: Ethereum's own June entry says 3,500, but
     // ETH Wallet was saved later in the month at 3,600.
@@ -486,6 +517,37 @@ describe('Saving balances', () => {
       .map(([, init]) => JSON.parse(String(init?.body)) as unknown)
     expect(bodies).toEqual([
       { account_id: 2, as_of_date: today, balance_usd: 710000 },
+    ])
+  })
+
+  it('posts the cost basis typed for a taxable account', async () => {
+    render(<Ledger />)
+
+    fireEvent.change(await screen.findByLabelText('Account'), {
+      target: { value: '2' },
+    })
+    fireEvent.change(screen.getByLabelText('Value'), {
+      target: { value: '710,000' },
+    })
+    fireEvent.change(screen.getByLabelText('Cost basis'), {
+      target: { value: '480,000' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save balance' }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Saved ✓' }),
+    ).toBeInTheDocument()
+    const today = new Date().toLocaleDateString('en-CA')
+    const bodies = fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'POST')
+      .map(([, init]) => JSON.parse(String(init?.body)) as unknown)
+    expect(bodies).toEqual([
+      {
+        account_id: 2,
+        as_of_date: today,
+        balance_usd: 710000,
+        cost_basis: 480000,
+      },
     ])
   })
 
