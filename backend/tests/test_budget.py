@@ -1715,6 +1715,25 @@ class TestGetBudgetMonth:
         assert income["fund_id"] is None
         assert income["is_fixed"] is None
 
+    def test_income_activity_carries_the_drawn_fund(self, client):
+        # The feed is the edit form's only read: a drawn income row carries
+        # its fund in fund_id — the same column a fund-funded expense's row
+        # uses — so the Draw-from select can pre-fill without a GET-by-id.
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        payload = {
+            "txn_date": "2026-06-02",
+            "budget_month": "2026-06",
+            "source": "transfer_in",
+            "amount": 5200,
+            "drawn_from_fund_id": fund_id,
+        }
+        assert client.post("/api/income", json=payload).status_code == 201
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        income = body["activity"][0]
+        assert income["type"] == "income"
+        assert income["fund_id"] == fund_id
+
     def test_activity_carries_the_pending_flag(self, client):
         # The feed is the edit form's only read and the ⚠️ renders from
         # the row itself, so expense and income rows carry the stored flag.
