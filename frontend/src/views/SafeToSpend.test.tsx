@@ -841,11 +841,11 @@ describe('Responsive layout', () => {
     expect(screen.getByTestId('view-safe-to-spend')).toHaveClass(
       'grid-cols-1',
       'md:grid-cols-2',
-      'min-[1560px]:grid-cols-3',
+      '3col:grid-cols-3',
     )
     expect(screen.getByTestId('month-pager')).toHaveClass(
       'md:col-span-2',
-      'min-[1560px]:col-span-3',
+      '3col:col-span-3',
     )
   })
 
@@ -858,7 +858,7 @@ describe('Responsive layout', () => {
     // the envelopes column.
     expect(hero.parentElement).toBe(view)
     expect(screen.getByTestId('month-pager').nextElementSibling).toBe(hero)
-    expect(hero).toHaveClass('md:col-span-2', 'min-[1560px]:col-span-3')
+    expect(hero).toHaveClass('md:col-span-2', '3col:col-span-3')
   })
 
   it('stacks the form field grids into one column on narrow screens', async () => {
