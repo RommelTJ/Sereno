@@ -7,8 +7,10 @@ then the
 buckets grow by the real rate (return minus inflation) — except the
 ETH bucket, which grows at its own nominal rate minus inflation when
 eth_growth_pct is given (null keeps the blended rate, so the stored
-column stays optional) — and the year's spending need is withdrawn
-through the
+column stays optional) — staking pays that year's yield on the balance
+then staked, so the income decays with the stack rather than holding
+flat until a threshold ends it, and a null yield models none — and the
+year's spending need is withdrawn through the
 sourcing waterfall — so the 0% LTCG headroom, the gross-ups, and the
 59½ gate all apply per simulated year. ETH drains before the brokerage
 is touched: its draw is bounded by its balance, not by the headroom. Growth is all gain (the basis
@@ -26,12 +28,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 from sereno.engine.sourcing import (
-    STAKING_INCOME,
-    STAKING_MIN_ETH_BALANCE,
     Bracket,
     Bucket,
     BucketDraw,
     source_withdrawals,
+    staking_income,
 )
 
 END_AGE = 100
@@ -107,6 +108,7 @@ def simulate_forecast(
     return_pct: float,
     inflation_pct: float,
     eth_growth_pct: float | None = None,
+    staking_yield_pct: float | None = None,
     buckets: list[Bucket],
     social_security: Sequence[SocialSecurityBenefit] = (),
     purchases: Sequence[PlannedPurchase] = (),
@@ -134,15 +136,15 @@ def simulate_forecast(
         )
         current = [_grow(bucket, eth_rate if bucket.is_eth else real_rate) for bucket in current]
         eth_balance = sum(b.balance for b in current if b.is_eth)
-        staking_income = STAKING_INCOME if eth_balance > STAKING_MIN_ETH_BALANCE else 0.0
+        staking = staking_income(eth_balance, staking_yield_pct)
         lump = sum(p.amount for p in purchases if p.age == age)
         ongoing = sum(p.ongoing_delta for p in purchases if age >= p.age)
 
         year = source_withdrawals(
             target_spend=spend + ongoing + lump,
             age=age,
-            income=ss_income + staking_income,
-            ordinary_income=staking_income,
+            income=ss_income + staking,
+            ordinary_income=staking,
             buckets=current,
             ltcg_0_ceiling=ltcg_0_ceiling,
             std_deduction=std_deduction,
@@ -158,8 +160,8 @@ def simulate_forecast(
             year = source_withdrawals(
                 target_spend=spend + ongoing,
                 age=age,
-                income=ss_income + staking_income,
-                ordinary_income=staking_income,
+                income=ss_income + staking,
+                ordinary_income=staking,
                 buckets=current,
                 ltcg_0_ceiling=ltcg_0_ceiling,
                 std_deduction=std_deduction,

@@ -230,7 +230,7 @@ class TestForecast:
         seed_portfolio()
         seed_config()
         body = client.get("/api/forecast").json()
-        assert body["series"][1]["eth"] == pytest.approx(400_000 * 1.04 - 42_000)
+        assert body["series"][1]["eth"] == pytest.approx(400_000 * 1.04 - 45_000)
         assert body["series"][1]["brokerage"] == pytest.approx(600_000 * 1.04)
 
     def test_rate_overrides_change_the_simulation(self, client):
@@ -294,7 +294,7 @@ class TestForecast:
         seed_config(eth_growth_pct=15)
         body = client.get("/api/forecast").json()
         assert body["eth_growth_pct"] == 15.0
-        assert body["series"][1]["eth"] == pytest.approx(400_000 * 1.12 - 42_000)
+        assert body["series"][1]["eth"] == pytest.approx(400_000 * 1.12 - 45_000)
         assert body["series"][1]["brokerage"] == pytest.approx(600_000 * 1.04)
 
     def test_an_eth_growth_query_overrides_the_stored_rate(self, client):
@@ -305,7 +305,7 @@ class TestForecast:
         params = {"eth_growth_pct": 3}
         body = client.get("/api/forecast", params=params).json()
         assert body["eth_growth_pct"] == 3.0
-        assert body["series"][1]["eth"] == pytest.approx(400_000 - 42_000)
+        assert body["series"][1]["eth"] == pytest.approx(400_000 - 45_000)
 
     def test_without_ss_rows_the_benefits_default_to_zero(self, client):
         seed_portfolio()

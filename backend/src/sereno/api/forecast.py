@@ -8,9 +8,10 @@ start_age) and the first point is today's actual balances.
 balance_at_100 is that year's opening balance too, so the headline
 equals the series' last point.
 Spend defaults to the plan's annual
-target, return, inflation, and ETH growth to the assumptions row (a
-null ETH growth keeps the ETH bucket on the blended rate — the column
-is optional, never a prerequisite), and Social
+target, return, inflation, ETH growth, and the staking yield to the
+assumptions row (a null ETH growth keeps the ETH bucket on the blended
+rate, a null yield models no staking income — both columns are
+optional, never prerequisites), and Social
 Security to the per-person stored rows (each on its own start age);
 the query params override each transiently — the Forecast screen's
 sliders are what-ifs, only Settings persists config. Planned
@@ -328,6 +329,7 @@ class _Resolved:
     return_pct: float
     inflation_pct: float
     eth_growth_pct: float | None
+    staking_yield_pct: float | None
     ss_you: float
     ss_spouse: float
     ss_start: float
@@ -346,6 +348,7 @@ class _Resolved:
             return_pct=self.return_pct,
             inflation_pct=self.inflation_pct,
             eth_growth_pct=self.eth_growth_pct,
+            staking_yield_pct=self.staking_yield_pct,
             buckets=self.buckets,
             social_security=self.benefits,
             purchases=purchases,
@@ -386,6 +389,7 @@ def _resolve_inputs(
         if eth_growth_pct is not None
         else (assumptions.eth_growth_pct if assumptions else None)
     )
+    resolved_staking_yield = assumptions.staking_yield_pct if assumptions else None
     if target is None or resolved_return is None or resolved_inflation is None:
         return None
     tiered = load_tiered_buckets(db)
@@ -423,6 +427,7 @@ def _resolve_inputs(
         return_pct=resolved_return,
         inflation_pct=resolved_inflation,
         eth_growth_pct=resolved_eth_growth,
+        staking_yield_pct=resolved_staking_yield,
         ss_you=resolved_you,
         ss_spouse=resolved_spouse,
         ss_start=resolved_start,

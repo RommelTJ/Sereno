@@ -34,11 +34,6 @@ BucketTreatment = Literal["LTCG", "ORDINARY", "TAX_FREE"]
 # (tax_param.ltcg_15_ceiling) is out of scope for v1.
 LTCG_RATE = 0.15
 
-# The handoff's staking rule: ~3,000/yr while the ETH stake stays
-# meaningful. Promote to config if the rule ever needs tuning.
-STAKING_INCOME = 3_000.0
-STAKING_MIN_ETH_BALANCE = 50_000.0
-
 
 @dataclass(frozen=True)
 class Bracket:
@@ -81,6 +76,16 @@ class SourcingResult:
     draws: tuple[BucketDraw, ...]
     net_delivered: float
     shortfall: float
+
+
+def staking_income(eth_balance: float, staking_yield_pct: float | None) -> float:
+    """The year's staking income: the yield on the balance actually
+    staked, so it falls with the stack as the position is drawn down
+    and reaches zero when the stack does. The rate is effective-dated
+    config like the other rates; a null one models no staking income."""
+    if staking_yield_pct is None:
+        return 0.0
+    return eth_balance * staking_yield_pct / 100
 
 
 def _gain_fraction(bucket: Bucket) -> float:

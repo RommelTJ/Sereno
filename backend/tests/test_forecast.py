@@ -311,33 +311,6 @@ class TestStaking:
         )
         assert result.series[39 - 38].balances[0] == pytest.approx(60_000)
 
-    def test_staking_income_flows_while_eth_stays_meaningful(self):
-        # ETH above 50,000 stakes 3,000/yr, so the draw is 37,000 —
-        # until the stake is spent below the threshold at age 40.
-        result = run(
-            return_pct=5,
-            inflation_pct=5,
-            buckets=[eth(100_000), brokerage(1_000_000)],
-        )
-        assert result.series[39 - 38].balances[0] == pytest.approx(100_000 - 37_000)
-        assert result.series[40 - 38].balances[0] == pytest.approx(100_000 - 2 * 37_000)
-        # At 40 the 26,000 stake is under the threshold: the full
-        # 40,000 need drains ETH and takes 14,000 from the brokerage.
-        assert result.series[41 - 38].balances == (
-            pytest.approx(0),
-            pytest.approx(1_000_000 - 14_000),
-        )
-
-    def test_staking_needs_strictly_more_than_the_threshold(self):
-        result = run(
-            return_pct=5,
-            inflation_pct=5,
-            buckets=[eth(50_000), brokerage(1_000_000)],
-        )
-        # No staking at exactly 50,000: the first draw is the full
-        # 40,000, not 37,000.
-        assert result.series[39 - 38].balances[0] == pytest.approx(10_000)
-
 
 class TestPlannedPurchases:
     def test_a_lump_raises_only_its_years_draw(self):
