@@ -646,6 +646,37 @@ describe('Add an income item', () => {
     )
   })
 
+  it('refreshes the funds card after a drawn income lowers a fund', async () => {
+    const routes: Record<string, unknown> = {
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 10 },
+    }
+    stubApi(routes)
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('income-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '1,200' },
+    })
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'brokerage-withdrawal' },
+    })
+    fireEvent.change(within(form).getByLabelText('Draw from'), {
+      target: { value: '1' },
+    })
+    // The server appends the draw, so the refetched list must land on the
+    // funds card — a stale $10,000.00 would overstate the fund's runway.
+    routes['/api/funds'] = FUNDS.map((fund) =>
+      fund.id === 1 ? { ...fund, balance: 8_800 } : fund,
+    )
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    expect(await screen.findByText('$8,800.00')).toBeInTheDocument()
+  })
+
   it('maps every source option onto the API source values', async () => {
     render(<SafeToSpend />)
 
