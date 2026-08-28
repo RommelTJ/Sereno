@@ -592,6 +592,24 @@ class TestPostBalanceEntries:
         )
         assert response.status_code == 422
 
+    def test_a_negative_cost_basis_is_rejected(self, client):
+        # A basis below zero puts the gain fraction above 1.0, taxing more
+        # gain than the sale can hold. The form cannot type one; the API
+        # is called directly, so the guard lives here.
+        account_id = insert_account(
+            "VFIAX", "brokerage_fund", tax_treatment="LTCG", is_investable=1
+        )
+        response = client.post(
+            "/api/balance-entries",
+            json={
+                "account_id": account_id,
+                "as_of_date": "2026-06-28",
+                "balance_usd": 600_000,
+                "cost_basis": -1,
+            },
+        )
+        assert response.status_code == 422
+
     def test_unknown_account_returns_404(self, client):
         response = client.post(
             "/api/balance-entries",
