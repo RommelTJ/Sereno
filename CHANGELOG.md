@@ -4,6 +4,34 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.12.0 — ETH empties before the brokerage is touched. `_draw_ltcg`
+stopped the ETH step the moment the 0% LTCG headroom was spent, so the
+annual ETH draw was capped at whatever that ceiling bought. Once the
+spend schedule steps up mid-plan the cap covers only about three
+quarters of the year's gap; the remainder fell to the taxable
+brokerage, whose grossed-up draw slightly exceeds its real growth. The
+forecast therefore showed the brokerage bleeding down from the mid-40s
+while the large majority of the ETH position sat untouched — a chart
+modelling a policy we do not intend to follow (issue #136).
+
+One flag was doing two unrelated jobs. `Bucket.headroom_only` capped
+the draw *and* identified the ETH bucket for the forecast's growth-rate
+override and the staking-income rule, so simply clearing it would have
+silently dropped both. It is now `Bucket.is_eth`, identity only, and
+the taxed leg runs for every LTCG bucket: ETH stays priority 1 and
+drains fully, tax-free inside the headroom and then at 15% on the gain
+portion. ETH exhausts about six years earlier, the brokerage peaks some
+48% higher a decade later and stops declining, and the age-100 balance
+costs about 2.8% — the price of selling low-basis ETH above the
+headroom, nearly all of it won back by leaving the brokerage
+compounding. The plan still does not run out.
+
+The README stops being four documents in a trench coat. The 520-line
+API reference, the 400-line screen tour, and the 869-line changelog
+moved verbatim to `docs/api.md`, `docs/screens.md`, and `CHANGELOG.md`
+— this file. What remains is 221 lines: what Sereno is, how to run it,
+how to check it, and where the rest lives.
+
 v3.11.0 — The access gate actually fires. The `access_age` check sat
 behind an `elif` on tax treatment, so it was unreachable for any bucket
 that was not `ORDINARY` (issue #135) — and `load_buckets` collapsed
