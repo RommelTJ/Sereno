@@ -1310,6 +1310,23 @@ class TestUpdateIncome:
         assert [entry["balance"] for entry in entries] == [60000, 54800, 55000]
         assert entries[-1]["contribution"] == 200
 
+    def test_an_unchanged_amount_appends_no_fund_entry(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        income_id = self.insert_income(
+            client, source="transfer_in", amount=5200, drawn_from_fund_id=fund_id
+        )
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 5200,
+            "drawn_from_fund_id": fund_id,
+            "note": "True-up note only",
+        }
+        assert client.put(f"/api/income/{income_id}", json=payload).status_code == 200
+        assert [entry["balance"] for entry in fetch_fund_entries(fund_id)] == [60000, 54800]
+        assert query("SELECT note FROM income_event") == [{"note": "True-up note only"}]
+
     def test_an_increase_beyond_the_fund_balance_is_rejected(self, client):
         fund_id = insert_fund("Year-2 cash")
         insert_fund_entry(fund_id, "2026-06-01", 6000)

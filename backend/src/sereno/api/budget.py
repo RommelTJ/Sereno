@@ -543,23 +543,51 @@ def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
     """Revises the row in place — a full replace under the create body's
     validation, so a blanked title or note really clears. Income rows are
     facts nothing references: fixing an entry mistake is a correction, not
-    new history, so the append-only rule stays with the balance tables."""
-    _require(db, "income_event", income_id, "income")
+    new history, so the append-only rule stays with the balance tables.
+    A drawn row's paired 'spend' entry is corrected with compensating
+    entries (see _reverse_draw_down): a same-fund amount change appends
+    one delta entry, a changed draw reverses the old and freshly draws
+    the new — an omitted drawn_from_fund_id really clears the draw. The
+    overdraw guard re-applies either way, checked before anything is
+    written, so a 422 changes nothing."""
+    old = db.execute(
+        "SELECT drawn_from_fund_id, amount FROM income_event WHERE id = ?", (income_id,)
+    ).fetchone()
+    if old is None:
+        raise HTTPException(status_code=404, detail="income not found")
     _require(db, "account", income.account_id, "account")
+    _require(db, "fund", income.drawn_from_fund_id, "fund")
+    old_fund = old["drawn_from_fund_id"]
+    new_fund = income.drawn_from_fund_id
+    amount = to_cents(income.amount)
+    if old_fund is not None and old_fund == new_fund:
+        delta = amount - old["amount"]
+        if delta > _fund_balance(db, old_fund):
+            raise HTTPException(status_code=422, detail="income draw exceeds fund balance")
+        if delta != 0:
+            _reverse_draw_down(db, old_fund, -delta)
+    else:
+        if new_fund is not None and amount > _fund_balance(db, new_fund):
+            raise HTTPException(status_code=422, detail="income draw exceeds fund balance")
+        if old_fund is not None:
+            _reverse_draw_down(db, old_fund, old["amount"])
+        if new_fund is not None:
+            _reverse_draw_down(db, new_fund, -amount)
     db.execute(
         "UPDATE income_event SET txn_date = ?, budget_month = ?, source = ?, amount = ?,"
-        " tax_treatment = ?, account_id = ?, source_label = ?, note = ?, pending = ?"
-        " WHERE id = ?",
+        " tax_treatment = ?, account_id = ?, source_label = ?, note = ?, pending = ?,"
+        " drawn_from_fund_id = ? WHERE id = ?",
         (
             income.txn_date.isoformat(),
             income.budget_month or income.txn_date.strftime("%Y-%m"),
             income.source,
-            to_cents(income.amount),
+            amount,
             income.tax_treatment,
             income.account_id,
             income.source_label,
             income.note,
             income.pending,
+            income.drawn_from_fund_id,
             income_id,
         ),
     )
