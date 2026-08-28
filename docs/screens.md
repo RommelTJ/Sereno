@@ -255,7 +255,8 @@ serves them at <http://localhost:5173>.
   "where does the money come from?" view, every figure from
   `GET /api/sourcing`. Left, the sequencing waterfall: target net
   spend, minus non-portfolio income (Social Security past its start
-  age, staking while the ETH stake stays meaningful), the gap from
+  age, staking as the configured yield on the staked balance), the gap
+  from
   the portfolio, then one step per bucket — ETH sold to exhaustion
   (tax-free inside the 0% LTCG headroom, then 15% on the gain),
   brokerage next (inheriting leftover headroom, then 15% on the gain
@@ -370,8 +371,8 @@ serves them at <http://localhost:5173>.
   on Settings — funds live on Funds & Goals, where their targets and
   progress already are. Below them sit the Envelopes card, the
   Assumptions summary
-  (return, inflation, ETH growth, planned spend, the at-retirement
-  initial withdrawal rate, and the guardrail band), the Social Security
+  (return, inflation, ETH growth, the staking yield, planned spend, the
+  at-retirement initial withdrawal rate, and the guardrail band), the Social Security
   panel (You/Spouse $/mo and start age), the latest year's tax
   parameters (LTCG ceilings, NIIT, standard deduction, ordinary
   brackets), and the dark append-only data-model note pointing at
