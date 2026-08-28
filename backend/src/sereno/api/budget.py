@@ -348,22 +348,20 @@ def _fund_balance(db: sqlite3.Connection, fund_id: int | None) -> int:
     ).fetchone()[0]
 
 
-def _draw_down_fund(db: sqlite3.Connection, expense: ExpenseCreate) -> None:
-    """The other half of a fund-funded spend: append a 'spend' fund_entry so
-    the earmark releases as the expense lands — appends, never updates."""
-    balance = _fund_balance(db, expense.fund_id)
-    amount = to_cents(expense.amount)
-    if amount > balance:
-        raise HTTPException(status_code=422, detail="expense exceeds fund balance")
+def _draw_down_fund(
+    db: sqlite3.Connection, fund_id: int, amount: float, txn_date: date, detail: str
+) -> None:
+    """The other half of a fund-funded transaction: append a 'spend'
+    fund_entry so the earmark releases as the row lands — appends, never
+    updates. detail names the caller in the overdraw 422."""
+    balance = _fund_balance(db, fund_id)
+    cents = to_cents(amount)
+    if cents > balance:
+        raise HTTPException(status_code=422, detail=detail)
     db.execute(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
         " VALUES (?, ?, ?, ?, 'spend')",
-        (
-            expense.fund_id,
-            expense.txn_date.isoformat(),
-            balance - amount,
-            -amount,
-        ),
+        (fund_id, txn_date.isoformat(), balance - cents, -cents),
     )
 
 
@@ -387,8 +385,10 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
     _require(db, "category", expense.category_id, "category")
     _require(db, "fund", expense.fund_id, "fund")
     _require(db, "account", expense.account_id, "account")
-    if expense.funded_from == "fund":
-        _draw_down_fund(db, expense)
+    if expense.funded_from == "fund" and expense.fund_id is not None:
+        _draw_down_fund(
+            db, expense.fund_id, expense.amount, expense.txn_date, "expense exceeds fund balance"
+        )
     cursor = db.execute(
         "INSERT INTO expense_line (txn_date, budget_month, category_id, amount,"
         " is_fixed, funded_from, fund_id, account_id, note, pending)"
