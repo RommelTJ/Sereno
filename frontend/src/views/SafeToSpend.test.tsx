@@ -552,6 +552,131 @@ describe('Add an income item', () => {
     expect(postBody(fetchMock, '/api/income')).not.toHaveProperty('pending')
   })
 
+  it('reveals the Draw-from funds only for a transfer-in source', async () => {
+    render(<SafeToSpend />)
+
+    // Paychecks, dividends, staking and interest never come out of a
+    // fund, so the default form keeps its shape.
+    const form = await screen.findByTestId('income-form')
+    expect(within(form).queryByLabelText('Draw from')).not.toBeInTheDocument()
+
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'brokerage-withdrawal' },
+    })
+
+    const select = within(form).getByLabelText('Draw from')
+    const options = within(select).getAllByRole('option')
+    expect(
+      options.map((option) => ({
+        value: (option as HTMLOptionElement).value,
+        label: option.textContent,
+      })),
+    ).toEqual([
+      { value: '', label: 'Not from a fund' },
+      { value: '1', label: '🚨 Emergency fund' },
+      { value: '2', label: '🚲 Bike fund' },
+      { value: '3', label: 'Travel fund' },
+    ])
+  })
+
+  it('posts the drawn fund and shows the hint when one is picked', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 8 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('income-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '5,200' },
+    })
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'brokerage-withdrawal' },
+    })
+    fireEvent.change(within(form).getByLabelText('Draw from'), {
+      target: { value: '3' },
+    })
+    expect(
+      within(form).getByText(
+        '↳ Lowers Travel fund by this amount as the month is funded — no separate balance correction needed.',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() => expect(postBody(fetchMock, '/api/income')).toBeDefined())
+    expect(postBody(fetchMock, '/api/income')).toMatchObject({
+      source: 'transfer_in',
+      drawn_from_fund_id: 3,
+    })
+  })
+
+  it('resets and omits the draw when the source leaves transfer-in', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 9 },
+    })
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('income-form')
+
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'brokerage-withdrawal' },
+    })
+    fireEvent.change(within(form).getByLabelText('Draw from'), {
+      target: { value: '3' },
+    })
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'spouse-paycheck' },
+    })
+    expect(within(form).queryByLabelText('Draw from')).not.toBeInTheDocument()
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '120' },
+    })
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() => expect(postBody(fetchMock, '/api/income')).toBeDefined())
+    expect(postBody(fetchMock, '/api/income')).not.toHaveProperty(
+      'drawn_from_fund_id',
+    )
+  })
+
+  it('refreshes the funds card after a drawn income lowers a fund', async () => {
+    const routes: Record<string, unknown> = {
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 10 },
+    }
+    stubApi(routes)
+    render(<SafeToSpend />)
+    const form = await screen.findByTestId('income-form')
+
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '1,200' },
+    })
+    fireEvent.change(within(form).getByLabelText('Source'), {
+      target: { value: 'brokerage-withdrawal' },
+    })
+    fireEvent.change(within(form).getByLabelText('Draw from'), {
+      target: { value: '1' },
+    })
+    // The server appends the draw, so the refetched list must land on the
+    // funds card — a stale $10,000.00 would overstate the fund's runway.
+    routes['/api/funds'] = FUNDS.map((fund) =>
+      fund.id === 1 ? { ...fund, balance: 8_800 } : fund,
+    )
+    fireEvent.click(
+      within(form).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    expect(await screen.findByText('$8,800.00')).toBeInTheDocument()
+  })
+
   it('maps every source option onto the API source values', async () => {
     render(<SafeToSpend />)
 
@@ -1165,6 +1290,88 @@ describe('Income item editing', () => {
       ([, callInit]) => callInit?.method === 'PUT',
     )!
     expect(JSON.parse(init?.body as string)).toMatchObject({ pending: true })
+  })
+
+  // The Spouse-paycheck income row recast as a fund-drawn transfer, the
+  // way the feed serves one: the drawn fund rides in fund_id.
+  const drawnFeed = {
+    ...BUDGET_MONTH,
+    activity: BUDGET_MONTH.activity.map((item) =>
+      item.id === 2 && item.type === 'income'
+        ? {
+            ...item,
+            source: 'transfer_in',
+            source_label: 'Brokerage withdrawal',
+            fund_id: 1,
+          }
+        : item,
+    ),
+  }
+
+  it('prefills the Draw-from select from the drawn row', async () => {
+    stubApi({ '/api/budget-month': drawnFeed, '/api/funds': FUNDS })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+
+    const form = await screen.findByTestId('income-edit-form')
+    expect(within(form).getByLabelText('Draw from')).toHaveValue('1')
+  })
+
+  it('keeps the draw on a save that leaves the select untouched', async () => {
+    // The PUT is a full replace: a form blind to the draw would silently
+    // reverse it on every unrelated edit.
+    const fetchMock = stubApi({
+      '/api/budget-month': drawnFeed,
+      '/api/funds': FUNDS,
+      'PUT /api/income/2': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+    const form = await screen.findByTestId('income-edit-form')
+    fireEvent.change(within(form).getByLabelText('Amount'), {
+      target: { value: '2500' },
+    })
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+      ).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(
+      ([, callInit]) => callInit?.method === 'PUT',
+    )!
+    expect(JSON.parse(init?.body as string)).toMatchObject({
+      source: 'transfer_in',
+      drawn_from_fund_id: 1,
+    })
+  })
+
+  it('clearing the Draw-from select omits the fund, reversing the draw', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': drawnFeed,
+      '/api/funds': FUNDS,
+      'PUT /api/income/2': {},
+    })
+    render(<SafeToSpend />)
+    fireEvent.click((await feedRows())[3])
+    const form = await screen.findByTestId('income-edit-form')
+    fireEvent.change(within(form).getByLabelText('Draw from'), {
+      target: { value: '' },
+    })
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT'),
+      ).toBe(true),
+    )
+    const [, init] = fetchMock.mock.calls.find(
+      ([, callInit]) => callInit?.method === 'PUT',
+    )!
+    expect(JSON.parse(init?.body as string)).not.toHaveProperty(
+      'drawn_from_fund_id',
+    )
   })
 })
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { IncomeInput } from '../api.ts'
+import type { Fund, IncomeInput } from '../api.ts'
 import { SOURCE_OPTIONS, fundsMonthOptions, incomeInput } from '../budget.ts'
 import { todayIso } from '../ledger.ts'
 import { FieldLabel } from './SpendingForm.tsx'
@@ -8,9 +8,11 @@ const inputClasses =
   'mt-1 w-full rounded-input border border-input-border bg-card px-3 py-2.5 text-sm'
 
 function IncomeForm({
+  funds,
   month,
   onAdd,
 }: {
+  funds: Fund[]
   // The viewed month: the prepay window slides with the pager — this
   // month and the next two, defaulting to the month on screen.
   month: string
@@ -21,16 +23,28 @@ function IncomeForm({
   const [fundsMonth, setFundsMonth] = useState(months[0].value)
   const [sourceKey, setSourceKey] = useState(SOURCE_OPTIONS[0].value)
   const [sourceLabel, setSourceLabel] = useState(SOURCE_OPTIONS[0].sourceLabel)
+  const [drawnFrom, setDrawnFrom] = useState('')
   const [note, setNote] = useState('')
   const [pending, setPending] = useState(false)
   const [adding, setAdding] = useState(false)
 
+  // Only a transfer-in can come out of a fund — paychecks, dividends,
+  // staking and interest never do — so the Draw-from select renders for
+  // transfers alone and the default form keeps its shape.
+  const drawEligible =
+    SOURCE_OPTIONS.find((option) => option.value === sourceKey)?.source ===
+    'transfer_in'
+  const drawnFund = funds.find((fund) => fund.id === Number(drawnFrom))
+
   // Switching the source re-prefills the title, overwriting any edit —
   // the title belongs to the selected source, not to the form session.
+  // Leaving transfer-in clears the fund pick, so a paycheck can never
+  // post a draw.
   const handleSourceChange = (value: string) => {
     setSourceKey(value)
     const option = SOURCE_OPTIONS.find((source) => source.value === value)
     if (option) setSourceLabel(option.sourceLabel)
+    if (option && option.source !== 'transfer_in') setDrawnFrom('')
   }
 
   const handleAdd = async () => {
@@ -42,6 +56,7 @@ function IncomeForm({
       sourceLabel,
       note,
       pending,
+      drawnFrom,
     )
     if (!input) return
     setAdding(true)
@@ -106,6 +121,30 @@ function IncomeForm({
           ))}
         </select>
       </label>
+      {drawEligible && (
+        <label htmlFor="income-draw-from" className="mt-[11px] block">
+          <FieldLabel text="Draw from" />
+          <select
+            id="income-draw-from"
+            className={inputClasses}
+            value={drawnFrom}
+            onChange={(event) => setDrawnFrom(event.target.value)}
+          >
+            <option value="">Not from a fund</option>
+            {funds.map((fund) => (
+              <option key={fund.id} value={String(fund.id)}>
+                {fund.emoji ? `${fund.emoji} ${fund.name}` : fund.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {drawEligible && drawnFund && (
+        <p className="mt-2 rounded-tile bg-amber-soft-2 px-[11px] py-2 text-[11.5px] text-amber-text">
+          ↳ Lowers {drawnFund.name} by this amount as the month is funded — no
+          separate balance correction needed.
+        </p>
+      )}
       <div className="mt-[11px] grid grid-cols-1 gap-[11px] sm:grid-cols-2">
         <label htmlFor="income-source-title" className="block">
           <FieldLabel text="Source title" />

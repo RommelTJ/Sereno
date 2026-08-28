@@ -269,6 +269,39 @@ describe('incomeUpdateInput', () => {
       ),
     ).not.toHaveProperty('pending')
   })
+
+  it('carries the edited drawn fund', () => {
+    expect(
+      incomeUpdateInput(
+        item,
+        '5200',
+        'brokerage-withdrawal',
+        '2026-06',
+        '2026-05-27',
+        '',
+        '',
+        false,
+        '3',
+      ),
+    ).toMatchObject({ drawn_from_fund_id: 3 })
+  })
+
+  it('omits a cleared drawn fund, reversing the draw on the full replace', () => {
+    const drawnItem = { ...item, fund_id: 3 }
+    expect(
+      incomeUpdateInput(
+        drawnItem,
+        '5200',
+        'brokerage-withdrawal',
+        '2026-06',
+        '2026-05-27',
+        '',
+        '',
+        false,
+        '',
+      ),
+    ).not.toHaveProperty('drawn_from_fund_id')
+  })
 })
 
 describe('incomeInput', () => {
@@ -282,5 +315,26 @@ describe('incomeInput', () => {
     expect(
       incomeInput('120', 'spouse-paycheck', '2026-06', '2026-06-15', '', ''),
     ).not.toHaveProperty('pending')
+  })
+
+  it('carries the drawn fund', () => {
+    expect(
+      incomeInput(
+        '5200',
+        'brokerage-withdrawal',
+        '2026-06',
+        '2026-06-02',
+        '',
+        '',
+        false,
+        '3',
+      ),
+    ).toMatchObject({ drawn_from_fund_id: 3 })
+  })
+
+  it('omits the drawn fund when none is picked', () => {
+    expect(
+      incomeInput('5200', 'brokerage-withdrawal', '2026-06', '2026-06-02', '', ''),
+    ).not.toHaveProperty('drawn_from_fund_id')
   })
 })

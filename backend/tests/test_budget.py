@@ -1022,6 +1022,7 @@ class TestPostIncome:
             "source_label": "You paycheck",
             "note": "Includes the spot bonus",
             "pending": False,
+            "drawn_from_fund_id": None,
         }
         rows = query("SELECT budget_month, source, amount, source_label, note FROM income_event")
         assert rows == [
@@ -1086,6 +1087,98 @@ class TestPostIncome:
             json={"txn_date": "2026-06-15", "source": "paycheck", "amount": 100, "account_id": 9},
         )
         assert response.status_code == 404
+
+    def test_a_draw_from_fund_appends_the_paired_spend_entry(self, client):
+        # The mirror of a fund-funded expense: the income row funds the
+        # month, the appended 'spend' entry releases the earmark — one
+        # action instead of an income row plus a hand-entered correction.
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-05-01", 60000)
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-05-28",
+                "budget_month": "2026-06",
+                "source": "transfer_in",
+                "amount": 5200,
+                "drawn_from_fund_id": fund_id,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["drawn_from_fund_id"] == fund_id
+        rows = query("SELECT drawn_from_fund_id FROM income_event")
+        assert rows == [{"drawn_from_fund_id": fund_id}]
+        assert fetch_fund_entries(fund_id) == [
+            {"as_of_date": "2026-05-01", "balance": 60000, "contribution": 0, "source": None},
+            {
+                "as_of_date": "2026-05-28",
+                "balance": 54800,
+                "contribution": -5200,
+                "source": "spend",
+            },
+        ]
+
+    def test_drawn_from_fund_defaults_to_null(self, client):
+        response = client.post(
+            "/api/income",
+            json={"txn_date": "2026-06-15", "source": "interest", "amount": 12.34},
+        )
+        assert response.status_code == 201
+        assert response.json()["drawn_from_fund_id"] is None
+
+    def test_a_draw_exceeding_the_fund_balance_is_rejected(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-05-01", 1000)
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-05-28",
+                "source": "transfer_in",
+                "amount": 1200,
+                "drawn_from_fund_id": fund_id,
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"] == "income draw exceeds fund balance"
+        assert query("SELECT id FROM income_event") == []
+        assert len(fetch_fund_entries(fund_id)) == 1
+
+    def test_an_unknown_drawn_from_fund_returns_404(self, client):
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-05-28",
+                "source": "transfer_in",
+                "amount": 100,
+                "drawn_from_fund_id": 999,
+            },
+        )
+        assert response.status_code == 404
+
+    def test_a_drawn_income_moves_safe_to_spend_exactly_once(self, client):
+        # The crux of the one-touch draw: the income row is the only thing
+        # moving safe-to-spend. The paired 'spend' entry stays out of the
+        # fund_contributions headline and the feed, so the draw lowers the
+        # fund without double-counting the inflow.
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-06-02",
+                "budget_month": "2026-06",
+                "source": "transfer_in",
+                "amount": 5200,
+                "drawn_from_fund_id": fund_id,
+            },
+        )
+        assert response.status_code == 201
+        assert fetch_fund_entries(fund_id)[-1]["source"] == "spend"
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["baseline"] == 5200
+        assert body["fund_contributions"] == 0
+        assert body["safe_to_spend"] == 5200
+        assert [(item["type"], item["amount"]) for item in body["activity"]] == [("income", 5200)]
 
 
 class TestUpdateIncome:
@@ -1180,6 +1273,164 @@ class TestUpdateIncome:
         payload = {"txn_date": "2026-06-27", "source": "paycheck", "amount": 0}
         assert client.put(f"/api/income/{income_id}", json=payload).status_code == 422
 
+    def test_a_same_fund_amount_increase_appends_a_delta_entry(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        income_id = self.insert_income(
+            client, source="transfer_in", amount=5200, drawn_from_fund_id=fund_id
+        )
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 5500,
+            "drawn_from_fund_id": fund_id,
+        }
+        assert client.put(f"/api/income/{income_id}", json=payload).status_code == 200
+        entries = fetch_fund_entries(fund_id)
+        assert [entry["balance"] for entry in entries] == [60000, 54800, 54500]
+        delta = entries[-1]
+        assert delta["contribution"] == -300
+        assert delta["source"] == "spend"
+        assert delta["as_of_date"] == date.today().isoformat()
+
+    def test_a_same_fund_amount_decrease_releases_the_difference(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        income_id = self.insert_income(
+            client, source="transfer_in", amount=5200, drawn_from_fund_id=fund_id
+        )
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 5000,
+            "drawn_from_fund_id": fund_id,
+        }
+        assert client.put(f"/api/income/{income_id}", json=payload).status_code == 200
+        entries = fetch_fund_entries(fund_id)
+        assert [entry["balance"] for entry in entries] == [60000, 54800, 55000]
+        assert entries[-1]["contribution"] == 200
+
+    def test_an_unchanged_amount_appends_no_fund_entry(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        income_id = self.insert_income(
+            client, source="transfer_in", amount=5200, drawn_from_fund_id=fund_id
+        )
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 5200,
+            "drawn_from_fund_id": fund_id,
+            "note": "True-up note only",
+        }
+        assert client.put(f"/api/income/{income_id}", json=payload).status_code == 200
+        assert [entry["balance"] for entry in fetch_fund_entries(fund_id)] == [60000, 54800]
+        assert query("SELECT note FROM income_event") == [{"note": "True-up note only"}]
+
+    def test_an_increase_beyond_the_fund_balance_is_rejected(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 6000)
+        income_id = self.insert_income(
+            client, source="transfer_in", amount=5200, drawn_from_fund_id=fund_id
+        )
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 6100,
+            "drawn_from_fund_id": fund_id,
+        }
+        response = client.put(f"/api/income/{income_id}", json=payload)
+        assert response.status_code == 422
+        assert response.json()["detail"] == "income draw exceeds fund balance"
+        assert [entry["balance"] for entry in fetch_fund_entries(fund_id)] == [6000, 800]
+        assert query("SELECT amount FROM income_event") == [{"amount": 520000}]
+
+    def test_clearing_the_draw_reverses_it(self, client):
+        # The edit is a full replace: an omitted drawn_from_fund_id really
+        # clears the draw, and the compensating entry restores the fund.
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        income_id = self.insert_income(
+            client, source="transfer_in", amount=5200, drawn_from_fund_id=fund_id
+        )
+        payload = {"txn_date": "2026-06-27", "source": "transfer_in", "amount": 5200}
+        response = client.put(f"/api/income/{income_id}", json=payload)
+        assert response.status_code == 200
+        assert response.json()["drawn_from_fund_id"] is None
+        entries = fetch_fund_entries(fund_id)
+        assert [entry["balance"] for entry in entries] == [60000, 54800, 60000]
+        assert entries[-1]["contribution"] == 5200
+        assert query("SELECT drawn_from_fund_id FROM income_event") == [
+            {"drawn_from_fund_id": None}
+        ]
+
+    def test_adding_a_draw_draws_the_fund_down(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        income_id = self.insert_income(client, source="transfer_in", amount=5200)
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 5200,
+            "drawn_from_fund_id": fund_id,
+        }
+        response = client.put(f"/api/income/{income_id}", json=payload)
+        assert response.status_code == 200
+        assert response.json()["drawn_from_fund_id"] == fund_id
+        entries = fetch_fund_entries(fund_id)
+        assert [entry["balance"] for entry in entries] == [60000, 54800]
+        assert entries[-1]["contribution"] == -5200
+        assert entries[-1]["source"] == "spend"
+        assert entries[-1]["as_of_date"] == date.today().isoformat()
+
+    def test_adding_a_draw_respects_the_overdraw_guard(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 1000)
+        income_id = self.insert_income(client, source="transfer_in", amount=2800)
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 2800,
+            "drawn_from_fund_id": fund_id,
+        }
+        assert client.put(f"/api/income/{income_id}", json=payload).status_code == 422
+        assert [entry["balance"] for entry in fetch_fund_entries(fund_id)] == [1000]
+        assert query("SELECT drawn_from_fund_id FROM income_event") == [
+            {"drawn_from_fund_id": None}
+        ]
+
+    def test_a_fund_to_fund_edit_moves_the_draw(self, client):
+        year2_id = insert_fund("Year-2 cash")
+        year3_id = insert_fund("Year-3 cash")
+        insert_fund_entry(year2_id, "2026-06-01", 60000)
+        insert_fund_entry(year3_id, "2026-06-01", 20000)
+        income_id = self.insert_income(
+            client, source="transfer_in", amount=5200, drawn_from_fund_id=year2_id
+        )
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 5200,
+            "drawn_from_fund_id": year3_id,
+        }
+        assert client.put(f"/api/income/{income_id}", json=payload).status_code == 200
+        assert [entry["balance"] for entry in fetch_fund_entries(year2_id)] == [
+            60000,
+            54800,
+            60000,
+        ]
+        assert [entry["balance"] for entry in fetch_fund_entries(year3_id)] == [20000, 14800]
+
+    def test_an_unknown_drawn_from_fund_returns_404(self, client):
+        income_id = self.insert_income(client)
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 2800,
+            "drawn_from_fund_id": 999,
+        }
+        assert client.put(f"/api/income/{income_id}", json=payload).status_code == 404
+
 
 class TestDeleteIncome:
     def test_deletes_the_row(self, client):
@@ -1206,6 +1457,36 @@ class TestDeleteIncome:
 
     def test_unknown_income_returns_404(self, client):
         assert client.delete("/api/income/99").status_code == 404
+
+    def test_a_drawn_income_delete_reverses_the_draw(self, client):
+        # The compensating entry appends, dated today — the paired 'spend'
+        # entry stays, since each entry snapshots the balance and pulling a
+        # mid-chain row would not restore it.
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        payload = {
+            "txn_date": "2026-06-27",
+            "source": "transfer_in",
+            "amount": 5200,
+            "drawn_from_fund_id": fund_id,
+        }
+        income_id = client.post("/api/income", json=payload).json()["id"]
+        assert client.delete(f"/api/income/{income_id}").status_code == 204
+        assert query("SELECT id FROM income_event") == []
+        entries = fetch_fund_entries(fund_id)
+        assert [entry["balance"] for entry in entries] == [60000, 54800, 60000]
+        reversal = entries[-1]
+        assert reversal["contribution"] == 5200
+        assert reversal["source"] == "spend"
+        assert reversal["as_of_date"] == date.today().isoformat()
+
+    def test_an_undrawn_income_delete_appends_no_fund_entry(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        payload = {"txn_date": "2026-06-27", "source": "transfer_in", "amount": 5200}
+        income_id = client.post("/api/income", json=payload).json()["id"]
+        assert client.delete(f"/api/income/{income_id}").status_code == 204
+        assert len(fetch_fund_entries(fund_id)) == 1
 
 
 class TestGetBudgetMonth:
@@ -1433,6 +1714,25 @@ class TestGetBudgetMonth:
         assert income["funded_from"] is None
         assert income["fund_id"] is None
         assert income["is_fixed"] is None
+
+    def test_income_activity_carries_the_drawn_fund(self, client):
+        # The feed is the edit form's only read: a drawn income row carries
+        # its fund in fund_id — the same column a fund-funded expense's row
+        # uses — so the Draw-from select can pre-fill without a GET-by-id.
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        payload = {
+            "txn_date": "2026-06-02",
+            "budget_month": "2026-06",
+            "source": "transfer_in",
+            "amount": 5200,
+            "drawn_from_fund_id": fund_id,
+        }
+        assert client.post("/api/income", json=payload).status_code == 201
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        income = body["activity"][0]
+        assert income["type"] == "income"
+        assert income["fund_id"] == fund_id
 
     def test_activity_carries_the_pending_flag(self, client):
         # The feed is the edit form's only read and the ⚠️ renders from

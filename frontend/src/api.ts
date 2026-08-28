@@ -501,7 +501,9 @@ export type ExpenseInput = {
 
 // source_label is the row's display title ("Spouse paycheck") — the
 // context the source enum can't carry; note is a true note. Blank values
-// are omitted, not sent empty.
+// are omitted, not sent empty. drawn_from_fund_id names the sinking fund
+// the inflow came out of: the server appends the paired 'spend' fund
+// entry alongside the row, so funding a month from a fund is one action.
 export interface IncomeInput {
   txn_date: string
   budget_month: string
@@ -510,6 +512,7 @@ export interface IncomeInput {
   source_label?: string
   note?: string
   pending?: boolean
+  drawn_from_fund_id?: number
 }
 
 // PUT /api/expenses/{id} and /api/income/{id} are full replaces of the

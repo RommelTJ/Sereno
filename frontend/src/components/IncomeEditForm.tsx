@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ActivityItem, IncomeUpdateInput } from '../api.ts'
+import type { ActivityItem, Fund, IncomeUpdateInput } from '../api.ts'
 import {
   SOURCE_OPTIONS,
   editMonthOptions,
@@ -14,6 +14,7 @@ const inputClasses =
 
 interface IncomeEditFormProps {
   item: ActivityItem
+  funds: Fund[]
   onSave: (input: IncomeUpdateInput) => Promise<void>
   onDelete: () => Promise<void>
   onCancel: () => void
@@ -23,9 +24,12 @@ interface IncomeEditFormProps {
 // form's fields plus the date, each prefilled from the row. The source
 // select re-prefills the title on switch, exactly like the create form —
 // the title belongs to the selected source. tax_treatment and account_id
-// ride along unchanged via incomeUpdateInput.
+// ride along unchanged via incomeUpdateInput; the drawn fund is edited
+// directly — the PUT is a full replace, so a form blind to it would
+// silently reverse the draw on every unrelated edit.
 function IncomeEditForm({
   item,
+  funds,
   onSave,
   onDelete,
   onCancel,
@@ -38,6 +42,9 @@ function IncomeEditForm({
   const [sourceLabel, setSourceLabel] = useState(
     item.source_label ?? storedOption.sourceLabel,
   )
+  const [drawnFrom, setDrawnFrom] = useState(
+    item.fund_id != null ? String(item.fund_id) : '',
+  )
   const [txnDate, setTxnDate] = useState(item.txn_date)
   const [note, setNote] = useState(item.note ?? '')
   const [pending, setPending] = useState(item.pending ?? false)
@@ -45,10 +52,18 @@ function IncomeEditForm({
 
   const months = editMonthOptions(storedMonth, txnDate)
 
+  // Only a transfer-in can come out of a fund, exactly like the create
+  // form; leaving transfer-in clears the pick, so a row re-sourced as a
+  // paycheck can never keep a draw.
+  const drawEligible =
+    SOURCE_OPTIONS.find((option) => option.value === sourceKey)?.source ===
+    'transfer_in'
+
   const handleSourceChange = (value: string) => {
     setSourceKey(value)
     const option = SOURCE_OPTIONS.find((source) => source.value === value)
     if (option) setSourceLabel(option.sourceLabel)
+    if (option && option.source !== 'transfer_in') setDrawnFrom('')
   }
 
   const handleSave = async () => {
@@ -61,6 +76,7 @@ function IncomeEditForm({
       sourceLabel,
       note,
       pending,
+      drawnFrom,
     )
     if (!input) return
     setSaving(true)
@@ -125,6 +141,24 @@ function IncomeEditForm({
             ))}
           </select>
         </label>
+        {drawEligible && (
+          <label htmlFor="edit-income-draw-from" className="block">
+            <FieldLabel text="Draw from" />
+            <select
+              id="edit-income-draw-from"
+              className={inputClasses}
+              value={drawnFrom}
+              onChange={(event) => setDrawnFrom(event.target.value)}
+            >
+              <option value="">Not from a fund</option>
+              {funds.map((fund) => (
+                <option key={fund.id} value={String(fund.id)}>
+                  {fund.emoji ? `${fund.emoji} ${fund.name}` : fund.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label htmlFor="edit-income-date" className="block">
           <FieldLabel text="Date" />
           <input

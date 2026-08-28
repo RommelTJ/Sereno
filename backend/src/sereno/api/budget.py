@@ -115,7 +115,10 @@ class IncomeCreate(BaseModel):
     month — the prepay pattern passes the next month (June pay funds July).
     source_label is the row's display title ("Spouse paycheck") — the context
     the source enum can't carry — leaving note to be a true note. pending
-    marks a provisional amount to true up after it settles."""
+    marks a provisional amount to true up after it settles. drawn_from_fund_id
+    names the sinking fund the inflow came out of: the paired 'spend' fund
+    entry appends alongside the row, so funding a month from a fund is one
+    action instead of an income row plus a hand-entered correction."""
 
     txn_date: date
     budget_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
@@ -126,6 +129,7 @@ class IncomeCreate(BaseModel):
     source_label: str | None = None
     note: str | None = None
     pending: bool = False
+    drawn_from_fund_id: int | None = None
 
 
 class Income(BaseModel):
@@ -139,6 +143,7 @@ class Income(BaseModel):
     source_label: str | None
     note: str | None
     pending: bool
+    drawn_from_fund_id: int | None
     created_at: datetime
 
 
@@ -155,8 +160,9 @@ class ActivityItem(BaseModel):
     """Rows carry every column their edit form pre-fills — the feed is the
     only read, so a tap costs no GET-by-id round trip. Expense rows carry
     the first six extras, income rows budget_month / tax_treatment /
-    account_id, both the pending flag behind the feed's ⚠️; fund rows (no
-    edit affordance) carry all-null extras."""
+    account_id plus the drawn fund in fund_id, both the pending flag
+    behind the feed's ⚠️; fund rows (no edit affordance) carry all-null
+    extras."""
 
     type: Literal["expense", "income", "fund"]
     id: int
@@ -348,22 +354,20 @@ def _fund_balance(db: sqlite3.Connection, fund_id: int | None) -> int:
     ).fetchone()[0]
 
 
-def _draw_down_fund(db: sqlite3.Connection, expense: ExpenseCreate) -> None:
-    """The other half of a fund-funded spend: append a 'spend' fund_entry so
-    the earmark releases as the expense lands — appends, never updates."""
-    balance = _fund_balance(db, expense.fund_id)
-    amount = to_cents(expense.amount)
-    if amount > balance:
-        raise HTTPException(status_code=422, detail="expense exceeds fund balance")
+def _draw_down_fund(
+    db: sqlite3.Connection, fund_id: int, amount: float, txn_date: date, detail: str
+) -> None:
+    """The other half of a fund-funded transaction: append a 'spend'
+    fund_entry so the earmark releases as the row lands — appends, never
+    updates. detail names the caller in the overdraw 422."""
+    balance = _fund_balance(db, fund_id)
+    cents = to_cents(amount)
+    if cents > balance:
+        raise HTTPException(status_code=422, detail=detail)
     db.execute(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
         " VALUES (?, ?, ?, ?, 'spend')",
-        (
-            expense.fund_id,
-            expense.txn_date.isoformat(),
-            balance - amount,
-            -amount,
-        ),
+        (fund_id, txn_date.isoformat(), balance - cents, -cents),
     )
 
 
@@ -387,8 +391,10 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
     _require(db, "category", expense.category_id, "category")
     _require(db, "fund", expense.fund_id, "fund")
     _require(db, "account", expense.account_id, "account")
-    if expense.funded_from == "fund":
-        _draw_down_fund(db, expense)
+    if expense.funded_from == "fund" and expense.fund_id is not None:
+        _draw_down_fund(
+            db, expense.fund_id, expense.amount, expense.txn_date, "expense exceeds fund balance"
+        )
     cursor = db.execute(
         "INSERT INTO expense_line (txn_date, budget_month, category_id, amount,"
         " is_fixed, funded_from, fund_id, account_id, note, pending)"
@@ -497,10 +503,19 @@ def delete_expense(expense_id: int, db: Db) -> None:
 @router.post("/income", status_code=201)
 def create_income(income: IncomeCreate, db: Db) -> Income:
     _require(db, "account", income.account_id, "account")
+    _require(db, "fund", income.drawn_from_fund_id, "fund")
+    if income.drawn_from_fund_id is not None:
+        _draw_down_fund(
+            db,
+            income.drawn_from_fund_id,
+            income.amount,
+            income.txn_date,
+            "income draw exceeds fund balance",
+        )
     cursor = db.execute(
         "INSERT INTO income_event (txn_date, budget_month, source, amount,"
-        " tax_treatment, account_id, source_label, note, pending)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " tax_treatment, account_id, source_label, note, pending, drawn_from_fund_id)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             income.txn_date.isoformat(),
             income.budget_month or income.txn_date.strftime("%Y-%m"),
@@ -511,12 +526,14 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
             income.source_label,
             income.note,
             income.pending,
+            income.drawn_from_fund_id,
         ),
     )
     db.commit()
     row = db.execute(
-        "SELECT id, txn_date, budget_month, source, amount, tax_treatment,"
-        " account_id, source_label, note, pending, created_at FROM income_event WHERE id = ?",
+        "SELECT id, txn_date, budget_month, source, amount, tax_treatment, account_id,"
+        " source_label, note, pending, drawn_from_fund_id, created_at"
+        " FROM income_event WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
     return Income(**(dict(row) | {"amount": to_dollars(row["amount"])}))
@@ -527,30 +544,59 @@ def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
     """Revises the row in place — a full replace under the create body's
     validation, so a blanked title or note really clears. Income rows are
     facts nothing references: fixing an entry mistake is a correction, not
-    new history, so the append-only rule stays with the balance tables."""
-    _require(db, "income_event", income_id, "income")
+    new history, so the append-only rule stays with the balance tables.
+    A drawn row's paired 'spend' entry is corrected with compensating
+    entries (see _reverse_draw_down): a same-fund amount change appends
+    one delta entry, a changed draw reverses the old and freshly draws
+    the new — an omitted drawn_from_fund_id really clears the draw. The
+    overdraw guard re-applies either way, checked before anything is
+    written, so a 422 changes nothing."""
+    old = db.execute(
+        "SELECT drawn_from_fund_id, amount FROM income_event WHERE id = ?", (income_id,)
+    ).fetchone()
+    if old is None:
+        raise HTTPException(status_code=404, detail="income not found")
     _require(db, "account", income.account_id, "account")
+    _require(db, "fund", income.drawn_from_fund_id, "fund")
+    old_fund = old["drawn_from_fund_id"]
+    new_fund = income.drawn_from_fund_id
+    amount = to_cents(income.amount)
+    if old_fund is not None and old_fund == new_fund:
+        delta = amount - old["amount"]
+        if delta > _fund_balance(db, old_fund):
+            raise HTTPException(status_code=422, detail="income draw exceeds fund balance")
+        if delta != 0:
+            _reverse_draw_down(db, old_fund, -delta)
+    else:
+        if new_fund is not None and amount > _fund_balance(db, new_fund):
+            raise HTTPException(status_code=422, detail="income draw exceeds fund balance")
+        if old_fund is not None:
+            _reverse_draw_down(db, old_fund, old["amount"])
+        if new_fund is not None:
+            _reverse_draw_down(db, new_fund, -amount)
     db.execute(
         "UPDATE income_event SET txn_date = ?, budget_month = ?, source = ?, amount = ?,"
-        " tax_treatment = ?, account_id = ?, source_label = ?, note = ?, pending = ?"
-        " WHERE id = ?",
+        " tax_treatment = ?, account_id = ?, source_label = ?, note = ?, pending = ?,"
+        " drawn_from_fund_id = ? WHERE id = ?",
         (
             income.txn_date.isoformat(),
             income.budget_month or income.txn_date.strftime("%Y-%m"),
             income.source,
-            to_cents(income.amount),
+            amount,
             income.tax_treatment,
             income.account_id,
             income.source_label,
             income.note,
             income.pending,
+            income.drawn_from_fund_id,
             income_id,
         ),
     )
     db.commit()
     row = db.execute(
-        "SELECT id, txn_date, budget_month, source, amount, tax_treatment,"
-        " account_id, source_label, note, pending, created_at FROM income_event WHERE id = ?",
+        "SELECT id, txn_date, budget_month, source, amount, tax_treatment, account_id,"
+        " source_label, note, pending, drawn_from_fund_id, created_at"
+        " FROM income_event WHERE id = ?",
         (income_id,),
     ).fetchone()
     return Income(**(dict(row) | {"amount": to_dollars(row["amount"])}))
@@ -559,8 +605,16 @@ def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
 @router.delete("/income/{income_id}", status_code=204)
 def delete_income(income_id: int, db: Db) -> None:
     """Hard delete: nothing references an income row, so removing a
-    provisional or mistaken entry leaves nothing dangling."""
-    _require(db, "income_event", income_id, "income")
+    provisional or mistaken entry leaves nothing dangling. A drawn row
+    gets its draw fully reversed in the same transaction — see
+    _reverse_draw_down."""
+    row = db.execute(
+        "SELECT drawn_from_fund_id, amount FROM income_event WHERE id = ?", (income_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="income not found")
+    if row["drawn_from_fund_id"] is not None:
+        _reverse_draw_down(db, row["drawn_from_fund_id"], row["amount"])
     db.execute("DELETE FROM income_event WHERE id = ?", (income_id,))
     db.commit()
 
@@ -632,7 +686,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
     )
     incomes = db.execute(
         "SELECT id, txn_date, amount, source, source_label, note, created_at,"
-        " budget_month, tax_treatment, account_id, pending"
+        " budget_month, tax_treatment, account_id, pending, drawn_from_fund_id AS fund_id"
         " FROM income_event WHERE budget_month = ?",
         (target,),
     )
@@ -649,10 +703,11 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
         " WHERE e.source IN ('monthly_plan', 'top_up') AND substr(e.as_of_date, 1, 7) = ?",
         (target,),
     )
+    # fund_id stays out of the shared nulls: income rows carry their drawn
+    # fund there, selected in the query above.
     no_expense_fields = {
         "category_id": None,
         "funded_from": None,
-        "fund_id": None,
         "is_fixed": None,
     }
     no_income_fields = {"tax_treatment": None}
@@ -677,7 +732,7 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
             | {"type": "fund", "source_label": None, "note": None}
             | no_expense_fields
             | no_income_fields
-            | {"account_id": None, "budget_month": None, "pending": None}
+            | {"fund_id": None, "account_id": None, "budget_month": None, "pending": None}
             | {"amount": to_dollars(row["amount"])}
             for row in fund_entries
         ],

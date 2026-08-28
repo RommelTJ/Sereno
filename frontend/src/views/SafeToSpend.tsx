@@ -91,7 +91,14 @@ function SafeToSpend() {
 
   const addIncome = async (input: IncomeInput) => {
     await createIncome(input)
-    setBudget(await fetchBudgetMonth(viewMonth ?? undefined))
+    // A drawn income lowers its fund server-side, so the funds card
+    // refreshes alongside the hero and envelopes.
+    const [nextBudget, nextFunds] = await Promise.all([
+      fetchBudgetMonth(viewMonth ?? undefined),
+      fetchFunds(),
+    ])
+    setBudget(nextBudget)
+    setFunds(nextFunds)
   }
 
   // An item edit or delete can touch anything: the hero and envelopes, and
@@ -188,6 +195,7 @@ function SafeToSpend() {
             />
             <IncomeForm
               key={`income-${budget.month}`}
+              funds={funds}
               month={budget.month}
               onAdd={addIncome}
             />

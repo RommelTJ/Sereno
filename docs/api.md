@@ -138,7 +138,17 @@ The budget slice:
   and `note` is a true note beside it; migration 0008 moved the old
   title-style notes into `source_label`, so existing rows kept their titles.
   `pending` marks a provisional inflow the same way — flagged with ⚠️ in
-  the feed while still counting toward the month's funding.
+  the feed while still counting toward the month's funding. An optional
+  `drawn_from_fund_id` names the sinking fund the inflow came out of,
+  making month funding from a fund one action instead of an income row
+  plus a hand-entered balance correction: the paired `'spend'` fund entry
+  appends in the same transaction — fund spending in reverse, dated the
+  transaction, balance minus the amount — a draw exceeding the fund's
+  balance is a 422 (`income draw exceeds fund balance`) that writes
+  nothing, and an unknown fund a 404. Because `'spend'` entries stay out
+  of the headline, the feed, and the budget-year actual, the income row
+  remains the only mover of safe-to-spend: the gross inflow shows once
+  and the fund quietly steps down.
 - `PUT /api/expenses/{id}` / `DELETE /api/expenses/{id}` — corrects or
   removes a spending line: pending charges settle (Lyft consolidates a
   day's rides into one charge, bars add tips) and typos happen, and
@@ -160,7 +170,13 @@ The budget slice:
 - `PUT /api/income/{id}` / `DELETE /api/income/{id}` — the same for income
   events: a full replace (an omitted title or note really clears),
   `budget_month` defaulting from the txn date, and a hard delete — the
-  month's funding baseline follows immediately.
+  month's funding baseline follows immediately. A drawn row is corrected
+  exactly like a fund-funded expense, with compensating `'spend'` entries
+  dated today: a single delta on a same-fund amount edit, a full reversal
+  on delete or when the draw is cleared — the full replace means an
+  omitted `drawn_from_fund_id` really clears it — a reverse-and-redraw on
+  a fund change, and the overdraw guard re-applied before anything is
+  written, so a 422 changes nothing.
 - `GET /api/budget-month` — the computed month (`?month=`, default current):
   per-category planned/spent/remaining envelopes (overspend is allowed and
   goes negative), the Safe-to-spend headline
@@ -180,7 +196,9 @@ The budget slice:
   carries the fields its edit form pre-fills (category, fund, account,
   fixed flag, budget month, tax treatment, and the pending flag behind
   the feed's ⚠️), so a tap costs no GET-by-id
-  round trip; fund rows carry them null — they have no edit affordance.
+  round trip; an income row's drawn fund rides in the same `fund_id`
+  slot a fund-funded expense uses; fund rows carry them null — they
+  have no edit affordance.
   Fund-funded expenses stay out of `total_spent` and the envelope bars —
   they were paid from parked money, and the fund's drawdown already
   released the earmark — and `fund_contributions` is the month's automatic
