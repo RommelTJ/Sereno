@@ -225,6 +225,7 @@ function ActivityFeed({
                 {editing === row.key && item.type === 'income' && (
                   <IncomeEditForm
                     item={item}
+                    funds={funds}
                     onSave={(input) => saveIncome(item, input)}
                     onDelete={() => removeItem(item)}
                     onCancel={() => setEditing(null)}
