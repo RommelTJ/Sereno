@@ -816,12 +816,14 @@ describe('Leftover line retirement', () => {
 })
 
 describe('Activity feed', () => {
-  it('renders every item of the month below the income form', async () => {
+  it('renders every item of the month in its own column', async () => {
     render(<SafeToSpend />)
 
-    const form = await screen.findByTestId('income-form')
+    const view = await screen.findByTestId('view-safe-to-spend')
     const feed = screen.getByTestId('sts-activity')
-    expect(form.nextElementSibling).toBe(feed)
+    // A column of its own: a direct grid child, not stacked under the forms.
+    expect(feed.parentElement).toBe(view)
+    expect(within(feed).queryByTestId('income-form')).not.toBeInTheDocument()
     expect(within(feed).getByText('Activity')).toBeInTheDocument()
     // Uncapped: all four fixture items, the fund entry among them.
     expect(within(feed).getAllByTestId('activity-row')).toHaveLength(4)
@@ -832,13 +834,18 @@ describe('Activity feed', () => {
 })
 
 describe('Responsive layout', () => {
-  it('stacks the hero column and forms into one column on narrow screens', async () => {
+  it('stacks into one column, widening to two and then three', async () => {
     render(<SafeToSpend />)
     await screen.findByText('$3,670.00')
 
     expect(screen.getByTestId('view-safe-to-spend')).toHaveClass(
       'grid-cols-1',
-      'lg:grid-cols-[1fr_1fr]',
+      'md:grid-cols-2',
+      'min-[1560px]:grid-cols-3',
+    )
+    expect(screen.getByTestId('month-pager')).toHaveClass(
+      'md:col-span-2',
+      'min-[1560px]:col-span-3',
     )
   })
 
