@@ -604,8 +604,16 @@ def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
 @router.delete("/income/{income_id}", status_code=204)
 def delete_income(income_id: int, db: Db) -> None:
     """Hard delete: nothing references an income row, so removing a
-    provisional or mistaken entry leaves nothing dangling."""
-    _require(db, "income_event", income_id, "income")
+    provisional or mistaken entry leaves nothing dangling. A drawn row
+    gets its draw fully reversed in the same transaction — see
+    _reverse_draw_down."""
+    row = db.execute(
+        "SELECT drawn_from_fund_id, amount FROM income_event WHERE id = ?", (income_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="income not found")
+    if row["drawn_from_fund_id"] is not None:
+        _reverse_draw_down(db, row["drawn_from_fund_id"], row["amount"])
     db.execute("DELETE FROM income_event WHERE id = ?", (income_id,))
     db.commit()
 

@@ -1480,6 +1480,14 @@ class TestDeleteIncome:
         assert reversal["source"] == "spend"
         assert reversal["as_of_date"] == date.today().isoformat()
 
+    def test_an_undrawn_income_delete_appends_no_fund_entry(self, client):
+        fund_id = insert_fund("Year-2 cash")
+        insert_fund_entry(fund_id, "2026-06-01", 60000)
+        payload = {"txn_date": "2026-06-27", "source": "transfer_in", "amount": 5200}
+        income_id = client.post("/api/income", json=payload).json()["id"]
+        assert client.delete(f"/api/income/{income_id}").status_code == 204
+        assert len(fetch_fund_entries(fund_id)) == 1
+
 
 class TestGetBudgetMonth:
     def spend(self, client, amount, txn_date="2026-06-10", **extra):
