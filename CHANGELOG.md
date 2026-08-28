@@ -4,6 +4,28 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.13.0 — The forecast reports each year's January 1 balance. The
+simulation ran grow → record → withdraw, so every plotted balance was
+last year's close plus a full year of real return, taken before that
+year's spending came out. That is not a date anyone can name, which
+made the balance-by-bucket chart hard to reason about — and the first
+bar was worst: not the money actually held, but today's balance with a
+year of growth already applied (issue #137).
+
+The snapshot now precedes the growth. With a January 1 birthdate an age
+is exactly one calendar year, so age N is that year's January 1 and the
+first row is the balances sitting in the ledger today — labeled
+"Today", since it is the one column whose heading would otherwise claim
+a date still to come. The simulation itself is untouched: growth and
+the withdrawal still run in that order over the same numbers, so draws,
+run-out age, and unaffordable years are identical to the digit. Only
+the snapshot point moved.
+
+`balance_at_100` falls by one year of growth as a result, because it is
+now the age-100 opening balance — and that is the point. The headline
+in the verdict hero is exactly the rightmost bar of the chart beneath
+it, where the two used to disagree by a year of compounding.
+
 v3.12.0 — ETH empties before the brokerage is touched. `_draw_ltcg`
 stopped the ETH step the moment the 0% LTCG headroom was spent, so the
 annual ETH draw was capped at whatever that ceiling bought. Once the
