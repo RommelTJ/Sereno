@@ -124,7 +124,8 @@ const LABEL_STEP = 5
 // purchase year carries a ◆ marker and its amount; an unaffordable
 // year carries how far the lump missed; cap is the hatched
 // forgone-growth band up to the baseline's total. totalUsd is the
-// portfolio that year — the three balances only. Social Security is an
+// portfolio that year — the balance bands only, one per withdrawal
+// tier. Social Security is an
 // annual income flow, not a balance, so adding it in would answer "what
 // is my net worth?" with a number that is nobody's net worth. deltaUsd
 // is the change against the previous simulated year, null on the first,
@@ -135,10 +136,12 @@ export interface ChartColumn {
   eth: number
   brokerage: number
   retirement: number
+  hsa: number
   ss: number
   ethUsd: number
   brokerageUsd: number
   retirementUsd: number
+  hsaUsd: number
   ssUsd: number
   totalUsd: number
   deltaUsd: number | null
@@ -158,7 +161,8 @@ export function chartColumns(
   series: ForecastPoint[],
   extras: ChartExtras = {},
 ): ChartColumn[] {
-  const total = (point: ForecastPoint) => point.eth + point.brokerage + point.retirement
+  const total = (point: ForecastPoint) =>
+    point.eth + point.brokerage + point.retirement + point.hsa
   const baseline = extras.baseline ?? []
   // The baseline is never below the with-purchases path for long, so
   // scaling to both keeps the hatched cap inside the chart.
@@ -188,10 +192,12 @@ export function chartColumns(
       eth: height(point.eth),
       brokerage: height(point.brokerage),
       retirement: height(point.retirement),
+      hsa: height(point.hsa),
       ss: point.ss_income > 0 ? Math.max(SS_MIN_HEIGHT, height(point.ss_income)) : 0,
       ethUsd: point.eth,
       brokerageUsd: point.brokerage,
       retirementUsd: point.retirement,
+      hsaUsd: point.hsa,
       ssUsd: point.ss_income,
       totalUsd: total(point),
       deltaUsd: previous == null ? null : total(point) - total(previous),
@@ -240,15 +246,23 @@ export interface BridgeCopy {
   ok: boolean
 }
 
-// How long the taxable buckets (ETH + brokerage) last before the
-// 401(k) unlocks: the first pre-60 year they sit empty broke the
-// bridge that many years after the start age.
-export function bridgeCopy(series: ForecastPoint[], startAge: number): BridgeCopy {
-  const broke = series.find((point) => point.age < 60 && point.eth + point.brokerage <= 0)
+// How long the taxable buckets (ETH + brokerage) last before the locked
+// money opens: the first year before gateAge that they sit empty broke
+// the bridge that many years after the start age. The gate comes from
+// the accounts, so both the window searched and the years to cover
+// follow it rather than a literal.
+export function bridgeCopy(
+  series: ForecastPoint[],
+  startAge: number,
+  gateAge: number,
+): BridgeCopy {
+  const broke = series.find(
+    (point) => point.age < gateAge && point.eth + point.brokerage <= 0,
+  )
   if (broke != null) {
     return { years: `${broke.age - startAge} yrs`, ok: false }
   }
-  return { years: '31+ yrs', ok: true }
+  return { years: `${Math.ceil(gateAge - startAge)}+ yrs`, ok: true }
 }
 
 export interface SensitivityRowCopy {

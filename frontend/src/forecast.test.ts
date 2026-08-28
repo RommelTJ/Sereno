@@ -28,6 +28,7 @@ function point(
     brokerage: number
     retirement: number
     ss_income: number
+    hsa: number
   }> = {},
 ) {
   return {
@@ -35,6 +36,7 @@ function point(
     eth: 0,
     brokerage: 0,
     retirement: 0,
+    hsa: 0,
     ss_income: 0,
     ...balances,
   }
@@ -44,7 +46,13 @@ function point(
 function series(
   overrides: Record<
     number,
-    Partial<{ eth: number; brokerage: number; retirement: number; ss_income: number }>
+    Partial<{
+      eth: number
+      brokerage: number
+      retirement: number
+      hsa: number
+      ss_income: number
+    }>
   > = {},
 ) {
   return Array.from({ length: 100 - 38 + 1 }, (_, i) => point(38 + i, overrides[38 + i]))
@@ -177,10 +185,12 @@ describe('chartColumns', () => {
       eth: 95,
       brokerage: 47.5,
       retirement: 47.5,
+      hsa: 0,
       ss: 0,
       ethUsd: 100_000,
       brokerageUsd: 50_000,
       retirementUsd: 50_000,
+      hsaUsd: 0,
       ssUsd: 0,
       totalUsd: 200_000,
       deltaUsd: null,
@@ -191,11 +201,15 @@ describe('chartColumns', () => {
     })
   })
 
-  it('totals the three balance buckets', () => {
+  it('totals every balance bucket, the HSA tier included', () => {
     const columns = chartColumns(
-      series({ 38: { eth: 100_000, brokerage: 50_000, retirement: 50_000 } }),
+      series({
+        38: { eth: 100_000, brokerage: 50_000, retirement: 50_000, hsa: 25_000 },
+      }),
     )
-    expect(columns[0].totalUsd).toBe(200_000)
+    expect(columns[0].totalUsd).toBe(225_000)
+    expect(columns[0].hsaUsd).toBe(25_000)
+    expect(columns[0].hsa).toBeGreaterThan(0)
   })
 
   it('leaves Social Security out of the total — it is a flow, not a balance', () => {
@@ -282,10 +296,12 @@ describe('chartColumns', () => {
       eth: 0,
       brokerage: 0,
       retirement: 0,
+      hsa: 0,
       ss: 0,
       ethUsd: 0,
       brokerageUsd: 0,
       retirementUsd: 0,
+      hsaUsd: 0,
       ssUsd: 0,
       totalUsd: 0,
       deltaUsd: null,
@@ -487,7 +503,10 @@ describe('bridgeCopy', () => {
     for (let age = 38; age < 52; age += 1) {
       overrides[age] = { eth: 100_000 }
     }
-    expect(bridgeCopy(series(overrides), 38)).toEqual({ years: '14 yrs', ok: false })
+    expect(bridgeCopy(series(overrides), 38, 59.5)).toEqual({
+      years: '14 yrs',
+      ok: false,
+    })
   })
 
   it('counts the bridge years from the caller-supplied start age', () => {
@@ -497,15 +516,40 @@ describe('bridgeCopy', () => {
     for (let age = 38; age < 52; age += 1) {
       overrides[age] = { eth: 100_000 }
     }
-    expect(bridgeCopy(series(overrides), 40)).toEqual({ years: '12 yrs', ok: false })
+    expect(bridgeCopy(series(overrides), 40, 59.5)).toEqual({
+      years: '12 yrs',
+      ok: false,
+    })
   })
 
   it('celebrates taxable buckets that outlast the bridge', () => {
+    // 59.5 minus a start age of 38 is 21.5 years to cover; the literal
+    // 31+ came from the prototype handoff and matched no gate at all.
     const overrides: Record<number, { brokerage: number }> = {}
     for (let age = 38; age <= 95; age += 1) {
       overrides[age] = { brokerage: 100_000 }
     }
-    expect(bridgeCopy(series(overrides), 38)).toEqual({ years: '31+ yrs', ok: true })
+    expect(bridgeCopy(series(overrides), 38, 59.5)).toEqual({
+      years: '22+ yrs',
+      ok: true,
+    })
+  })
+
+  it('measures the bridge against a later gate age', () => {
+    // Empty from 60: within reach of a 59.5 gate, but four years short
+    // of a spouse-owned bucket that opens at 64.
+    const overrides: Record<number, { brokerage: number }> = {}
+    for (let age = 38; age < 60; age += 1) {
+      overrides[age] = { brokerage: 100_000 }
+    }
+    expect(bridgeCopy(series(overrides), 38, 59.5)).toEqual({
+      years: '22+ yrs',
+      ok: true,
+    })
+    expect(bridgeCopy(series(overrides), 38, 64)).toEqual({
+      years: '22 yrs',
+      ok: false,
+    })
   })
 
   it('ignores the locked retirement bucket', () => {
@@ -513,7 +557,10 @@ describe('bridgeCopy', () => {
     for (let age = 38; age <= 95; age += 1) {
       overrides[age] = { retirement: 500_000 }
     }
-    expect(bridgeCopy(series(overrides), 38)).toEqual({ years: '0 yrs', ok: false })
+    expect(bridgeCopy(series(overrides), 38, 59.5)).toEqual({
+      years: '0 yrs',
+      ok: false,
+    })
   })
 })
 

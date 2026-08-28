@@ -36,7 +36,7 @@ import {
 } from '../forecast.ts'
 import { formatSignedUsd } from '../budgetReport.ts'
 import { formatUsd } from '../ledger.ts'
-import { hasWithdrawalBuckets } from '../sourcing.ts'
+import { formatGateAge, hasWithdrawalBuckets } from '../sourcing.ts'
 
 function BandRow({
   index,
@@ -158,6 +158,7 @@ function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
         <p className="num">ETH {formatUsd(column.ethUsd)}</p>
         <p className="num">Brokerage {formatUsd(column.brokerageUsd)}</p>
         <p className="num">401(k) {formatUsd(column.retirementUsd)}</p>
+        <p className="num">HSA {formatUsd(column.hsaUsd)}</p>
         {/* Social Security is an annual flow, not a balance the total
             can absorb — the rule says so before the /yr suffix does. */}
         <p
@@ -181,6 +182,7 @@ function BarColumn({ column, year }: { column: ChartColumn; year: number }) {
       <div className="w-full bg-accent" style={{ height: `${column.eth}px` }} />
       <div className="w-full bg-sidebar" style={{ height: `${column.brokerage}px` }} />
       <div className="w-full bg-amber" style={{ height: `${column.retirement}px` }} />
+      <div className="w-full bg-hsa" style={{ height: `${column.hsa}px` }} />
       <div
         data-testid={`forecast-ss-${column.age}`}
         className="w-full bg-ss-blue"
@@ -702,7 +704,11 @@ function Forecast() {
 
   const outcome = verdict(forecast.run_out_age)
   const delta = verdictDelta(forecast)
-  const bridge = bridgeCopy(forecast.series, forecast.start_age)
+  // Null means nothing in the portfolio is gated, so there is no
+  // bridge to cross and the card has nothing to say.
+  const gateAge = forecast.first_unlock_age
+  const bridge =
+    gateAge == null ? null : bridgeCopy(forecast.series, forecast.start_age, gateAge)
   const columns = chartColumns(forecast.series, {
     baseline: forecast.baseline.series,
     purchases: forecast.purchases,
@@ -757,18 +763,24 @@ function Forecast() {
             </p>
           )}
         </div>
-        <div
-          data-testid="forecast-bridge"
-          className="flex flex-col justify-center rounded-card border border-card-border bg-card p-6"
-        >
-          <p className="text-[11px] font-semibold text-muted-2">BRIDGE TO 401(k) @ 59½</p>
-          <p className="mt-[7px] text-[13.5px]">
-            Need to cover <b>{59.5 - forecast.start_age} yrs</b>
-          </p>
-          <p className={`text-[13.5px] ${bridge.ok ? 'text-accent' : 'text-red'}`}>
-            Taxable buckets last <b>{bridge.years}</b> {bridge.ok ? '✓' : '⚠'}
-          </p>
-        </div>
+        {bridge != null && gateAge != null && (
+          <div
+            data-testid="forecast-bridge"
+            className="flex flex-col justify-center rounded-card border border-card-border bg-card p-6"
+          >
+            <p className="text-[11px] font-semibold text-muted-2">
+              BRIDGE TO 401(k) @ {formatGateAge(gateAge)}
+            </p>
+            {/* Rounded up, so the years to cover never understate the
+                bridge and agree with the years the buckets last. */}
+            <p className="mt-[7px] text-[13.5px]">
+              Need to cover <b>{Math.ceil(gateAge - forecast.start_age)} yrs</b>
+            </p>
+            <p className={`text-[13.5px] ${bridge.ok ? 'text-accent' : 'text-red'}`}>
+              Taxable buckets last <b>{bridge.years}</b> {bridge.ok ? '✓' : '⚠'}
+            </p>
+          </div>
+        )}
       </div>
 
       <div
@@ -817,7 +829,13 @@ function Forecast() {
         <div className="mt-3.5 flex gap-[18px] text-[11.5px] text-[#5b6058]">
           <LegendSwatch color="bg-accent" label="ETH (first)" />
           <LegendSwatch color="bg-sidebar" label="Taxable brokerage" />
-          <LegendSwatch color="bg-amber" label="401(k) · locked to 59½" />
+          <LegendSwatch
+            color="bg-amber"
+            label={
+              gateAge == null ? '401(k)' : `401(k) · locked to ${formatGateAge(gateAge)}`
+            }
+          />
+          <LegendSwatch color="bg-hsa" label="HSA · drawn last" />
           <LegendSwatch
             color="bg-ss-blue"
             label={`Soc. Security · spent first from ${ssStart}`}

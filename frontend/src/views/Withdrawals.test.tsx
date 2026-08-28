@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { stepDetail } from '../sourcing.ts'
+import { stepAction, stepDetail } from '../sourcing.ts'
 import {
   ACCOUNTS,
   SOURCING,
@@ -137,7 +137,9 @@ describe('bucket rules', () => {
     await screen.findByTestId('sourcing-waterfall')
     expect(screen.getByText(/Harvest up to the 0% LTCG ceiling/)).toBeInTheDocument()
     expect(screen.getByText(/Lot-level basis/)).toBeInTheDocument()
-    expect(screen.getByText(/Drawn last/)).toBeInTheDocument()
+    expect(
+      screen.getByTestId('sourcing-rules'),
+    ).toHaveTextContent(/Drawn after the taxable buckets/)
     expect(
       screen.getByText(/never 0\.04 × balance per bucket/),
     ).toBeInTheDocument()
@@ -162,6 +164,82 @@ describe('empty state', () => {
     expect(empty).toHaveTextContent(/withdrawal priority/i)
     expect(empty).toHaveTextContent(/Settings & data/)
     expect(empty).not.toHaveTextContent(/Ledger entries/)
+  })
+})
+
+describe('bucket rules', () => {
+  it("names a gated tier's lock age from the waterfall", async () => {
+    render(<Withdrawals />)
+
+    const rules = await screen.findByTestId('sourcing-rules')
+    expect(rules).toHaveTextContent('Under 59½ it stays locked')
+  })
+
+  it('leaves out a tier the portfolio does not hold', async () => {
+    render(<Withdrawals />)
+
+    const rules = await screen.findByTestId('sourcing-rules')
+    expect(rules).not.toHaveTextContent('HSA')
+  })
+
+  it('adds the HSA tier and its own gate when the waterfall has one', async () => {
+    stubApi({
+      '/api/sourcing': {
+        ...SOURCING,
+        steps: [
+          ...SOURCING.steps,
+          {
+            name: 'HSA · spouse',
+            treatment: 'TAX_FREE',
+            gross: 0,
+            tax: 0,
+            net: 0,
+            note: 'locked until age 65',
+            access_age: 65,
+          },
+        ],
+      },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const rules = await screen.findByTestId('sourcing-rules')
+    expect(rules).toHaveTextContent('④ HSA')
+    expect(rules).toHaveTextContent('Under 65 it stays locked')
+    expect(rules).toHaveTextContent('Under 59½ it stays locked')
+  })
+
+  it('drops the lock sentence for a tier with no gate', async () => {
+    stubApi({
+      '/api/sourcing': {
+        ...SOURCING,
+        steps: [
+          SOURCING.steps[0],
+          SOURCING.steps[1],
+          { ...SOURCING.steps[2], note: null, access_age: null },
+        ],
+      },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const rules = await screen.findByTestId('sourcing-rules')
+    expect(rules).toHaveTextContent('③ 401(k)')
+    expect(rules).not.toHaveTextContent('stays locked')
+  })
+})
+
+describe('step action derivation', () => {
+  it('sells a capital-gains bucket and withdraws every other kind', () => {
+    // A 401(k) or an HSA is withdrawn, not sold: there is no position
+    // to realise, and "sell your HSA" reads as a mistake.
+    expect(stepAction({ ...SOURCING.steps[0], treatment: 'LTCG' })).toBe('sell')
+    expect(stepAction({ ...SOURCING.steps[0], treatment: 'ORDINARY' })).toBe(
+      'withdraw',
+    )
+    expect(stepAction({ ...SOURCING.steps[0], treatment: 'TAX_FREE' })).toBe(
+      'withdraw',
+    )
   })
 })
 

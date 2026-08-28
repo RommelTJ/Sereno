@@ -35,7 +35,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from sereno.api.config import get_assumptions, get_social_security, get_spend_plan
-from sereno.api.sourcing import current_age, current_tax_param, load_buckets
+from sereno.api.sourcing import (
+    BROKERAGE_PRIORITY,
+    ETH_PRIORITY,
+    HSA_PRIORITY,
+    RETIREMENT_PRIORITY,
+    current_age,
+    current_tax_param,
+    load_tiered_buckets,
+)
 from sereno.api.spend_bands import effective_schedule, validate_bands
 from sereno.db.connection import get_db
 from sereno.engine.forecast import (
@@ -84,6 +92,7 @@ class ForecastPointOut(BaseModel):
     eth: float
     brokerage: float
     retirement: float
+    hsa: float
     ss_income: float
 
 
@@ -162,6 +171,7 @@ class Forecast(BaseModel):
     ss_spouse: float
     ss_start: float
     tax_year: int
+    first_unlock_age: float | None
     bands: list[BandOut]
     purchases: list[PurchaseOut]
     series: list[ForecastPointOut]
@@ -173,19 +183,33 @@ class Forecast(BaseModel):
     sensitivity: list[SensitivityRow]
 
 
-def _series(result: ForecastResult, buckets: list[Bucket]) -> list[ForecastPointOut]:
-    by_name = {bucket.name: index for index, bucket in enumerate(buckets)}
+def _first_unlock_age(buckets: list[Bucket]) -> float | None:
+    """When the earliest locked bucket opens, measured on the caller's
+    own age axis: a younger owner's gate lands later there than the age
+    she will actually be. None when nothing is gated."""
+    gates = [
+        bucket.access_age - bucket.age_offset for bucket in buckets if bucket.access_age is not None
+    ]
+    return min(gates) if gates else None
 
-    def balance(balances: tuple[float, ...], name: str) -> float:
-        index = by_name.get(name)
-        return balances[index] if index is not None else 0.0
+
+def _series(result: ForecastResult, tiers: list[int]) -> list[ForecastPointOut]:
+    """One band per withdrawal tier, not per bucket: a tier split
+    between two owners or two treatments is still one line on the
+    chart, and a tier nobody holds reports zero."""
+
+    def band(balances: tuple[float, ...], priority: int) -> float:
+        return sum(
+            balance for balance, tier in zip(balances, tiers, strict=True) if tier == priority
+        )
 
     return [
         ForecastPointOut(
             age=point.age,
-            eth=balance(point.balances, "ETH"),
-            brokerage=balance(point.balances, "Brokerage"),
-            retirement=balance(point.balances, "401(k)"),
+            eth=band(point.balances, ETH_PRIORITY),
+            brokerage=band(point.balances, BROKERAGE_PRIORITY),
+            retirement=band(point.balances, RETIREMENT_PRIORITY),
+            hsa=band(point.balances, HSA_PRIORITY),
             ss_income=point.ss_income,
         )
         for point in result.series
@@ -305,6 +329,7 @@ class _Resolved:
     benefits: tuple[SocialSecurityBenefit, ...]
     brackets: list[Bracket] | None
     buckets: list[Bucket]
+    tiers: list[int]
     tax_year: int
     ltcg_0_ceiling: float
     std_deduction: float
@@ -358,9 +383,10 @@ def _resolve_inputs(
     )
     if target is None or resolved_return is None or resolved_inflation is None:
         return None
-    buckets = load_buckets(db)
-    if not buckets:
+    tiered = load_tiered_buckets(db)
+    if not tiered:
         return None
+    buckets = [bucket for _, bucket in tiered]
 
     stored = {entry.person: entry for entry in get_social_security(db)}
     you = stored.get("you")
@@ -411,6 +437,7 @@ def _resolve_inputs(
             else None
         ),
         buckets=buckets,
+        tiers=[tier for tier, _ in tiered],
         tax_year=tax.tax_year,
         ltcg_0_ceiling=tax.ltcg_0_ceiling,
         std_deduction=tax.std_deduction or 0.0,
@@ -456,7 +483,7 @@ def get_forecast(
         return None
     target = inputs.target
     start_age = inputs.start_age
-    buckets = inputs.buckets
+    tiers = inputs.tiers
 
     engine_purchases = [
         PlannedPurchase(age=p.age, amount=p.amount, ongoing_delta=p.ongoing_delta)
@@ -510,9 +537,10 @@ def get_forecast(
         ss_spouse=inputs.ss_spouse,
         ss_start=inputs.ss_start,
         tax_year=inputs.tax_year,
+        first_unlock_age=_first_unlock_age(inputs.buckets),
         bands=bands,
         purchases=purchases,
-        series=_series(result, buckets),
+        series=_series(result, tiers),
         run_out_age=result.run_out_age,
         balance_at_100=result.balance_at_100,
         unaffordable=[
@@ -524,7 +552,7 @@ def get_forecast(
         baseline=BaselineOut(
             run_out_age=baseline_result.run_out_age,
             balance_at_100=baseline_result.balance_at_100,
-            series=_series(baseline_result, buckets),
+            series=_series(baseline_result, tiers),
         ),
         purchase_costs=[cost_row(index) for index in range(len(purchases))],
         sensitivity=[sensitivity_row(level) for level in _sensitivity_levels(db)],

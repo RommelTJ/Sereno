@@ -103,6 +103,7 @@ import {
   mortgageAccounts,
   mortgageEdit,
   mortgageFormValues,
+  OWNER_OPTIONS,
   PRIORITY_OPTIONS,
   quickLinkInput,
   socialSecurityEdits,
@@ -327,7 +328,7 @@ function AccountRowItem({
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: row.id })
 
-  const set = (key: 'kind' | 'taxTreatment' | 'priority' | 'accessAge') =>
+  const set = (key: 'kind' | 'taxTreatment' | 'priority' | 'accessAge' | 'owner') =>
     (value: string) => setValues((current) => ({ ...current, [key]: value }))
 
   const startEditing = () => {
@@ -399,6 +400,13 @@ function AccountRowItem({
             label="Access age"
             value={values.accessAge}
             onChange={set('accessAge')}
+          />
+          <SelectField
+            id={`account-owner-${row.id}`}
+            label="Owner"
+            value={values.owner}
+            options={OWNER_OPTIONS}
+            onChange={set('owner')}
           />
           <SaveButton disabled={saving} onClick={() => void save()} />
         </div>

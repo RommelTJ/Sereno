@@ -4,8 +4,14 @@ income leaves a gap, filled bucket by bucket in the caller's order —
 ETH inside the 0% LTCG headroom, then taxable brokerage, then 401(k).
 The headroom is measured in gain dollars (the 0% ceiling minus taxable
 ordinary income) and converts to sale proceeds through each bucket's
-gain fraction. The engine solves for net spendable — never a flat 4%
-per bucket. Pure math over the caller's numbers; loading balances,
+gain fraction. A tax-free bucket — a Roth, or an HSA spent on
+qualified expenses — is neither taxed as gain nor stacked on ordinary
+income, so it comes out whole. Any bucket may carry an access_age,
+which gates it whatever its treatment, read against its owner's age —
+age_offset carries how far that owner sits from the caller's age axis,
+so two people of different ages share one simulation without the
+engine ever learning whose bucket is whose. The engine solves for net
+spendable — never a flat 4% per bucket. Pure math over the caller's numbers; loading balances,
 basis, and tax parameters is the API layer's job.
 
 v1 simplifications, on purpose: federal only (state_treatment and the
@@ -19,7 +25,7 @@ ordinary income.
 from dataclasses import dataclass
 from typing import Literal
 
-BucketTreatment = Literal["LTCG", "ORDINARY"]
+BucketTreatment = Literal["LTCG", "ORDINARY", "TAX_FREE"]
 
 # The federal rate above the 0% bracket. Flat by design: a gap big
 # enough to push realized gains past the 15% → 20% threshold
@@ -45,6 +51,9 @@ class Bucket:
     basis: float
     treatment: BucketTreatment
     access_age: float | None = None
+    # The owner's age minus the caller's: 0 when the bucket is gated on
+    # the age passed in, negative when its owner is younger than that.
+    age_offset: float = 0.0
     headroom_only: bool = False
 
 
@@ -96,6 +105,15 @@ def _draw_ltcg(bucket: Bucket, needed: float, headroom: float) -> tuple[BucketDr
 
     draw = BucketDraw(name=bucket.name, treatment="LTCG", gross=gross, tax=tax, net=net)
     return draw, headroom - free_gross * gain_fraction
+
+
+def _draw_tax_free(bucket: Bucket, needed: float) -> BucketDraw:
+    """A Roth or an HSA spent on qualified expenses: the withdrawal
+    realizes no gain and stacks on no ordinary income, so gross is net
+    and the balance is the only limit. It leaves the 0% LTCG headroom
+    untouched for the buckets behind it."""
+    gross = max(0.0, min(needed, bucket.balance))
+    return BucketDraw(name=bucket.name, treatment="TAX_FREE", gross=gross, tax=0.0, net=gross)
 
 
 def _gross_up_ordinary(
@@ -154,17 +172,23 @@ def source_withdrawals(
     ordinary_running = ordinary_income
     draws: list[BucketDraw] = []
     for bucket in buckets:
-        if bucket.treatment == "LTCG":
-            draw, remaining_headroom = _draw_ltcg(bucket, remaining, remaining_headroom)
-        elif bucket.access_age is not None and age < bucket.access_age:
+        if bucket.access_age is not None and age + bucket.age_offset < bucket.access_age:
+            # The gate belongs to the bucket, not to its tax treatment:
+            # a Roth or an HSA locks the way a traditional 401(k) does.
+            # A locked bucket sells nothing, so it also spends none of
+            # the headroom the buckets behind it inherit.
             draw = BucketDraw(
                 name=bucket.name,
-                treatment="ORDINARY",
+                treatment=bucket.treatment,
                 gross=0.0,
                 tax=0.0,
                 net=0.0,
                 note=f"locked until age {bucket.access_age:g}",
             )
+        elif bucket.treatment == "LTCG":
+            draw, remaining_headroom = _draw_ltcg(bucket, remaining, remaining_headroom)
+        elif bucket.treatment == "TAX_FREE":
+            draw = _draw_tax_free(bucket, remaining)
         else:
             gross, tax = _gross_up_ordinary(
                 remaining, bucket.balance, ordinary_running, std_deduction, ordinary_brackets

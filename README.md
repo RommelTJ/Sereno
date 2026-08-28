@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.10.0**
+**v3.11.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,
@@ -42,7 +42,9 @@ whole thing in plain SQL.
   drawdown begins.
 - **Withdrawal sourcing** — a tax-aware sequencing waterfall: fill the spending gap from
   ETH first inside the 0% long-term-capital-gains headroom, then taxable brokerage, then
-  401(k) after 59½. Solves for *net spendable*, not a naive 4%-per-bucket draw.
+  the 401(k), then HSAs last and untaxed. Every gate is the account's own `access_age`,
+  read against its owner's age, so two people of different ages unlock on different
+  years. Solves for *net spendable*, not a naive 4%-per-bucket draw.
 - **Mortgage** — the loan's terms as effective-dated config, and the payoff date
   solved from them rather than typed: balance from the ledger, rate, and P&I plus
   extra principal give the month the payment stops, the age then, the interest
@@ -51,7 +53,7 @@ whole thing in plain SQL.
   the nominal-vs-real gap visible instead of implicit.
 - **Longevity forecast** — a year-by-year simulation from the current age (derived
   from a sanitized birthdate constant) to 100, charted one bar per year by bucket
-  (ETH, brokerage, 401(k), Social Security) with a hover breakdown per bar, led by
+  (ETH, brokerage, 401(k), HSA, Social Security) with a hover breakdown per bar, led by
   that year's portfolio total and its change against the year before. Verdict
   up front: "You don't run out" or "Lasts to age N", plus a sensitivity table across
   spend levels and live sliders for return, ETH growth, inflation, and Social
@@ -185,8 +187,9 @@ Interactive docs at <http://localhost:8000/docs>.
 The balances slice:
 
 - `GET /api/accounts` — the account dimension rows (name, emoji, kind,
-  tax treatment, liability and investable flags, withdrawal priority,
-  and access age; inactive accounts stay listed with `active: false` so
+  tax treatment, owner, liability and investable flags, withdrawal
+  priority, and access age; inactive accounts stay listed with
+  `active: false` so
   history keeps its labels), ordered by `sort_order` then id, so every
   consumer — the ledger columns, the balance form picker, the Settings
   cards — renders the user-defined order.
@@ -199,12 +202,14 @@ The balances slice:
   displayed negative.
 - `PUT /api/accounts/{id}` — classifies an account for the planners:
   kind, tax treatment, the investable flag, withdrawal priority (1 ETH,
-  2 brokerage, 3 tax-advantaged), and access age, revised in place — the
-  account row is a dimension, like an envelope rename, so history is
-  unaffected. This is what lets an account created through the UI feed
-  Guardrails (investable), Sourcing, and Forecast (priority buckets). A
-  liability can never be investable or hold a priority; unknown kinds or
-  treatments, out-of-range priorities, and negative access ages are 422s.
+  2 brokerage, 3 401(k), 4 HSA), access age, and owner (`you`, `spouse`,
+  or `joint`), revised in place — the account row is a dimension, like an
+  envelope rename, so history is unaffected. This is what lets an account
+  created through the UI feed Guardrails (investable), Sourcing, and
+  Forecast (priority buckets). Owner is what decides *whose* age a gate is
+  read against, so it matters wherever `access_age` is set. A liability
+  can never be investable or hold a priority; unknown kinds, treatments or
+  owners, out-of-range priorities, and negative access ages are 422s.
 - `PUT /api/accounts/order` — persists a user-defined display order:
   the body's `ids` must be exactly the active account ids (a 422
   otherwise), and each id's position becomes its `sort_order`. Accounts
@@ -586,16 +591,27 @@ The sourcing slice (the second Plan engine):
   inside the 0% long-term-capital-gains headroom (the ceiling minus
   taxable ordinary income, converted to sale proceeds through each
   bucket's gain fraction), then taxable brokerage (leftover headroom
-  first, then 15% on the gain portion), then 401(k) only at age ≥ 59½
-  with ordinary-income treatment (the unused standard deduction
-  shelters the first dollars, then a walk up the year's brackets).
-  Buckets aggregate accounts by `withdrawal_priority`; each account
+  first, then 15% on the gain portion), then the 401(k) with
+  ordinary-income treatment (the unused standard deduction shelters the
+  first dollars, then a walk up the year's brackets), then HSAs, which
+  come out whole — no gain to realize, no ordinary income to stack.
+  Each bucket is gated by its own `access_age`, whatever its tax
+  treatment: a locked bucket draws nothing, reports `locked until age
+  N`, and leaves the 0% headroom intact for the buckets behind it.
+  Accounts group into buckets by `withdrawal_priority` and by whatever
+  else decides their answer — tax treatment, gate age, and, where there
+  is a gate, their owner; a tier that splits names each bucket for the
+  part that differs (`401(k) · you`, `401(k) · spouse`). Each account
   contributes its newest balance row from any month and its basis
   from open tax lots, falling back to the balance row's `cost_basis`,
-  then to zero. `?age=` evaluates a what-if age, defaulting to the
-  current age derived from the backend's sanitized `BIRTHDATE`
-  constant (January 1, 1988 — deliberately not a real birthday; no
-  birthdate lives in the schema), and `?spend=` tests a what-if level
+  then to zero. `?age=` is *your* age, defaulting to the one derived
+  from the backend's sanitized `BIRTHDATE` constant (January 1, 1988 —
+  deliberately not a real birthday; no birthdate lives in the schema);
+  your spouse's age slides with it, three years behind per the
+  companion `SPOUSE_BIRTHDATE` constant, so one axis carries both
+  people's gates. Each step also reports its bucket's `access_age` —
+  its owner's own, not one shifted onto your axis. `?spend=` tests a
+  what-if level
   (it also stands in for
   a missing spend plan). Each step reports gross, tax, net, and any
   gate note; whatever the waterfall cannot deliver comes back as
@@ -616,7 +632,8 @@ The forecast slice (the third Plan engine):
   person's start age) and staking income (while the ETH stake stays
   above $50k) reduce the year's need, and the remainder is withdrawn
   through the sourcing waterfall — the 0% LTCG headroom, the
-  gross-ups, and the 59½ gate apply every simulated year. Growth is
+  gross-ups, and each bucket's own access gate apply every simulated
+  year. Growth is
   all gain (basis stays put); sales reduce basis pro-rata. Spend
   defaults to the plan's annual target, the rates to the assumptions
   row, and Social Security to the stored rows; `?spend=`,
@@ -637,7 +654,7 @@ The forecast slice (the third Plan engine):
   `purchase=year:amount[:ongoing_delta]` params
   (`?purchase=2036:800000&purchase=2041:70000:9000`): each lump lands
   on its year's target inside the same waterfall — so the 0%
-  headroom, the gross-up, and the 59½ gate meet the lumpy year
+  headroom, the gross-up, and the access gates meet the lumpy year
   instead of an amortized smear — and the optional third field raises
   annual spend from that year on (both amounts may be negative: a
   sale, a cost that ends). Years map through the birthdate-derived
@@ -675,8 +692,8 @@ The forecast slice (the third Plan engine):
   to a target age and `min_balance_at_100=` adds a terminal floor.
   The response carries `max_amount`, the outcome at that ceiling, and
   `binding_constraint` — `purchase_year_liquidity` when the buckets
-  reachable that year are the cap (pre-59½, the taxable bridge; a
-  later year can raise the ceiling) versus `longevity` when the plan
+  reachable that year are the cap (before the gates open, the taxable
+  bridge; a later year can raise the ceiling) versus `longevity` when the plan
   fails downstream. Read-only like every planner endpoint: a solve is
   a pure computation, so it stays a GET. Null until the forecast's
   prerequisites exist. The solve runs against the banded plan: the
@@ -927,11 +944,13 @@ The forecast slice (the third Plan engine):
   `GET /api/sourcing`. Left, the sequencing waterfall: target net
   spend, minus non-portfolio income (Social Security past its start
   age, staking while the ETH stake stays meaningful), the gap from
-  the portfolio, then the three bucket steps — ETH sold tax-free
+  the portfolio, then one step per bucket — ETH sold tax-free
   inside the 0% LTCG headroom, brokerage next (inheriting leftover
-  headroom, then 15% on the gain portion), 401(k) last and only at
-  59½ — down to the net delivered, with a shortfall banner when the
-  gap goes unfilled. Age and what-if spend inputs re-evaluate the
+  headroom, then 15% on the gain portion), the 401(k) once its gate
+  opens, and HSAs last and untaxed — down to the net delivered, with a
+  shortfall banner when the gap goes unfilled. The bucket rule cards
+  name each tier's lock age from the waterfall itself, and say nothing
+  about a lock where the accounts set no gate. Age and what-if spend inputs re-evaluate the
   whole waterfall server-side (the age defaults to the server's
   birthdate-derived current age). Right, the per-bucket rule cards
   and the engine rule: never 0.04 × balance per bucket; solve for
@@ -943,12 +962,15 @@ The forecast slice (the third Plan engine):
   "does the money last?" view, every figure from `GET /api/forecast`.
   The verdict hero ("You don't run out." / "Lasts to age N", red only
   when the money dies before 90) carries the resolved spend and the
-  projected age-100 balance, beside the bridge-to-59½ card — how long
-  the taxable buckets last against the bridge to the 401(k) (59½
-  minus the derived current age). The balance-by-bucket chart draws
+  projected age-100 balance, beside the bridge card — how long the
+  taxable buckets last against the bridge to the locked money
+  (`first_unlock_age`, the earliest gate on your own age axis, minus
+  the derived current age). The card names that age rather than a
+  literal, and disappears entirely when nothing in the portfolio is
+  gated. The balance-by-bucket chart draws
   one CSS stacked bar per simulated year, the current age → 100 with
-  axis labels thinned to every fifth age: ETH, brokerage, 401(k), and
-  the Social
+  axis labels thinned to every fifth age: ETH, brokerage, 401(k), HSA,
+  and the Social
   Security income sliver at the base, enlarged to a 7px minimum so
   the income stays visible against multi-million balances; hovering
   a bar shows the age, its calendar year, and the exact per-bucket
@@ -1099,6 +1121,53 @@ docker compose run --rm --no-deps frontend npm test
 ```
 
 ## Status
+
+v3.11.0 — The access gate actually fires. The `access_age` check sat
+behind an `elif` on tax treatment, so it was unreachable for any bucket
+that was not `ORDINARY` (issue #135) — and `load_buckets` collapsed
+every non-ordinary tag into `LTCG`, which the engine had no third
+member to express. The real 401(k) and HSA accounts, tagged `TAX_FREE`,
+therefore drew freely at *any* age and paid 15% capital-gains tax on
+money that owes none: at 40, against a stored gate of 62, the waterfall
+handed over $573,954 and took $86,093 in tax that does not exist. The
+gate now runs before the treatment branch, for every bucket, and a
+locked draw leaves the 0% headroom intact for the buckets behind it
+instead of spending it. `TAX_FREE` joins `BucketTreatment` with a draw
+that realizes no gain and stacks on no ordinary income.
+
+One bucket per `withdrawal_priority` could not hold the accounts it was
+being asked to: a tier took its treatment from whichever row SQLite
+returned last and its gate from the first, so a 401(k) at 59½ sharing
+priority 3 with an HSA at 65 unlocked the HSA five and a half years
+early. Accounts now group by everything that decides their answer —
+tier, treatment, gate age, and, where there is a gate, their owner —
+with the owner deliberately dropped from the key for ungated accounts
+so ETH and brokerage never fragment on a field that cannot change their
+result. A tier that splits keeps its plain label where it doesn't and
+names only the differing part where it does: `401(k) · you`,
+`401(k) · spouse`. HSAs become the fourth tier, tax-free and drawn last.
+
+Two people of different ages needed two gates. `account.owner` has been
+a column since the first migration with nothing to write it; it is now
+part of the classification body and an Owner select in Settings, beside
+a fourth withdrawal priority. A second sanitized constant stands in for
+the spouse's birthdate and `age_offsets` derives the whole-year gap from
+the pair rather than writing it down — neither is a real birthday, and
+no birthdate lives in the schema. Each bucket carries its owner's offset
+from the simulation's axis, so `?age=` and `start_age` stay *your* age
+while her gates land on hers: at your 66 the 401(k) is open and her HSA
+is not, because she is 63.
+
+The screens stop guessing. `59.5` was hardcoded in the bridge card's
+heading and year count, in the chart legend, in `bridgeCopy`'s search
+window and its literal "31+ yrs", and in the 401(k) rule card — all
+disagreeing with accounts that said 62. Every one of them now reads the
+data: steps report their bucket's `access_age`, the forecast reports
+`first_unlock_age`, the bridge card names that age and disappears when
+nothing is gated, and the rule cards drop the lock sentence for a tier
+with no gate. The chart gains an HSA band, and its series sums by tier
+rather than by bucket name — a tier split between two owners used to
+match neither band and read as zero.
 
 v3.10.0 — The Ledger says which way the money went. The table showed
 absolute balances only, so telling whether an account grew or shrank —

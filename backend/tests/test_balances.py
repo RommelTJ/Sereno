@@ -348,6 +348,57 @@ class TestUpdateAccount:
         )
         assert row == {"withdrawal_priority": 3, "access_age": 59.5}
 
+    def test_classifies_an_hsa_into_the_fourth_withdrawal_tier(self, client):
+        # HSAs are their own tier: tax-free, gated later than a 401(k),
+        # and drawn after it.
+        created = self.create(client, "Fidelity HSA")
+        response = client.put(
+            f"/api/accounts/{created['id']}",
+            json={
+                "kind": "hsa",
+                "tax_treatment": "TAX_FREE",
+                "is_investable": True,
+                "withdrawal_priority": 4,
+                "access_age": 65,
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["withdrawal_priority"] == 4
+        (row,) = query(
+            "SELECT withdrawal_priority, access_age FROM account WHERE id = ?", created["id"]
+        )
+        assert row == {"withdrawal_priority": 4, "access_age": 65.0}
+
+    def test_classifies_the_accounts_owner(self, client):
+        # Whose account it is decides which age its gate is read
+        # against, so the planners need it recorded.
+        created = self.create(client, "Her 401(k)")
+        response = client.put(
+            f"/api/accounts/{created['id']}", json={**self.CLASSIFICATION, "owner": "spouse"}
+        )
+        assert response.status_code == 200
+        assert response.json()["owner"] == "spouse"
+        (account,) = client.get("/api/accounts").json()
+        assert account["owner"] == "spouse"
+        (row,) = query("SELECT owner FROM account WHERE id = ?", created["id"])
+        assert row == {"owner": "spouse"}
+
+    def test_an_unknown_owner_is_rejected(self, client):
+        created = self.create(client, "Robinhood")
+        response = client.put(
+            f"/api/accounts/{created['id']}", json={**self.CLASSIFICATION, "owner": "cousin"}
+        )
+        assert response.status_code == 422
+
+    def test_the_owner_can_be_cleared(self, client):
+        created = self.create(client, "Robinhood")
+        client.put(f"/api/accounts/{created['id']}", json={**self.CLASSIFICATION, "owner": "you"})
+        response = client.put(
+            f"/api/accounts/{created['id']}", json={**self.CLASSIFICATION, "owner": None}
+        )
+        assert response.status_code == 200
+        assert response.json()["owner"] is None
+
     def test_classification_can_be_cleared_back_to_net_worth_only(self, client):
         created = self.create(client, "Coinbase ETH")
         classified = client.put(f"/api/accounts/{created['id']}", json=self.CLASSIFICATION)
@@ -388,7 +439,7 @@ class TestUpdateAccount:
 
     def test_out_of_range_withdrawal_priority_is_rejected(self, client):
         created = self.create(client, "Robinhood")
-        for priority in (0, 4):
+        for priority in (0, 5):
             response = client.put(
                 f"/api/accounts/{created['id']}",
                 json={**self.CLASSIFICATION, "withdrawal_priority": priority},

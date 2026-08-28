@@ -315,3 +315,101 @@ class TestUnfillableGap:
         assert result.draws[2].note == "locked until age 59.5"
         assert result.shortfall == pytest.approx(22_000)
         assert result.net_delivered == pytest.approx(23_000)
+
+
+def hsa(balance=500_000.0, access_age=65.0):
+    # A tax-advantaged bucket that is not taxed as ordinary income:
+    # its gate has to hold on the bucket, not on the treatment.
+    return Bucket(name="HSA", balance=balance, basis=0.0, treatment="LTCG", access_age=access_age)
+
+
+class TestAccessGate:
+    """The gate belongs to the bucket, not to its tax treatment — a Roth
+    or an HSA locks exactly the way a traditional 401(k) does."""
+
+    def test_a_capital_gains_bucket_below_its_access_age_is_locked(self):
+        result = run(age=40, buckets=[hsa()])
+        draw = result.draws[0]
+        assert draw.gross == 0
+        assert draw.net == 0
+        assert draw.note == "locked until age 65"
+        assert result.shortfall == pytest.approx(37_000)
+
+    def test_a_locked_bucket_reports_its_own_treatment(self):
+        assert run(age=40, buckets=[hsa()]).draws[0].treatment == "LTCG"
+
+    def test_a_locked_bucket_spends_none_of_the_headroom(self):
+        # The gate runs first, so the brokerage behind it still meets
+        # the full 0% headroom rather than one the locked sale spent.
+        result = run(age=40, buckets=[hsa(), brokerage()])
+        assert result.draws[1].gross == pytest.approx(37_000)
+        assert result.draws[1].tax == 0
+        assert result.shortfall == 0
+
+
+def tax_free(balance=500_000.0, access_age=None):
+    return Bucket(
+        name="HSA", balance=balance, basis=0.0, treatment="TAX_FREE", access_age=access_age
+    )
+
+
+class TestTaxFreeStep:
+    """A Roth or an HSA spent on qualified expenses comes out whole:
+    no gain to realize, and nothing to stack on ordinary income."""
+
+    def test_the_draw_is_delivered_untaxed(self):
+        result = run(age=70, buckets=[tax_free()], ordinary_brackets=BRACKETS)
+        draw = result.draws[0]
+        assert draw.treatment == "TAX_FREE"
+        assert draw.gross == pytest.approx(37_000)
+        assert draw.tax == 0
+        assert draw.net == pytest.approx(37_000)
+        assert result.shortfall == 0
+
+    def test_the_balance_caps_the_draw(self):
+        result = run(age=70, buckets=[tax_free(balance=10_000)], ordinary_brackets=BRACKETS)
+        assert result.draws[0].gross == pytest.approx(10_000)
+        assert result.shortfall == pytest.approx(27_000)
+
+    def test_it_spends_none_of_the_capital_gains_headroom(self):
+        # 20,000 comes out tax-free; the brokerage behind it still meets
+        # the whole 0% headroom rather than one the draw ate into.
+        result = run(age=70, buckets=[tax_free(balance=20_000), brokerage()])
+        assert result.draws[0].net == pytest.approx(20_000)
+        assert result.draws[1].gross == pytest.approx(17_000)
+        assert result.draws[1].tax == 0
+
+
+def spouse_hsa(age_offset=-3.0):
+    # The caller simulates on one age axis; a bucket owned by someone
+    # younger sits that many years behind it.
+    return Bucket(
+        name="HSA · spouse",
+        balance=500_000.0,
+        basis=0.0,
+        treatment="TAX_FREE",
+        access_age=65.0,
+        age_offset=age_offset,
+    )
+
+
+class TestOwnerAgeOffset:
+    """A gate is measured against its owner's age, which need not be the
+    age the caller passes. The offset carries the difference, so the
+    engine never has to know whose bucket it is."""
+
+    def test_a_younger_owners_bucket_is_locked_past_the_gate_age(self):
+        result = run(age=65, buckets=[spouse_hsa()], ordinary_brackets=BRACKETS)
+        draw = result.draws[0]
+        assert draw.gross == 0
+        assert draw.note == "locked until age 65"
+
+    def test_it_unlocks_when_the_owner_reaches_the_gate(self):
+        result = run(age=68, buckets=[spouse_hsa()], ordinary_brackets=BRACKETS)
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(37_000)
+        assert draw.note is None
+
+    def test_an_unoffset_bucket_keeps_its_gate_on_the_callers_axis(self):
+        result = run(age=65, buckets=[spouse_hsa(age_offset=0.0)], ordinary_brackets=BRACKETS)
+        assert result.draws[0].note is None

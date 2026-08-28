@@ -14,19 +14,23 @@ from sereno.db.connection import connect, db_path
 from sereno.db.migrations import migrate
 from sereno.money import to_cents
 
-# (name, emoji, kind, tax_treatment, is_liability, is_investable,
-#  withdrawal_priority, access_age, penalty_rate)
+# (name, emoji, kind, tax_treatment, owner, is_liability, is_investable,
+#  withdrawal_priority, access_age, penalty_rate). The 401(k) is yours
+# and the HSA your spouse's, so a seeded database exercises the two
+# ages a gate can be read against; the HSA is the fourth tier, tax-free
+# and gated later than the 401(k).
 ACCOUNTS = [
-    ("Ethereum", "⚡", "eth", "LTCG", 0, 1, 1, None, None),
-    ("VFIAX", "📈", "brokerage_fund", "LTCG", 0, 1, 2, None, None),
-    ("VTIAX", "🌍", "brokerage_fund", "LTCG", 0, 1, 2, None, None),
-    ("VGSH", "🏦", "brokerage_fund", "LTCG", 0, 1, 2, None, None),
-    ("Retirement", "🏖️", "401k", "ORDINARY", 0, 1, 3, 59.5, 0.10),
-    ("Home", "🏠", "home", "NONE", 0, 0, None, None, None),
-    ("Chase checking", "💵", "cash", "NONE", 0, 0, None, None, None),
-    ("Vanguard Cash Plus", "💵", "cash_plus", "NONE", 0, 0, None, None, None),
-    ("Car", "🚗", "car", "NONE", 0, 0, None, None, None),
-    ("Mortgage", "🏡", "mortgage", "NONE", 1, 0, None, None, None),
+    ("Ethereum", "⚡", "eth", "LTCG", "joint", 0, 1, 1, None, None),
+    ("VFIAX", "📈", "brokerage_fund", "LTCG", "joint", 0, 1, 2, None, None),
+    ("VTIAX", "🌍", "brokerage_fund", "LTCG", "joint", 0, 1, 2, None, None),
+    ("VGSH", "🏦", "brokerage_fund", "LTCG", "joint", 0, 1, 2, None, None),
+    ("Retirement", "🏖️", "401k", "ORDINARY", "you", 0, 1, 3, 59.5, 0.10),
+    ("HSA", "🩺", "hsa", "TAX_FREE", "spouse", 0, 1, 4, 65, None),
+    ("Home", "🏠", "home", "NONE", "joint", 0, 0, None, None, None),
+    ("Chase checking", "💵", "cash", "NONE", "joint", 0, 0, None, None, None),
+    ("Vanguard Cash Plus", "💵", "cash_plus", "NONE", "joint", 0, 0, None, None, None),
+    ("Car", "🚗", "car", "NONE", "joint", 0, 0, None, None, None),
+    ("Mortgage", "🏡", "mortgage", "NONE", "joint", 1, 0, None, None, None),
 ]
 
 ETH_QTY = 20
@@ -34,28 +38,31 @@ COST_BASIS = {"Ethereum": 24000, "VFIAX": 520000, "VTIAX": 200000, "VGSH": 12500
 
 # Monthly snapshots, oldest first. The 2026 rows come from the design
 # handoff's ledger table; Jul-Dec 2025 extend its month-over-month deltas
-# backward. Liability balances (Mortgage) are stored positive.
-# (month, ETH $/unit, VFIAX, VTIAX, VGSH, Retirement, Home,
+# backward. Liability balances (Mortgage) are stored positive. The HSA's
+# balance is carved out of the handoff's tax-advantaged figure rather
+# than added to it, so net worth still matches the handoff exactly.
+# (month, ETH $/unit, VFIAX, VTIAX, VGSH, Retirement, HSA, Home,
 #  Chase checking, Vanguard Cash Plus, Car, Mortgage)
 MONTHLY_BALANCES = [
-    ("2025-07", 2400, 601000, 208000, 118000, 305000, 339000, 6500, 20000, 15000, 157700),
-    ("2025-08", 2500, 610000, 212000, 119000, 309000, 340000, 6500, 20000, 15000, 157000),
-    ("2025-09", 2600, 619000, 216000, 120000, 313000, 341000, 6500, 20000, 15000, 156300),
-    ("2025-10", 2700, 628000, 220000, 121000, 317000, 342000, 6500, 20000, 15000, 155600),
-    ("2025-11", 2800, 637000, 224000, 122000, 321000, 343000, 6500, 20000, 15000, 154900),
-    ("2025-12", 2900, 646000, 228000, 123000, 325000, 344000, 6500, 20000, 15000, 154200),
-    ("2026-01", 3000, 655000, 232000, 124000, 329000, 345000, 6500, 20000, 15000, 153500),
-    ("2026-02", 3100, 666000, 236000, 125000, 333000, 346000, 8000, 20000, 15000, 152800),
-    ("2026-03", 3200, 675000, 240000, 126000, 337000, 347000, 6000, 20000, 15000, 152100),
-    ("2026-04", 3300, 682000, 243000, 127000, 341000, 348000, 9000, 20000, 15000, 151400),
-    ("2026-05", 3400, 690000, 246000, 128000, 345000, 349000, 7000, 20000, 15000, 150700),
-    ("2026-06", 3500, 700000, 250000, 130000, 350000, 350000, 9000, 20000, 15000, 150000),
+    ("2025-07", 2400, 601000, 208000, 118000, 277000, 28000, 339000, 6500, 20000, 15000, 157700),
+    ("2025-08", 2500, 610000, 212000, 119000, 280600, 28400, 340000, 6500, 20000, 15000, 157000),
+    ("2025-09", 2600, 619000, 216000, 120000, 284200, 28800, 341000, 6500, 20000, 15000, 156300),
+    ("2025-10", 2700, 628000, 220000, 121000, 287700, 29300, 342000, 6500, 20000, 15000, 155600),
+    ("2025-11", 2800, 637000, 224000, 122000, 291300, 29700, 343000, 6500, 20000, 15000, 154900),
+    ("2025-12", 2900, 646000, 228000, 123000, 294800, 30200, 344000, 6500, 20000, 15000, 154200),
+    ("2026-01", 3000, 655000, 232000, 124000, 298400, 30600, 345000, 6500, 20000, 15000, 153500),
+    ("2026-02", 3100, 666000, 236000, 125000, 301900, 31100, 346000, 8000, 20000, 15000, 152800),
+    ("2026-03", 3200, 675000, 240000, 126000, 305500, 31500, 347000, 6000, 20000, 15000, 152100),
+    ("2026-04", 3300, 682000, 243000, 127000, 309000, 32000, 348000, 9000, 20000, 15000, 151400),
+    ("2026-05", 3400, 690000, 246000, 128000, 312500, 32500, 349000, 7000, 20000, 15000, 150700),
+    ("2026-06", 3500, 700000, 250000, 130000, 317000, 33000, 350000, 9000, 20000, 15000, 150000),
 ]
 USD_ACCOUNTS = (
     "VFIAX",
     "VTIAX",
     "VGSH",
     "Retirement",
+    "HSA",
     "Home",
     "Chase checking",
     "Vanguard Cash Plus",
@@ -132,7 +139,7 @@ def seed(conn: sqlite3.Connection) -> bool:
     conn.executemany(
         "INSERT INTO account (name, emoji, kind, tax_treatment, owner, is_liability,"
         " is_investable, withdrawal_priority, access_age, penalty_rate)"
-        " VALUES (?, ?, ?, ?, 'joint', ?, ?, ?, ?, ?)",
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ACCOUNTS,
     )
     accounts = _ids_by_name(conn, "account")

@@ -14,6 +14,7 @@ const account = (
     is_investable: boolean
     withdrawal_priority: number | null
     access_age: number | null
+    owner: string | null
     active: boolean
   }> = {},
 ) => ({
@@ -45,6 +46,7 @@ export const ACCOUNTS = [
   account(5, 'Retirement', '401k', '🏖️', {
     ...investable(3, 'ORDINARY'),
     access_age: 59.5,
+    owner: 'you',
   }),
   account(6, 'Home', 'home', '🏠'),
   account(7, 'Chase checking', 'cash', '💵'),
@@ -500,6 +502,7 @@ const FORECAST_SERIES = Array.from({ length: 100 - 38 + 1 }, (_, i) => ({
   eth: 200_000,
   brokerage: 800_000,
   retirement: 600_000,
+  hsa: 0,
   ss_income: 38 + i >= 67 ? 34_800 : 0,
 }))
 
@@ -515,6 +518,7 @@ export const FORECAST: Forecast = {
   ss_spouse: 1_400,
   ss_start: 67,
   tax_year: 2026,
+  first_unlock_age: 59.5,
   purchases: [],
   series: FORECAST_SERIES,
   run_out_age: null,
@@ -555,6 +559,7 @@ export const SOURCING: Sourcing = {
       tax: 0,
       net: 42_000,
       note: null,
+      access_age: null,
     },
     {
       name: 'Brokerage',
@@ -563,6 +568,7 @@ export const SOURCING: Sourcing = {
       tax: 0,
       net: 0,
       note: null,
+      access_age: null,
     },
     {
       name: '401(k)',
@@ -571,6 +577,7 @@ export const SOURCING: Sourcing = {
       tax: 0,
       net: 0,
       note: 'locked until age 59.5',
+      access_age: 59.5,
     },
   ],
   net_delivered: 45_000,

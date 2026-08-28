@@ -66,11 +66,11 @@ def insert_tax_param(tax_year=None, ltcg_0_ceiling=96_700, std_deduction=30_000)
     )
 
 
-def insert_account(name, kind, *, tax_treatment="LTCG", priority=None, access_age=None):
+def insert_account(name, kind, *, tax_treatment="LTCG", priority=None, access_age=None, owner=None):
     return execute(
         "INSERT INTO account (name, kind, tax_treatment, owner, is_liability, is_investable,"
-        " withdrawal_priority, access_age) VALUES (?, ?, ?, NULL, 0, 1, ?, ?)",
-        (name, kind, tax_treatment, priority, access_age),
+        " withdrawal_priority, access_age) VALUES (?, ?, ?, ?, 0, 1, ?, ?)",
+        (name, kind, tax_treatment, owner, priority, access_age),
     )
 
 
@@ -188,6 +188,7 @@ class TestWaterfall:
                     "tax": 0.0,
                     "net": 42_000.0,
                     "note": None,
+                    "access_age": None,
                 },
                 {
                     "name": "Brokerage",
@@ -196,6 +197,7 @@ class TestWaterfall:
                     "tax": 0.0,
                     "net": 0.0,
                     "note": None,
+                    "access_age": None,
                 },
                 {
                     "name": "401(k)",
@@ -204,6 +206,7 @@ class TestWaterfall:
                     "tax": 0.0,
                     "net": 0.0,
                     "note": "locked until age 59.5",
+                    "access_age": 59.5,
                 },
             ],
             "net_delivered": 45_000.0,
@@ -282,3 +285,176 @@ class TestWaterfall:
         body = client.get("/api/sourcing", params={"age": 38}).json()
         assert body["steps"][0]["gross"] == pytest.approx(42_000)
         assert body["shortfall"] == 0.0
+
+
+def seed_hsa(balance=500_000, access_age=65):
+    """A TAX_FREE account — a Roth or an HSA — as the only bucket."""
+    account = insert_account(
+        "Fidelity HSA", "hsa", tax_treatment="TAX_FREE", priority=3, access_age=access_age
+    )
+    insert_balance(account, balance)
+    insert_spend_plan()
+    insert_tax_param()
+    return account
+
+
+class TestTaxFreeBucket:
+    """load_buckets collapses everything that is not ORDINARY into LTCG,
+    so a Roth or an HSA is taxed as capital gains on withdrawal."""
+
+    def test_it_reports_its_own_treatment_while_locked(self, client):
+        seed_hsa()
+        step = client.get("/api/sourcing", params={"age": 40}).json()["steps"][0]
+        assert step["treatment"] == "TAX_FREE"
+        assert step["gross"] == 0
+        assert step["note"] == "locked until age 65"
+
+    def test_it_is_withdrawn_whole_once_the_gate_opens(self, client):
+        # 200,000 is well past the 96,700 of 0% headroom: taxed as LTCG
+        # the draw costs 18,229 in tax it should never owe.
+        seed_hsa()
+        body = client.get("/api/sourcing", params={"age": 66, "spend": 200_000}).json()
+        step = body["steps"][0]
+        assert step["treatment"] == "TAX_FREE"
+        assert step["gross"] == pytest.approx(200_000)
+        assert step["tax"] == 0
+        assert step["net"] == pytest.approx(200_000)
+        assert body["shortfall"] == 0
+
+
+class TestBucketGrouping:
+    """One bucket per withdrawal_priority cannot hold two people's
+    accounts, or two tax treatments: the gate and the tax rate are
+    properties of the account, not of the tier it sits in."""
+
+    def test_gated_accounts_split_by_owner(self, client):
+        yours = insert_account(
+            "Your 401(k)",
+            "401k",
+            tax_treatment="ORDINARY",
+            priority=3,
+            access_age=59.5,
+            owner="you",
+        )
+        insert_balance(yours, 300_000)
+        hers = insert_account(
+            "Her 401(k)",
+            "401k",
+            tax_treatment="ORDINARY",
+            priority=3,
+            access_age=59.5,
+            owner="spouse",
+        )
+        insert_balance(hers, 200_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 40}).json()["steps"]
+        assert [step["name"] for step in steps] == ["401(k) · you", "401(k) · spouse"]
+
+    def test_ungated_accounts_do_not_split_by_owner(self, client):
+        # Without a gate the owner cannot change the answer, so it must
+        # not fragment the tier either.
+        yours = insert_account("VFIAX", "brokerage_fund", priority=2, owner="you")
+        insert_balance(yours, 400_000)
+        hers = insert_account("VTIAX", "brokerage_fund", priority=2, owner="spouse")
+        insert_balance(hers, 200_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 40}).json()["steps"]
+        assert [step["name"] for step in steps] == ["Brokerage"]
+        assert steps[0]["gross"] == pytest.approx(45_000)
+
+    def test_a_tier_holding_two_treatments_splits(self, client):
+        # These used to collapse onto whichever row SQLite returned
+        # last, so the tier's tax treatment was a matter of luck.
+        wallet = insert_account("ETH Wallet", "eth", tax_treatment="ORDINARY", priority=1)
+        insert_balance(wallet, 100_000, cost_basis=10_000)
+        staked = insert_account("ETH Staked", "eth", tax_treatment="LTCG", priority=1)
+        insert_balance(staked, 300_000, cost_basis=30_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 40}).json()["steps"]
+        assert [step["name"] for step in steps] == ["ETH · capital gains", "ETH · ordinary"]
+        assert [step["treatment"] for step in steps] == ["LTCG", "ORDINARY"]
+
+    def test_a_tier_holding_two_gate_ages_splits(self, client):
+        # 401(k)s at 59.5 beside HSAs at 65: one access_age for the tier
+        # is wrong for half the money whichever one wins.
+        early = insert_account(
+            "401(k)", "401k", tax_treatment="ORDINARY", priority=3, access_age=59.5, owner="you"
+        )
+        insert_balance(early, 300_000)
+        late = insert_account(
+            "HSA", "hsa", tax_treatment="ORDINARY", priority=3, access_age=65, owner="you"
+        )
+        insert_balance(late, 200_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 62}).json()["steps"]
+        assert [step["note"] for step in steps] == [None, "locked until age 65"]
+
+
+class TestHsaTier:
+    """HSAs are the fourth withdrawal tier: tax-free, gated later than a
+    401(k), and drawn only once everything ahead of them is spent."""
+
+    def test_the_fourth_tier_is_labelled_and_drawn_last(self, client):
+        retirement = insert_account(
+            "401(k)", "401k", tax_treatment="ORDINARY", priority=3, access_age=59.5
+        )
+        insert_balance(retirement, 100_000)
+        hsa = insert_account("Fidelity HSA", "hsa", tax_treatment="TAX_FREE", priority=4)
+        insert_balance(hsa, 500_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 66, "spend": 200_000}).json()["steps"]
+        assert [step["name"] for step in steps] == ["401(k)", "HSA"]
+        assert steps[1]["treatment"] == "TAX_FREE"
+        assert steps[1]["gross"] > 0
+
+
+def seed_two_owners_401k(access_age=59.5):
+    for owner in ("you", "spouse"):
+        account = insert_account(
+            f"{owner} 401(k)",
+            "401k",
+            tax_treatment="ORDINARY",
+            priority=3,
+            access_age=access_age,
+            owner=owner,
+        )
+        insert_balance(account, 300_000)
+    insert_spend_plan()
+    insert_tax_param()
+
+
+class TestOwnerAges:
+    """?age= is your age. Your spouse's slides with it, three sanitized
+    years behind, so one age axis carries both people's gates."""
+
+    def test_a_spouse_owned_bucket_is_still_locked_when_yours_opens(self, client):
+        seed_two_owners_401k()
+        steps = client.get("/api/sourcing", params={"age": 60}).json()["steps"]
+        assert [step["name"] for step in steps] == ["401(k) · you", "401(k) · spouse"]
+        assert steps[0]["note"] is None
+        assert steps[1]["note"] == "locked until age 59.5"
+
+    def test_it_unlocks_once_she_reaches_the_gate(self, client):
+        seed_two_owners_401k()
+        steps = client.get("/api/sourcing", params={"age": 63}).json()["steps"]
+        assert [step["note"] for step in steps] == [None, None]
+
+    def test_a_joint_bucket_is_gated_on_your_own_age(self, client):
+        account = insert_account(
+            "Joint 401(k)",
+            "401k",
+            tax_treatment="ORDINARY",
+            priority=3,
+            access_age=59.5,
+            owner="joint",
+        )
+        insert_balance(account, 300_000)
+        insert_spend_plan()
+        insert_tax_param()
+        steps = client.get("/api/sourcing", params={"age": 60}).json()["steps"]
+        assert steps[0]["note"] is None
