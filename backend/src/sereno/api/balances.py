@@ -104,7 +104,7 @@ class BalanceEntryCreate(BaseModel):
     balance_usd: float | None = None
     quantity: float | None = None
     unit_price: float | None = None
-    cost_basis: float | None = None
+    cost_basis: Annotated[float, Field(ge=0)] | None = None
 
     @model_validator(mode="after")
     def one_form_only(self) -> Self:
