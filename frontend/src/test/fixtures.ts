@@ -218,7 +218,8 @@ const blankReportMonth = (month: string) => ({
   actual: null,
   variance: null,
   cumulative_variance: null,
-  contributions: null,
+  funds_in: null,
+  funds_out: null,
   provisional: false,
 })
 
@@ -228,7 +229,8 @@ const reportMonth = (
   mandatory: number,
   discretionary: number,
   cumulative: number,
-  contributions: number,
+  fundsIn: number,
+  fundsOut = 0,
   provisional = false,
 ) => ({
   month,
@@ -238,7 +240,8 @@ const reportMonth = (
   actual: mandatory + discretionary,
   variance: planned - (mandatory + discretionary),
   cumulative_variance: cumulative,
-  contributions,
+  funds_in: fundsIn,
+  funds_out: fundsOut,
   provisional,
 })
 
@@ -251,11 +254,11 @@ export const BUDGET_YEAR = {
   months: [
     blankReportMonth('2025-01'),
     blankReportMonth('2025-02'),
-    reportMonth('2025-03', 7500, 4200, 2800, 500, 800),
+    reportMonth('2025-03', 7500, 4200, 2800, 500, 800, -500),
     reportMonth('2025-04', 7500, 4300, 3900, -200, 500),
     reportMonth('2025-05', 7500, 3600, 2500, 1200, 0),
-    reportMonth('2025-06', 7500, 4000, 2850, 1850, 1000),
-    reportMonth('2025-07', 7500, 1500, 900, 6950, 250, true),
+    reportMonth('2025-06', 7500, 4000, 2850, 1850, 1000, -3000),
+    reportMonth('2025-07', 7500, 1500, 900, 6950, 250, 0, true),
     blankReportMonth('2025-08'),
     blankReportMonth('2025-09'),
     blankReportMonth('2025-10'),
