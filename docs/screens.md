@@ -191,12 +191,16 @@ serves them at <http://localhost:5173>.
   balance out?" view: the monthly discipline is `annual_target / 12`,
   most months land a little under, some go over, and this table is where
   that assumption gets checked. A year picker (data-start's year through
-  the current one) over a 12-row table — month, planned, actual,
-  variance, cumulative variance — every figure from
-  `GET /api/budget-year`, variances signed and colored (green under
-  plan, red over). Months outside the data render blank, never $0, so a
-  partial year is visibly partial, and the in-progress month is marked
-  "· in progress" since it undercounts until it closes.
+  the current one) over a 12-row table — month, planned, mandatory,
+  discretionary, actual (semibold, the sum of the split: consumption-basis
+  spending, fund-funded one-offs included), variance, cumulative
+  variance, and a muted To funds column holding the month's fund
+  contributions apart, so money parked into funds stays visible without
+  reading as spending — every figure from `GET /api/budget-year`,
+  variances signed and colored (green under plan, red over). Months
+  outside the data render blank, never $0, so a partial year is visibly
+  partial, and the in-progress month is marked "· in progress" since it
+  undercounts until it closes.
 - **Funds & goals** (<http://localhost:5173/funds>) — sinking funds and
   dated goals as one concept, in a single card: a header with the total
   parked and the "notes auto-calculate" hint, the dashed **+ New fund or
@@ -388,13 +392,15 @@ serves them at <http://localhost:5173>.
   brackets), and the dark append-only data-model note pointing at
   `docs/design/schema.sql`. The Envelopes card manages the spending
   categories: each envelope's emoji, name, and current planned amount
-  with a per-row Edit covering all three (the name and emoji revise the
-  row in place; a changed planned amount appends an effective-dated
-  plan revision — only what actually changed is sent), a per-row
-  Archive that soft-removes the envelope while its plans and spending
-  history keep counting, and an add form (name, a curated emoji select,
-  $ / month) that creates the category with its initial plan — new
-  envelopes appear in Safe-to-spend immediately. Below the envelopes,
+  with a per-row Edit covering those plus a Mandatory checkbox — spend
+  that can't be cut vs discretionary, the axis the Budget report splits
+  real spending on (the name, emoji, and flag revise the row in place; a
+  changed planned amount appends an effective-dated plan revision — only
+  what actually changed is sent), a per-row Archive that soft-removes
+  the envelope while its plans and spending history keep counting, and
+  an add form (name, a curated emoji select, $ / month, the same
+  Mandatory checkbox) that creates the category with its initial plan —
+  new envelopes appear in Safe-to-spend immediately. Below the envelopes,
   the Quick links card manages the Ledger's institution URLs: label and
   URL rows with a per-row Edit and a Delete — a true delete, since a
   link has no history to keep — an add form, and the same drag-handle

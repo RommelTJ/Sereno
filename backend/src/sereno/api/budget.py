@@ -37,26 +37,31 @@ class Category(BaseModel):
     id: int
     name: str
     emoji: str | None
-    is_fixed: bool
+    is_mandatory: bool
     planned: float
 
 
 class CategoryCreate(BaseModel):
     """effective_month dates the initial plan row; it defaults to the current
-    month. planned may be 0 — an envelope can exist before it's funded."""
+    month. planned may be 0 — an envelope can exist before it's funded.
+    is_mandatory marks spend that can't be cut (Groceries, Mortgage…) — the
+    axis the budget report splits real spending on."""
 
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     emoji: str | None = None
     planned: float = Field(ge=0)
     effective_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
+    is_mandatory: bool = False
 
 
 class CategoryUpdate(BaseModel):
-    """The rename body — name and emoji replace the stored values (a null
-    or omitted emoji clears it). planned stays on the /plan endpoint."""
+    """The rename body — name, emoji, and the mandatory flag replace the
+    stored values (a null or omitted emoji clears it; an omitted flag
+    reads false). planned stays on the /plan endpoint."""
 
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     emoji: str | None = None
+    is_mandatory: bool = False
 
 
 class CategoryPlanCreate(BaseModel):
@@ -201,9 +206,12 @@ class BudgetMonth(BaseModel):
 class BudgetYearMonth(BaseModel):
     month: str
     planned: float | None
+    mandatory: float | None
+    discretionary: float | None
     actual: float | None
     variance: float | None
     cumulative_variance: float | None
+    contributions: float | None
     provisional: bool
 
 
@@ -222,7 +230,7 @@ def _require(db: sqlite3.Connection, table: str, row_id: int | None, label: str)
 
 def _category(db: sqlite3.Connection, category_id: int, month: str) -> Category:
     row = db.execute(
-        "SELECT c.id, c.name, c.emoji, c.is_fixed,"
+        "SELECT c.id, c.name, c.emoji, c.is_mandatory,"
         " COALESCE((SELECT p.planned FROM category_plan p"
         "           WHERE p.category_id = c.id AND p.effective_month <= ?"
         "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned"
@@ -235,7 +243,7 @@ def _category(db: sqlite3.Connection, category_id: int, month: str) -> Category:
 @router.get("/categories")
 def list_categories(db: Db, month: Month = None) -> list[Category]:
     rows = db.execute(
-        "SELECT c.id, c.name, c.emoji, c.is_fixed,"
+        "SELECT c.id, c.name, c.emoji, c.is_mandatory,"
         " COALESCE((SELECT p.planned FROM category_plan p"
         "           WHERE p.category_id = c.id AND p.effective_month <= ?"
         "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned"
@@ -254,9 +262,9 @@ def create_category(category: CategoryCreate, db: Db) -> Category:
     if duplicate:
         raise HTTPException(status_code=409, detail=f"category {category.name!r} exists")
     cursor = db.execute(
-        "INSERT INTO category (name, emoji, sort_order)"
-        " VALUES (?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM category))",
-        (category.name, category.emoji),
+        "INSERT INTO category (name, emoji, is_mandatory, sort_order)"
+        " VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM category))",
+        (category.name, category.emoji, category.is_mandatory),
     )
     category_id = cursor.lastrowid
     db.execute(
@@ -265,7 +273,7 @@ def create_category(category: CategoryCreate, db: Db) -> Category:
     )
     db.commit()
     row = db.execute(
-        "SELECT id, name, emoji, is_fixed FROM category WHERE id = ?", (category_id,)
+        "SELECT id, name, emoji, is_mandatory FROM category WHERE id = ?", (category_id,)
     ).fetchone()
     return Category(**dict(row), planned=category.planned)
 
@@ -307,8 +315,8 @@ def update_category(category_id: int, update: CategoryUpdate, db: Db) -> Categor
     if duplicate:
         raise HTTPException(status_code=409, detail=f"category {update.name!r} exists")
     db.execute(
-        "UPDATE category SET name = ?, emoji = ? WHERE id = ?",
-        (update.name, update.emoji, category_id),
+        "UPDATE category SET name = ?, emoji = ?, is_mandatory = ? WHERE id = ?",
+        (update.name, update.emoji, update.is_mandatory, category_id),
     )
     db.commit()
     return _category(db, category_id, _current_month())
@@ -759,10 +767,18 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     """One row per month: planned (annual_target / 12 from the spend plan
     effective for that month — the latest effective_date on or before the
     month's end, so a mid-year revision splits the year) vs actual — the
-    month's discretionary spending plus its monthly_plan/top_up fund
-    contributions, the money-leaving-the-spendable-pool definition the
-    Safe-to-spend headline uses — with the variance (positive = under plan)
-    and its within-year running total.
+    month's spending on a consumption basis: every expense line, paid from
+    the spendable pool or drawn from a fund alike — with the variance
+    (positive = under plan) and its within-year running total. actual
+    splits by the line's category flag into mandatory (the spend that
+    can't be cut) and discretionary — everything else, uncategorized
+    lines included, since a line only lands on the mandatory side by
+    saying so. Fund
+    contributions are transfers, not spending, so the monthly_plan/top_up
+    sum rides apart as contributions (a release reads negative), where a
+    fund restoration or windfall park can't inflate the spending story.
+    Safe-to-spend keeps its money-leaving-the-pool definition; only the
+    report reads consumption.
 
     Months outside data-start → the current month are entirely null — the
     app cannot distinguish "no data" from "spent nothing", so a partial
@@ -775,10 +791,18 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     current = _current_month()
     data_start = db.execute("SELECT MIN(budget_month) FROM expense_line").fetchone()[0]
 
+    # Split at the line's category: COALESCE sends the uncategorized —
+    # most fund-funded one-offs — to the discretionary side.
     spent = {
-        row["month"]: row["total_spent"]
+        row["month"]: (row["mandatory"], row["discretionary"])
         for row in db.execute(
-            "SELECT month, total_spent FROM v_budget_month WHERE month LIKE ?",
+            "SELECT e.budget_month AS month,"
+            " SUM(CASE WHEN COALESCE(c.is_mandatory, 0) = 1 THEN e.amount ELSE 0 END)"
+            " AS mandatory,"
+            " SUM(CASE WHEN COALESCE(c.is_mandatory, 0) = 0 THEN e.amount ELSE 0 END)"
+            " AS discretionary"
+            " FROM expense_line e LEFT JOIN category c ON c.id = e.category_id"
+            " WHERE e.budget_month LIKE ? GROUP BY e.budget_month",
             (f"{target_year:04d}-%",),
         )
     }
@@ -805,9 +829,12 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
                 BudgetYearMonth(
                     month=month,
                     planned=None,
+                    mandatory=None,
+                    discretionary=None,
                     actual=None,
                     variance=None,
                     cumulative_variance=None,
+                    contributions=None,
                     provisional=False,
                 )
             )
@@ -820,7 +847,8 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
             ),
             None,
         )
-        actual = to_dollars(spent.get(month, 0) + contributed.get(month, 0))
+        mandatory, discretionary = spent.get(month, (0, 0))
+        actual = to_dollars(mandatory + discretionary)
         variance = planned - actual if planned is not None else None
         if variance is not None:
             cumulative += variance
@@ -828,9 +856,12 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
             BudgetYearMonth(
                 month=month,
                 planned=planned,
+                mandatory=to_dollars(mandatory),
+                discretionary=to_dollars(discretionary),
                 actual=actual,
                 variance=variance,
                 cumulative_variance=cumulative if variance is not None else None,
+                contributions=to_dollars(contributed.get(month, 0)),
                 provisional=month == current,
             )
         )

@@ -4,6 +4,30 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.18.0 — The budget report reads consumption, not cash flow, and
+splits it into mandatory and discretionary. Until now the report's
+actual used the Safe-to-spend definition — discretionary lines plus
+every monthly-plan and top-up fund contribution — so a fund restored
+after a draw, a windfall parked into a goal, or an extra savings top-up
+all read as spending; in a real month more than half the reported actual
+was transfers. actual now sums the month's expense lines by budget
+month, fund-funded one-offs included, and the monthly-plan/top-up sum
+rides apart in a new `contributions` field — a muted To funds column —
+where parked money stays visible without inflating the spending story.
+Safe-to-spend keeps its money-leaving-the-pool definition; only the
+report changes.
+
+Real spending further splits by a new settable category flag: migration
+0019 renames the dormant `category.is_fixed` — designed for a fixed-bill
+auto-fill that was never built, never settable through the API, and so 0
+on every row — to `is_mandatory`: Groceries and Mortgage can't be cut,
+everything else can. The flag rides on POST/PUT `/api/categories` and a
+Mandatory checkbox on the Settings envelope row edit and add form, and
+the report's `mandatory` and `discretionary` columns sum to actual, with
+uncategorized lines — most fund-funded one-offs — counting
+discretionary, since a line only lands on the mandatory side by saying
+so (issue #154).
+
 v3.17.0 — Income can draw from a fund, so funding a month out of a
 sinking fund is one action. `POST /api/income` takes an optional
 `drawn_from_fund_id` and appends the paired `'spend'` fund entry in the

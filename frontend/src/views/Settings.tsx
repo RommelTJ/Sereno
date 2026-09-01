@@ -729,11 +729,16 @@ function EnvelopeRow({
 }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [values, setValues] = useState({ name: '', emoji: '', planned: '' })
+  const [values, setValues] = useState({
+    name: '',
+    emoji: '',
+    planned: '',
+    mandatory: false,
+  })
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: category.id })
 
-  const set = (key: keyof typeof values) => (value: string) =>
+  const set = (key: 'name' | 'emoji' | 'planned') => (value: string) =>
     setValues((current) => ({ ...current, [key]: value }))
 
   const startEditing = () => {
@@ -741,6 +746,7 @@ function EnvelopeRow({
       name: category.name,
       emoji: category.emoji ?? '',
       planned: String(category.planned),
+      mandatory: category.is_mandatory,
     })
     setEditing(true)
   }
@@ -786,6 +792,21 @@ function EnvelopeRow({
             value={values.planned}
             onChange={set('planned')}
           />
+          <label htmlFor={`envelope-mandatory-${category.id}`} className="block">
+            <FieldLabel text="Mandatory" />
+            <input
+              id={`envelope-mandatory-${category.id}`}
+              type="checkbox"
+              checked={values.mandatory}
+              onChange={(event) =>
+                setValues((current) => ({
+                  ...current,
+                  mandatory: event.target.checked,
+                }))
+              }
+              className="mt-3 block size-4 accent-accent"
+            />
+          </label>
           <SaveButton disabled={saving} onClick={() => void save()} />
         </div>
       ) : (
@@ -828,10 +849,15 @@ function EnvelopesCard({
   onArchive: (categoryId: number) => Promise<void>
   onReorder: (ids: number[]) => Promise<void>
 }) {
-  const [values, setValues] = useState({ name: '', emoji: '', planned: '' })
+  const [values, setValues] = useState({
+    name: '',
+    emoji: '',
+    planned: '',
+    mandatory: false,
+  })
   const [adding, setAdding] = useState(false)
 
-  const set = (key: keyof typeof values) => (value: string) =>
+  const set = (key: 'name' | 'emoji' | 'planned') => (value: string) =>
     setValues((current) => ({ ...current, [key]: value }))
 
   const add = async () => {
@@ -842,7 +868,7 @@ function EnvelopesCard({
     setAdding(true)
     try {
       await onAdd(input)
-      setValues({ name: '', emoji: '', planned: '' })
+      setValues({ name: '', emoji: '', planned: '', mandatory: false })
     } finally {
       setAdding(false)
     }
@@ -874,7 +900,7 @@ function EnvelopesCard({
           ))}
         </SortableRows>
       </div>
-      <div className="mt-4 grid grid-cols-1 items-end gap-[11px] border-t border-hairline-2 pt-4 sm:grid-cols-[1fr_1fr_1fr_auto]">
+      <div className="mt-4 grid grid-cols-1 items-end gap-[11px] border-t border-hairline-2 pt-4 sm:grid-cols-[1fr_1fr_1fr_auto_auto]">
         <EditField
           id="envelope-name"
           label="Name"
@@ -893,6 +919,21 @@ function EnvelopesCard({
           value={values.planned}
           onChange={set('planned')}
         />
+        <label htmlFor="envelope-mandatory" className="block">
+          <FieldLabel text="Mandatory" />
+          <input
+            id="envelope-mandatory"
+            type="checkbox"
+            checked={values.mandatory}
+            onChange={(event) =>
+              setValues((current) => ({
+                ...current,
+                mandatory: event.target.checked,
+              }))
+            }
+            className="mt-3 block size-4 accent-accent"
+          />
+        </label>
         <button
           type="button"
           disabled={adding}

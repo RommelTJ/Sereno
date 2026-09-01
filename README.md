@@ -1,6 +1,6 @@
 # Sereno
 
-**v3.17.0**
+**v3.18.0**
 
 A private, LAN-only personal finance tracker for two people. No auth, no cloud, no bank
 integrations — just a calm, queryable picture of your money: net worth month over month,

@@ -70,14 +70,15 @@ USD_ACCOUNTS = (
     "Mortgage",
 )
 
-# (name, emoji, planned) — all variable envelopes; plans effective 2026-01.
+# (name, emoji, planned, is_mandatory) — plans effective 2026-01. The
+# mandatory rows demonstrate the budget report's can't-cut split.
 CATEGORIES = [
-    ("Groceries", "🛒", 500),
-    ("Gas", "🛢️", 100),
-    ("Entertainment", "🤪", 500),
-    ("Vices", "🍻", 250),
-    ("Consumerism", "💵", 800),
-    ("Travel", "✈️", 100),
+    ("Groceries", "🛒", 500, 1),
+    ("Gas", "🛢️", 100, 1),
+    ("Entertainment", "🤪", 500, 0),
+    ("Vices", "🍻", 250, 0),
+    ("Consumerism", "💵", 800, 0),
+    ("Travel", "✈️", 100, 0),
 ]
 PLAN_EFFECTIVE_MONTH = "2026-01"
 
@@ -177,15 +178,15 @@ def seed(conn: sqlite3.Connection) -> bool:
     )
 
     conn.executemany(
-        "INSERT INTO category (name, emoji, is_fixed) VALUES (?, ?, 0)",
-        [(name, emoji) for name, emoji, _ in CATEGORIES],
+        "INSERT INTO category (name, emoji, is_mandatory) VALUES (?, ?, ?)",
+        [(name, emoji, mandatory) for name, emoji, _, mandatory in CATEGORIES],
     )
     categories = _ids_by_name(conn, "category")
     conn.executemany(
         "INSERT INTO category_plan (category_id, effective_month, planned) VALUES (?, ?, ?)",
         [
             (categories[name], PLAN_EFFECTIVE_MONTH, to_cents(planned))
-            for name, _, planned in CATEGORIES
+            for name, _, planned, _ in CATEGORIES
         ],
     )
 

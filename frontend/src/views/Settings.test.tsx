@@ -434,7 +434,7 @@ describe('Envelopes card', () => {
       id: 9,
       name: 'Housing',
       emoji: '🏠',
-      is_fixed: false,
+      is_mandatory: false,
       planned: 2_000,
     }
     const liveRoutes = {
@@ -466,6 +466,40 @@ describe('Envelopes card', () => {
       planned: 2000,
     })
     expect(within(card).getByLabelText('Name')).toHaveValue('')
+  })
+
+  it('posts a mandatory envelope when the checkbox is ticked', async () => {
+    const liveRoutes = {
+      ...routes(),
+      'POST /api/categories': {
+        id: 9,
+        name: 'Mortgage',
+        emoji: null,
+        is_mandatory: true,
+        planned: 2_000,
+      },
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const card = await screen.findByTestId('envelopes-card')
+    fireEvent.change(within(card).getByLabelText('Name'), {
+      target: { value: 'Mortgage' },
+    })
+    fireEvent.change(within(card).getByLabelText('$ / month'), {
+      target: { value: '2000' },
+    })
+    fireEvent.click(within(card).getByLabelText('Mandatory'))
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/categories')).toEqual({
+        name: 'Mortgage',
+        planned: 2000,
+        is_mandatory: true,
+      }),
+    )
+    expect(within(card).getByLabelText('Mandatory')).not.toBeChecked()
   })
 
   it('does not post a blank name or a negative amount', async () => {
@@ -535,6 +569,51 @@ describe('Envelopes card', () => {
     expect(within(rows[0]).getByLabelText('$ / month')).toHaveValue('500')
   })
 
+  it('prefills the mandatory flag in the row edit', async () => {
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    expect(within(rows[0]).getByLabelText('Mandatory')).toBeChecked()
+
+    fireEvent.click(within(rows[1]).getByRole('button', { name: 'Edit' }))
+    expect(within(rows[1]).getByLabelText('Mandatory')).not.toBeChecked()
+  })
+
+  it('puts the flag when only the mandatory toggle flips', async () => {
+    const liveRoutes: Record<string, unknown> = {
+      ...routes(),
+      'PUT /api/categories/1': {
+        id: 1,
+        name: 'Groceries',
+        emoji: '🛒',
+        is_mandatory: false,
+        planned: 500,
+      },
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(within(rows[0]).getByLabelText('Mandatory'))
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(putBody(fetchMock, '/api/categories/1')).toEqual({
+        name: 'Groceries',
+        emoji: '🛒',
+        is_mandatory: false,
+      }),
+    )
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          input === '/api/categories/1/plan' && init?.method === 'POST',
+      ),
+    ).toBe(false)
+  })
+
   it('puts the rename and posts the plan revision when all fields change', async () => {
     const liveRoutes: Record<string, unknown> = {
       ...routes(),
@@ -542,7 +621,7 @@ describe('Envelopes card', () => {
         id: 1,
         name: 'Food',
         emoji: '🍽️',
-        is_fixed: false,
+        is_mandatory: true,
         planned: 550,
       },
       'POST /api/categories/1/plan': {
@@ -583,6 +662,7 @@ describe('Envelopes card', () => {
     expect(putBody(fetchMock, '/api/categories/1')).toEqual({
       name: 'Food',
       emoji: '🍽️',
+      is_mandatory: true,
     })
     expect(postBody(fetchMock, '/api/categories/1/plan')).toEqual({
       planned: 550,
@@ -624,7 +704,7 @@ describe('Envelopes card', () => {
         id: 1,
         name: 'Food',
         emoji: '🛒',
-        is_fixed: false,
+        is_mandatory: true,
         planned: 500,
       },
     }
@@ -642,6 +722,7 @@ describe('Envelopes card', () => {
       expect(putBody(fetchMock, '/api/categories/1')).toEqual({
         name: 'Food',
         emoji: '🛒',
+        is_mandatory: true,
       }),
     )
     expect(
@@ -1735,7 +1816,7 @@ describe('Responsive layout', () => {
     const nameField = within(card).getByLabelText('Name')
     expect(nameField.closest('.grid')).toHaveClass(
       'grid-cols-1',
-      'sm:grid-cols-[1fr_1fr_1fr_auto]',
+      'sm:grid-cols-[1fr_1fr_1fr_auto_auto]',
     )
   })
 })

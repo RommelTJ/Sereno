@@ -23,7 +23,15 @@ function ReportRow({ row }: { row: BudgetYearMonth }) {
       <td className={`${cell} text-[#5b6058]`}>
         {row.planned != null && formatUsd(row.planned)}
       </td>
-      <td className={cell}>{row.actual != null && formatUsd(row.actual)}</td>
+      <td className={cell}>
+        {row.mandatory != null && formatUsd(row.mandatory)}
+      </td>
+      <td className={cell}>
+        {row.discretionary != null && formatUsd(row.discretionary)}
+      </td>
+      <td className={`${cell} font-semibold`}>
+        {row.actual != null && formatUsd(row.actual)}
+      </td>
       <td
         className={`${cell}${row.variance != null ? ` ${varianceClass(row.variance)}` : ''}`}
       >
@@ -38,6 +46,11 @@ function ReportRow({ row }: { row: BudgetYearMonth }) {
       >
         {row.cumulative_variance != null &&
           formatSignedUsd(row.cumulative_variance)}
+      </td>
+      {/* Transfers, not spending — rendered apart and muted so parked
+          money never reads as consumption. */}
+      <td className={`${cell} text-muted-2`}>
+        {row.contributions != null && formatUsd(row.contributions)}
       </td>
     </tr>
   )
@@ -94,6 +107,12 @@ function BudgetReport() {
                   Planned
                 </th>
                 <th className="px-3.5 py-2.5 text-right font-semibold">
+                  Mandatory
+                </th>
+                <th className="px-3.5 py-2.5 text-right font-semibold">
+                  Discretionary
+                </th>
+                <th className="px-3.5 py-2.5 text-right font-semibold">
                   Actual
                 </th>
                 <th className="px-3.5 py-2.5 text-right font-semibold">
@@ -101,6 +120,9 @@ function BudgetReport() {
                 </th>
                 <th className="px-3.5 py-2.5 text-right font-bold text-ink">
                   Cumulative
+                </th>
+                <th className="px-3.5 py-2.5 text-right font-semibold">
+                  To funds
                 </th>
               </tr>
             </thead>

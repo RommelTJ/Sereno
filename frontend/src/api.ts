@@ -94,12 +94,14 @@ export interface AccountClassificationInput {
 }
 
 // GET /api/categories: the category dimension with each envelope's planned
-// amount resolved for a month (default: the current one).
+// amount resolved for a month (default: the current one). is_mandatory
+// marks spend that can't be cut (Groceries, Mortgage…) — the axis the
+// budget report splits real spending on.
 export interface Category {
   id: number
   name: string
   emoji: string | null
-  is_fixed: boolean
+  is_mandatory: boolean
   planned: number
 }
 
@@ -151,16 +153,25 @@ export interface BudgetMonth {
   activity: ActivityItem[]
 }
 
-// One report row. Months outside data-start → the current month are
-// entirely null — "no data", never "spent nothing" — and the current
-// month rides along flagged provisional, since it undercounts until it
-// closes. variance is planned − actual: positive = under plan.
+// One report row. actual is consumption-basis spending — every expense
+// line, fund-funded one-offs included — split by the line's category
+// flag into mandatory (can't be cut) and discretionary (everything
+// else, uncategorized lines included); the two sum to actual. Fund
+// contributions are transfers, not spending, riding apart in
+// contributions (a release reads negative). Months outside data-start →
+// the current month are entirely null — "no data", never "spent
+// nothing" — and the current month rides along flagged provisional,
+// since it undercounts until it closes. variance is planned − actual:
+// positive = under plan.
 export interface BudgetYearMonth {
   month: string
   planned: number | null
+  mandatory: number | null
+  discretionary: number | null
   actual: number | null
   variance: number | null
   cumulative_variance: number | null
+  contributions: number | null
   provisional: boolean
 }
 
@@ -532,13 +543,15 @@ export interface IncomeUpdateInput extends IncomeInput {
 }
 
 // POST /api/categories inserts the category and its initial plan row;
-// effective_month is omitted so the plan starts this month. A duplicate
-// active name is a 409.
+// effective_month is omitted so the plan starts this month, and
+// is_mandatory is sent only when ticked — the server defaults it false.
+// A duplicate active name is a 409.
 export interface CategoryInput {
   name: string
   emoji?: string
   planned: number
   effective_month?: string
+  is_mandatory?: boolean
 }
 
 // POST /api/categories/{id}/plan appends an effective-dated revision —
@@ -549,11 +562,13 @@ export interface CategoryPlanInput {
 }
 
 // PUT /api/categories/{id} renames the dimension row in place — plans and
-// expense lines keep their history; a null emoji clears it. A name matching
-// another active category is a 409.
+// expense lines keep their history; a null emoji clears it, and the
+// mandatory flag is always sent since the server reads an omitted one as
+// false. A name matching another active category is a 409.
 export interface CategoryUpdate {
   name: string
   emoji: string | null
+  is_mandatory: boolean
 }
 
 // kind is derived server-side: a blank target_date means a sinking fund, a
