@@ -434,7 +434,7 @@ describe('Envelopes card', () => {
       id: 9,
       name: 'Housing',
       emoji: '🏠',
-      is_fixed: false,
+      is_mandatory: false,
       planned: 2_000,
     }
     const liveRoutes = {
@@ -535,6 +535,51 @@ describe('Envelopes card', () => {
     expect(within(rows[0]).getByLabelText('$ / month')).toHaveValue('500')
   })
 
+  it('prefills the mandatory flag in the row edit', async () => {
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    expect(within(rows[0]).getByLabelText('Mandatory')).toBeChecked()
+
+    fireEvent.click(within(rows[1]).getByRole('button', { name: 'Edit' }))
+    expect(within(rows[1]).getByLabelText('Mandatory')).not.toBeChecked()
+  })
+
+  it('puts the flag when only the mandatory toggle flips', async () => {
+    const liveRoutes: Record<string, unknown> = {
+      ...routes(),
+      'PUT /api/categories/1': {
+        id: 1,
+        name: 'Groceries',
+        emoji: '🛒',
+        is_mandatory: false,
+        planned: 500,
+      },
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const rows = await screen.findAllByTestId('settings-envelope-row')
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(within(rows[0]).getByLabelText('Mandatory'))
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(putBody(fetchMock, '/api/categories/1')).toEqual({
+        name: 'Groceries',
+        emoji: '🛒',
+        is_mandatory: false,
+      }),
+    )
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          input === '/api/categories/1/plan' && init?.method === 'POST',
+      ),
+    ).toBe(false)
+  })
+
   it('puts the rename and posts the plan revision when all fields change', async () => {
     const liveRoutes: Record<string, unknown> = {
       ...routes(),
@@ -542,7 +587,7 @@ describe('Envelopes card', () => {
         id: 1,
         name: 'Food',
         emoji: '🍽️',
-        is_fixed: false,
+        is_mandatory: true,
         planned: 550,
       },
       'POST /api/categories/1/plan': {
@@ -583,6 +628,7 @@ describe('Envelopes card', () => {
     expect(putBody(fetchMock, '/api/categories/1')).toEqual({
       name: 'Food',
       emoji: '🍽️',
+      is_mandatory: true,
     })
     expect(postBody(fetchMock, '/api/categories/1/plan')).toEqual({
       planned: 550,
@@ -624,7 +670,7 @@ describe('Envelopes card', () => {
         id: 1,
         name: 'Food',
         emoji: '🛒',
-        is_fixed: false,
+        is_mandatory: true,
         planned: 500,
       },
     }
@@ -642,6 +688,7 @@ describe('Envelopes card', () => {
       expect(putBody(fetchMock, '/api/categories/1')).toEqual({
         name: 'Food',
         emoji: '🛒',
+        is_mandatory: true,
       }),
     )
     expect(

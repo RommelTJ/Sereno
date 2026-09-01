@@ -94,12 +94,14 @@ export interface AccountClassificationInput {
 }
 
 // GET /api/categories: the category dimension with each envelope's planned
-// amount resolved for a month (default: the current one).
+// amount resolved for a month (default: the current one). is_mandatory
+// marks spend that can't be cut (Groceries, Mortgage…) — the axis the
+// budget report splits real spending on.
 export interface Category {
   id: number
   name: string
   emoji: string | null
-  is_fixed: boolean
+  is_mandatory: boolean
   planned: number
 }
 

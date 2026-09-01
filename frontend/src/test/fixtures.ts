@@ -267,10 +267,10 @@ export const BUDGET_YEAR = {
 // The category dimension exactly as GET /api/categories returns it: each
 // active envelope with its planned amount resolved for the month.
 export const CATEGORIES = [
-  { id: 1, name: 'Groceries', emoji: '🛒', is_fixed: false, planned: 500 },
-  { id: 2, name: 'Gas', emoji: '🛢️', is_fixed: false, planned: 100 },
-  { id: 3, name: 'Entertainment', emoji: '🤪', is_fixed: false, planned: 500 },
-  { id: 4, name: 'Travel', emoji: '✈️', is_fixed: false, planned: 0 },
+  { id: 1, name: 'Groceries', emoji: '🛒', is_mandatory: true, planned: 500 },
+  { id: 2, name: 'Gas', emoji: '🛢️', is_mandatory: false, planned: 100 },
+  { id: 3, name: 'Entertainment', emoji: '🤪', is_mandatory: false, planned: 500 },
+  { id: 4, name: 'Travel', emoji: '✈️', is_mandatory: false, planned: 0 },
 ]
 
 // Quick links exactly as GET /api/quick-links returns them, in the user's
