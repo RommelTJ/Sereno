@@ -88,12 +88,15 @@ The budget slice:
 - `GET /api/categories` — the category dimension with each envelope's planned
   amount for a month (`?month=YYYY-MM`, default the current month). Plans are
   effective-dated: the latest `category_plan` row on or before the month wins.
-  Ordered by `sort_order` then id, like accounts, and the budget month's
-  envelope list follows the same order.
+  Each row carries `is_mandatory` — spend that can't be cut (Groceries,
+  Mortgage…) vs discretionary, the axis the budget report splits real
+  spending on. Ordered by `sort_order` then id, like accounts, and the
+  budget month's envelope list follows the same order.
 - `POST /api/categories` — creates an envelope: inserts the `category` row
-  (name, emoji) plus its initial `category_plan` row (`effective_month`
-  defaults to the current month). A blank name or negative planned amount is
-  a 422; a name matching an active category (case-insensitive) is a 409.
+  (name, emoji, and an optional `is_mandatory`, default false) plus its
+  initial `category_plan` row (`effective_month` defaults to the current
+  month). A blank name or negative planned amount is a 422; a name matching
+  an active category (case-insensitive) is a 409.
 - `POST /api/categories/{id}/plan` — appends a new effective-dated plan row
   (the append-only config pattern — revisions never update in place; the
   latest row per month wins). New and revised envelopes flow into the
@@ -103,12 +106,14 @@ The budget slice:
   the exact mirror of `PUT /api/accounts/order`: `ids` must be exactly
   the active category ids, positions become `sort_order`, and new
   envelopes append at the end.
-- `PUT /api/categories/{id}` — renames an envelope's name and emoji in
-  place (a null emoji clears it). The category row is a dimension, not a
-  fact, so its identity is mutable; plans and expense lines keep their
-  history. A blank name is a 422; a name matching another active
-  category (case-insensitive) is a 409 — the check excludes the category
-  itself, so case-only renames work.
+- `PUT /api/categories/{id}` — revises an envelope's name, emoji, and
+  mandatory flag in place, a full replace (a null emoji clears it; an
+  omitted `is_mandatory` reads false, so the form always says where the
+  category stands). The category row is a dimension, not a fact, so its
+  identity is mutable; plans and expense lines keep their history. A
+  blank name is a 422; a name matching another active category
+  (case-insensitive) is a 409 — the check excludes the category itself,
+  so case-only renames work.
 - `POST /api/categories/{id}/archive` — soft remove, like account
   deactivation: flips `category.active` to 0 so the envelope drops out
   of listings and the budget-month envelope list, while its plans and
@@ -146,9 +151,9 @@ The budget slice:
   transaction, balance minus the amount — a draw exceeding the fund's
   balance is a 422 (`income draw exceeds fund balance`) that writes
   nothing, and an unknown fund a 404. Because `'spend'` entries stay out
-  of the headline, the feed, and the budget-year actual, the income row
-  remains the only mover of safe-to-spend: the gross inflow shows once
-  and the fund quietly steps down.
+  of the headline, the feed, and the budget-year transfers line, the
+  income row remains the only mover of safe-to-spend: the gross inflow
+  shows once and the fund quietly steps down.
 - `PUT /api/expenses/{id}` / `DELETE /api/expenses/{id}` — corrects or
   removes a spending line: pending charges settle (Lyft consolidates a
   day's rides into one charge, bars add tips) and typos happen, and
@@ -165,8 +170,8 @@ The budget slice:
   chain): a full reversal on delete or a funding-source change, a single
   delta on a same-fund amount edit, with the overdraw guard re-applied
   either way — a 422 writes nothing. `'spend'` entries stay out of the
-  headline, the feed, and the budget-year actual, so a correction never
-  moves safe-to-spend and nothing double-counts.
+  headline, the feed, and the budget-year transfers line, so a
+  correction never moves safe-to-spend and nothing double-counts.
 - `PUT /api/income/{id}` / `DELETE /api/income/{id}` — the same for income
   events: a full replace (an omitted title or note really clears),
   `budget_month` defaulting from the txn date, and a hard delete — the
@@ -219,19 +224,26 @@ The budget slice:
   default the current year): one row per month with `planned`
   (`annual_target / 12` from the spend plan effective for that month —
   the latest row on or before the month's end, so a mid-year revision
-  splits the year instead of repricing January), `actual` (discretionary
-  expense lines plus monthly-plan and top-up fund contributions — the
-  same money-leaving-the-spendable-pool definition as the Safe-to-spend
-  headline, so fund-funded lines never count and a release reads as
-  money back), `variance` (planned − actual, positive = under plan), and
-  `cumulative_variance`, the within-year running total. Months outside
-  data-start (the first logged expense's budget month, echoed as
-  `data_start`) → the current month are entirely null — the app cannot
-  distinguish "no data" from "spent nothing", so a partial year stays
-  visibly partial — and the current month rides along flagged
+  splits the year instead of repricing January), `actual` (the month's
+  spending on a consumption basis: every expense line by its
+  `budget_month`, fund-funded one-offs included — Safe-to-spend keeps
+  its own money-leaving-the-pool definition; only the report reads
+  consumption), `mandatory` and `discretionary` (actual split by the
+  line's category flag — mandatory is the spend that can't be cut,
+  discretionary everything else, uncategorized lines included, since a
+  line only lands on the mandatory side by saying so; the two sum to
+  actual), `variance` (planned − actual, positive = under plan),
+  `cumulative_variance`, the within-year running total, and
+  `contributions` (the calendar month's monthly-plan and top-up fund
+  entries — transfers, not spending, broken out so a fund restoration or
+  windfall park can never inflate actual; a release reads negative).
+  Months outside data-start (the first logged expense's budget month,
+  echoed as `data_start`) → the current month are entirely null — the
+  app cannot distinguish "no data" from "spent nothing", so a partial
+  year stays visibly partial — and the current month rides along flagged
   `provisional`, since it undercounts until it closes. Reading the
   report applies the monthly-plan catch-up, like the budget month, so
-  the current month's automatic funding always counts.
+  the current month's automatic funding always lands in `contributions`.
 The funds slice:
 
 - `GET /api/funds` — the active funds (sinking funds and goals: name, emoji,
@@ -300,14 +312,14 @@ The funds slice:
   everywhere else. An optional `source` switches the entry's kind:
   `'top_up'` (the default) or `'rollover'`, which assigns last month's
   leftover — the contribution is recorded identically, but the
-  headline, the activity feed, and the budget-year actual all filter
-  on `('monthly_plan', 'top_up')`, so the current month is never
+  headline, the activity feed, and the budget-year transfers line all
+  filter on `('monthly_plan', 'top_up')`, so the current month is never
   charged for money the old month already earned; any other value is
   a 422. An optional `as_of_date` (default today) lands the move in
   the calendar month it belongs to — the headline, the feed, and the
-  budget-year actual all scope fund entries by calendar month, so a
-  park recorded late charges its own month and a release dated into a
-  coming month credits that month's headline, not today's. The date
+  budget-year transfers line all scope fund entries by calendar month,
+  so a park recorded late charges its own month and a release dated into
+  a coming month credits that month's headline, not today's. The date
   may not precede the fund's latest entry (a 422): entries snapshot
   absolute balances resolved newest-first, so a mid-chain insert
   would silently drop out of the fund's balance. Due monthly-plan
