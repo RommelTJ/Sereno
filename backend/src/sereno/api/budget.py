@@ -206,6 +206,8 @@ class BudgetMonth(BaseModel):
 class BudgetYearMonth(BaseModel):
     month: str
     planned: float | None
+    mandatory: float | None
+    discretionary: float | None
     actual: float | None
     variance: float | None
     cumulative_variance: float | None
@@ -767,7 +769,11 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     month's end, so a mid-year revision splits the year) vs actual — the
     month's spending on a consumption basis: every expense line, paid from
     the spendable pool or drawn from a fund alike — with the variance
-    (positive = under plan) and its within-year running total. Fund
+    (positive = under plan) and its within-year running total. actual
+    splits by the line's category flag into mandatory (the spend that
+    can't be cut) and discretionary — everything else, uncategorized
+    lines included, since a line only lands on the mandatory side by
+    saying so. Fund
     contributions are transfers, not spending, so the monthly_plan/top_up
     sum rides apart as contributions (a release reads negative), where a
     fund restoration or windfall park can't inflate the spending story.
@@ -785,11 +791,18 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     current = _current_month()
     data_start = db.execute("SELECT MIN(budget_month) FROM expense_line").fetchone()[0]
 
+    # Split at the line's category: COALESCE sends the uncategorized —
+    # most fund-funded one-offs — to the discretionary side.
     spent = {
-        row["month"]: row["spent"]
+        row["month"]: (row["mandatory"], row["discretionary"])
         for row in db.execute(
-            "SELECT budget_month AS month, SUM(amount) AS spent"
-            " FROM expense_line WHERE budget_month LIKE ? GROUP BY budget_month",
+            "SELECT e.budget_month AS month,"
+            " SUM(CASE WHEN COALESCE(c.is_mandatory, 0) = 1 THEN e.amount ELSE 0 END)"
+            " AS mandatory,"
+            " SUM(CASE WHEN COALESCE(c.is_mandatory, 0) = 0 THEN e.amount ELSE 0 END)"
+            " AS discretionary"
+            " FROM expense_line e LEFT JOIN category c ON c.id = e.category_id"
+            " WHERE e.budget_month LIKE ? GROUP BY e.budget_month",
             (f"{target_year:04d}-%",),
         )
     }
@@ -816,6 +829,8 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
                 BudgetYearMonth(
                     month=month,
                     planned=None,
+                    mandatory=None,
+                    discretionary=None,
                     actual=None,
                     variance=None,
                     cumulative_variance=None,
@@ -832,7 +847,8 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
             ),
             None,
         )
-        actual = to_dollars(spent.get(month, 0))
+        mandatory, discretionary = spent.get(month, (0, 0))
+        actual = to_dollars(mandatory + discretionary)
         variance = planned - actual if planned is not None else None
         if variance is not None:
             cumulative += variance
@@ -840,6 +856,8 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
             BudgetYearMonth(
                 month=month,
                 planned=planned,
+                mandatory=to_dollars(mandatory),
+                discretionary=to_dollars(discretionary),
                 actual=actual,
                 variance=variance,
                 cumulative_variance=cumulative if variance is not None else None,
