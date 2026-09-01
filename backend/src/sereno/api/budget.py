@@ -767,9 +767,11 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     """One row per month: planned (annual_target / 12 from the spend plan
     effective for that month — the latest effective_date on or before the
     month's end, so a mid-year revision splits the year) vs actual — the
-    month's spending on a consumption basis: every expense line, paid from
-    the spendable pool or drawn from a fund alike — with the variance
-    (positive = under plan) and its within-year running total. actual
+    month's lifestyle spend: only the funded_from='discretionary' expense
+    lines. A fund-funded one-off's lifestyle cost was incurred as the
+    fund was saved, so its delivery-month draw stays out of actual, the
+    variance (positive = under plan), and the within-year running total —
+    parked money materializing, not this month's cost of living. actual
     splits by the line's category flag into mandatory (the spend that
     can't be cut) and discretionary — everything else, uncategorized
     lines included, since a line only lands on the mandatory side by
@@ -777,8 +779,8 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     contributions are transfers, not spending, so the monthly_plan/top_up
     sum rides apart as contributions (a release reads negative), where a
     fund restoration or windfall park can't inflate the spending story.
-    Safe-to-spend keeps its money-leaving-the-pool definition; only the
-    report reads consumption.
+    Safe-to-spend keeps its money-leaving-the-pool definition; the report
+    reads lifestyle.
 
     Months outside data-start → the current month are entirely null — the
     app cannot distinguish "no data" from "spent nothing", so a partial
@@ -791,8 +793,9 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     current = _current_month()
     data_start = db.execute("SELECT MIN(budget_month) FROM expense_line").fetchone()[0]
 
-    # Split at the line's category: COALESCE sends the uncategorized —
-    # most fund-funded one-offs — to the discretionary side.
+    # Split at the line's category: COALESCE sends uncategorized lines to
+    # the discretionary side. Fund-funded lines never enter — the filter
+    # keeps the table to lifestyle spend.
     spent = {
         row["month"]: (row["mandatory"], row["discretionary"])
         for row in db.execute(
@@ -802,7 +805,8 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
             " SUM(CASE WHEN COALESCE(c.is_mandatory, 0) = 0 THEN e.amount ELSE 0 END)"
             " AS discretionary"
             " FROM expense_line e LEFT JOIN category c ON c.id = e.category_id"
-            " WHERE e.budget_month LIKE ? GROUP BY e.budget_month",
+            " WHERE e.budget_month LIKE ? AND e.funded_from = 'discretionary'"
+            " GROUP BY e.budget_month",
             (f"{target_year:04d}-%",),
         )
     }
