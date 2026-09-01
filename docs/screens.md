@@ -192,15 +192,20 @@ serves them at <http://localhost:5173>.
   most months land a little under, some go over, and this table is where
   that assumption gets checked. A year picker (data-start's year through
   the current one) over a 12-row table — month, planned, mandatory,
-  discretionary, actual (semibold, the sum of the split: consumption-basis
-  spending, fund-funded one-offs included), variance, cumulative
-  variance, and a muted To funds column holding the month's fund
-  contributions apart, so money parked into funds stays visible without
-  reading as spending — every figure from `GET /api/budget-year`,
-  variances signed and colored (green under plan, red over). Months
-  outside the data render blank, never $0, so a partial year is visibly
-  partial, and the in-progress month is marked "· in progress" since it
-  undercounts until it closes.
+  discretionary, actual (semibold, the sum of the split: lifestyle
+  spend, only discretionary-funded category lines — a fund-funded
+  one-off's delivery-month draw stays out, its lifestyle cost having
+  been incurred as the fund was saved), variance, and cumulative
+  variance, variances signed and colored (green under plan, red over).
+  Below it, a Funds flow table shows the same months' fund activity
+  apart from the discipline numbers: In (monthly-plan, top-up, and
+  rollover contributions; a release reads negative), Out (the net of
+  the month's fund draws, so corrections cancel), and Net, their sum —
+  saving and fund-paid spending visible and netted without reading as
+  lifestyle. Both tables come from one `GET /api/budget-year` response.
+  Months outside the data render blank in both, never $0, so a partial
+  year is visibly partial, and the in-progress month is marked
+  "· in progress" since it undercounts until it closes.
 - **Funds & goals** (<http://localhost:5173/funds>) — sinking funds and
   dated goals as one concept, in a single card: a header with the total
   parked and the "notes auto-calculate" hint, the dashed **+ New fund or
