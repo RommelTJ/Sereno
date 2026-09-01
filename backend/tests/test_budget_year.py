@@ -3,13 +3,17 @@
 planned is annual_target / 12 from the spend plan effective for each month
 (the latest effective_date on or before the month's end, so a mid-year
 revision splits the year instead of repricing January). actual is the
-month's spending on a consumption basis — every expense line, paid from
-the spendable pool or drawn from a fund alike — so a one-off paid from
-parked money still reads as money spent. Fund contributions are transfers,
-not spending: the month's monthly_plan/top_up sum rides apart as
-contributions, where a restoration or windfall park can't inflate the
-spending story. Safe-to-spend keeps its own money-leaving-the-pool
-definition; only the report changes.
+month's lifestyle spend — mandatory + discretionary category spend, only
+the funded_from='discretionary' expense lines. A fund-funded one-off's
+lifestyle cost was incurred as the fund was saved, so its delivery-month
+draw stays out of actual, the split, variance, and cumulative — parked
+money materializing, not this month's cost of living. Fund activity
+rides apart as the funds flow: funds_in sums the calendar month's
+monthly_plan, top_up, and rollover contributions (a release reads
+negative), and funds_out nets its 'spend'-source entries, so
+compensating corrections cancel and an edit or delete never distorts
+the flow. One response feeds both tables. Safe-to-spend keeps its own
+money-leaving-the-pool definition; only the report changes.
 """
 
 from datetime import date
@@ -125,7 +129,7 @@ class TestBudgetYearMonths:
         assert months[0]["variance"] is None
         assert months[0]["actual"] == 100.0
 
-    def test_actual_counts_expense_lines_never_fund_contributions(self, client):
+    def test_actual_counts_category_lines_never_fund_flows(self, client):
         insert_spend_plan("2024-12-01", 90000)
         insert_expense("2025-03", 4000)
         insert_expense("2025-03", 1200)
@@ -134,53 +138,81 @@ class TestBudgetYearMonths:
         insert_fund_entry(fund_id, "2025-03-20", 800, 300, "top_up")
         months = get_months(client, 2025)
         assert months[2]["actual"] == 5200.0  # 4000 + 1200; transfers stay out
-        assert months[2]["contributions"] == 800.0  # 500 + 300, its own line
+        assert months[2]["funds_in"] == 800.0  # 500 + 300, the flow's own table
         assert months[2]["variance"] == 2300.0  # 7500 planned − 5200 actual
+        assert "contributions" not in months[2]  # replaced by the flow fields
 
-    def test_fund_funded_expenses_count_and_their_drawdowns_do_not(self, client):
-        # Consumption basis: a one-off paid from parked money is real
-        # spending, while the paired 'spend' drawdown row is its transfer
-        # half and never counts anywhere.
+    def test_fund_funded_expenses_leave_actual(self, client):
+        # Lifestyle basis: a one-off paid from parked money incurred its
+        # lifestyle cost as the fund was saved, so the delivery-month draw
+        # stays out — only the discretionary-funded line is this month's
+        # cost of living.
         insert_spend_plan("2024-12-01", 90000)
         fund_id = insert_fund("Travel")
         insert_expense("2025-04", 900, funded_from="fund", fund_id=fund_id)
         insert_fund_entry(fund_id, "2025-04-15", 0, -900, "spend")
         insert_expense("2025-04", 250)
         months = get_months(client, 2025)
-        assert months[3]["actual"] == 1150.0
-        assert months[3]["contributions"] == 0.0
+        assert months[3]["actual"] == 250.0
+        assert months[3]["variance"] == 7250.0
 
     def test_hand_entered_fund_rows_never_count(self, client):
-        # A NULL-source entry is a balance restatement, not a contribution.
+        # A NULL-source entry is a balance restatement, not a flow.
         insert_spend_plan("2024-12-01", 90000)
         fund_id = insert_fund("Travel")
         insert_fund_entry(fund_id, "2025-05-10", 900, 900, None)
         insert_expense("2025-05", 1000)
         months = get_months(client, 2025)
         assert months[4]["actual"] == 1000.0
-        assert months[4]["contributions"] == 0.0
+        assert months[4]["funds_in"] == 0.0
+        assert months[4]["funds_out"] == 0.0
 
-    def test_a_release_moves_contributions_never_actual(self, client):
+    def test_a_release_reads_negative_in_funds_in_never_actual(self, client):
         insert_spend_plan("2024-12-01", 90000)
         fund_id = insert_fund("Travel")
         insert_fund_entry(fund_id, "2025-05-10", 400, -200, "top_up")
         insert_expense("2025-05", 1000)
         months = get_months(client, 2025)
         assert months[4]["actual"] == 1000.0
-        assert months[4]["contributions"] == -200.0
+        assert months[4]["funds_in"] == -200.0
 
-    def test_rollover_entries_stay_out_of_the_report(self, client):
-        # The old month already showed its leftover as positive variance;
-        # counting the rollover as new-month outflow would re-count the
-        # same dollars — locked in here rather than left incidental to the
-        # ('monthly_plan', 'top_up') filter.
+    def test_a_rollover_lands_in_funds_in_never_actual(self, client):
+        # Leftover money being given a job is saving like any other
+        # contribution: it joins the flow's In column, apart from the
+        # plan-vs-actual discipline where it could re-count the old
+        # month's leftover.
         insert_spend_plan("2024-12-01", 90000)
         fund_id = insert_fund("Travel")
         insert_fund_entry(fund_id, "2025-05-10", 900, 900, "rollover")
         insert_expense("2025-05", 1000)
         months = get_months(client, 2025)
         assert months[4]["actual"] == 1000.0
-        assert months[4]["contributions"] == 0.0
+        assert months[4]["funds_in"] == 900.0
+
+    def test_funds_out_nets_the_months_spend_entries(self, client):
+        # Out is parked money materializing — the draw rides signed
+        # negative in the flow, never in actual.
+        insert_spend_plan("2024-12-01", 90000)
+        fund_id = insert_fund("Emergency")
+        insert_expense("2025-06", 3000, funded_from="fund", fund_id=fund_id)
+        insert_fund_entry(fund_id, "2025-06-15", 0, -3000, "spend")
+        insert_expense("2025-06", 250)
+        months = get_months(client, 2025)
+        assert months[5]["funds_out"] == -3000.0
+        assert months[5]["funds_in"] == 0.0
+        assert months[5]["actual"] == 250.0
+
+    def test_compensating_spend_corrections_cancel_in_funds_out(self, client):
+        # An expense edit or delete appends a positive 'spend' correction;
+        # netting keeps the flow at what actually left the funds.
+        insert_spend_plan("2024-12-01", 90000)
+        insert_expense("2025-06", 100)
+        fund_id = insert_fund("Emergency")
+        insert_fund_entry(fund_id, "2025-06-10", 0, -900, "spend")
+        insert_fund_entry(fund_id, "2025-06-12", 900, 900, "spend")
+        insert_fund_entry(fund_id, "2025-06-20", 400, -500, "spend")
+        months = get_months(client, 2025)
+        assert months[5]["funds_out"] == -500.0
 
     def test_cumulative_variance_runs_across_the_year(self, client):
         insert_spend_plan("2024-12-01", 90000)
@@ -205,7 +237,8 @@ class TestBudgetYearCoverage:
             assert row["actual"] is None
             assert row["variance"] is None
             assert row["cumulative_variance"] is None
-            assert row["contributions"] is None
+            assert row["funds_in"] is None
+            assert row["funds_out"] is None
         assert months[2]["actual"] == 7000.0
 
     def test_cumulative_variance_starts_at_data_start(self, client):
@@ -224,7 +257,7 @@ class TestBudgetYearCoverage:
         body = client.get("/api/budget-year", params={"year": 2025}).json()
         assert body["data_start"] is None
         assert all(
-            row["planned"] is None and row["actual"] is None and row["contributions"] is None
+            row["planned"] is None and row["actual"] is None and row["funds_in"] is None
             for row in body["months"]
         )
 
@@ -251,7 +284,8 @@ class TestBudgetYearCoverage:
             row["planned"] is None
             and row["actual"] is None
             and row["variance"] is None
-            and row["contributions"] is None
+            and row["funds_in"] is None
+            and row["funds_out"] is None
             for row in future
         )
 
@@ -260,13 +294,16 @@ class TestBudgetYearCoverage:
         insert_expense("2025-01", 100)
         months = get_months(client, 2025)
         assert months[1]["actual"] == 0.0  # February: covered, nothing logged
-        assert months[1]["contributions"] == 0.0
+        assert months[1]["funds_in"] == 0.0
+        assert months[1]["funds_out"] == 0.0
 
 
 class TestBudgetYearSplit:
     """actual split by the category's flag: mandatory is the spend that
-    can't be cut, discretionary everything else — uncategorized lines
-    included, since a line only lands on the mandatory side by saying so."""
+    can't be cut, discretionary everything else — uncategorized
+    discretionary-funded lines included, since a line only lands on the
+    mandatory side by saying so. Fund-funded lines leave the split with
+    actual; the flag never pulls a draw back in."""
 
     def test_expenses_split_by_their_categorys_flag(self, client):
         insert_spend_plan("2024-12-01", 90000)
@@ -286,18 +323,19 @@ class TestBudgetYearSplit:
         assert months[2]["mandatory"] == 0.0
         assert months[2]["discretionary"] == 800.0
 
-    def test_a_fund_funded_line_follows_its_category(self, client):
-        # A categorized one-off lands on its category's side; without a
-        # category the draw reads discretionary like any unclassified line.
+    def test_a_fund_funded_line_leaves_the_split_even_categorized(self, client):
+        # Fund-funded lines leave the table entirely — a mandatory
+        # category never pulls a draw back into the split.
         insert_spend_plan("2024-12-01", 90000)
         repairs = insert_category("Home repairs", is_mandatory=1)
         fund_id = insert_fund("Emergency")
         insert_expense("2025-04", 2000, funded_from="fund", fund_id=fund_id, category_id=repairs)
         insert_expense("2025-04", 900, funded_from="fund", fund_id=fund_id)
+        insert_expense("2025-04", 300, category_id=repairs)
         months = get_months(client, 2025)
-        assert months[3]["mandatory"] == 2000.0
-        assert months[3]["discretionary"] == 900.0
-        assert months[3]["actual"] == 2900.0
+        assert months[3]["mandatory"] == 300.0
+        assert months[3]["discretionary"] == 0.0
+        assert months[3]["actual"] == 300.0
 
     def test_the_split_is_null_outside_coverage_and_zero_on_an_empty_month(self, client):
         insert_spend_plan("2024-12-01", 90000)

@@ -11,15 +11,21 @@ import { formatUsd } from '../ledger.ts'
 
 const cell = 'px-3.5 py-[11px] text-right'
 
+function MonthCell({ row }: { row: BudgetYearMonth }) {
+  return (
+    <td className="px-3.5 py-[11px] text-left font-semibold">
+      {monthLabel(row.month)}
+      {row.provisional && (
+        <span className="font-medium text-muted-2"> · in progress</span>
+      )}
+    </td>
+  )
+}
+
 function ReportRow({ row }: { row: BudgetYearMonth }) {
   return (
     <tr data-testid="report-row" className="border-b border-hairline-2">
-      <td className="px-3.5 py-[11px] text-left font-semibold">
-        {monthLabel(row.month)}
-        {row.provisional && (
-          <span className="font-medium text-muted-2"> · in progress</span>
-        )}
-      </td>
+      <MonthCell row={row} />
       <td className={`${cell} text-[#5b6058]`}>
         {row.planned != null && formatUsd(row.planned)}
       </td>
@@ -47,10 +53,25 @@ function ReportRow({ row }: { row: BudgetYearMonth }) {
         {row.cumulative_variance != null &&
           formatSignedUsd(row.cumulative_variance)}
       </td>
-      {/* Transfers, not spending — rendered apart and muted so parked
-          money never reads as consumption. */}
-      <td className={`${cell} text-muted-2`}>
-        {row.contributions != null && formatUsd(row.contributions)}
+    </tr>
+  )
+}
+
+function FundsRow({ row }: { row: BudgetYearMonth }) {
+  // Net = In + Out, derived here — the API carries only the components.
+  const net =
+    row.funds_in != null && row.funds_out != null
+      ? row.funds_in + row.funds_out
+      : null
+  return (
+    <tr data-testid="funds-row" className="border-b border-hairline-2">
+      <MonthCell row={row} />
+      <td className={cell}>{row.funds_in != null && formatUsd(row.funds_in)}</td>
+      <td className={cell}>
+        {row.funds_out != null && formatUsd(row.funds_out)}
+      </td>
+      <td className={`${cell} font-semibold`}>
+        {net != null && formatUsd(net)}
       </td>
     </tr>
   )
@@ -74,7 +95,7 @@ function BudgetReport() {
   }
 
   return (
-    <div data-testid="view-budget-report">
+    <div data-testid="view-budget-report" className="flex flex-col gap-5">
       <section className="overflow-hidden rounded-card border border-card-border bg-card">
         <div className="flex items-center justify-between gap-3 border-b border-hairline px-5.5 py-4.5">
           <h2 className="text-sm font-bold">
@@ -121,14 +142,43 @@ function BudgetReport() {
                 <th className="px-3.5 py-2.5 text-right font-bold text-ink">
                   Cumulative
                 </th>
-                <th className="px-3.5 py-2.5 text-right font-semibold">
-                  To funds
-                </th>
               </tr>
             </thead>
             <tbody>
               {report?.months.map((row) => (
                 <ReportRow key={row.month} row={row} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {/* Saving and fund-paid spending, visible and netted — apart from
+          the discipline numbers above, where a delivery-month draw would
+          read as a blown month. */}
+      <section className="overflow-hidden rounded-card border border-card-border bg-card">
+        <div className="border-b border-hairline px-5.5 py-4.5">
+          <h2 className="text-sm font-bold">
+            Funds flow{' '}
+            <span className="font-medium text-muted-2">
+              · money parked into and drawn from funds
+            </span>
+          </h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="num w-full border-collapse text-[12.5px] whitespace-nowrap">
+            <thead>
+              <tr className="bg-[#faf8f3] text-muted-2">
+                <th className="px-3.5 py-2.5 text-left font-semibold">Month</th>
+                <th className="px-3.5 py-2.5 text-right font-semibold">In</th>
+                <th className="px-3.5 py-2.5 text-right font-semibold">Out</th>
+                <th className="px-3.5 py-2.5 text-right font-bold text-ink">
+                  Net
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {report?.months.map((row) => (
+                <FundsRow key={row.month} row={row} />
               ))}
             </tbody>
           </table>

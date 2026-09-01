@@ -19,18 +19,24 @@ describe('Budget report table', () => {
     expect(within(march).getAllByText('+$500.00')).toHaveLength(2)
   })
 
-  it('splits actual into mandatory and discretionary with transfers apart', async () => {
+  it('splits actual into mandatory and discretionary', async () => {
     stubApi({ '/api/budget-year': BUDGET_YEAR })
     render(<BudgetReport />)
 
     const rows = await screen.findAllByTestId('report-row')
     expect(screen.getByText('Mandatory')).toBeInTheDocument()
     expect(screen.getByText('Discretionary')).toBeInTheDocument()
-    expect(screen.getByText('To funds')).toBeInTheDocument()
     const march = rows[2]
     expect(within(march).getByText('$4,200.00')).toBeInTheDocument()
     expect(within(march).getByText('$2,800.00')).toBeInTheDocument()
-    expect(within(march).getByText('$800.00')).toBeInTheDocument()
+  })
+
+  it('keeps fund flows out of the plan vs. actual table', async () => {
+    stubApi({ '/api/budget-year': BUDGET_YEAR })
+    render(<BudgetReport />)
+
+    await screen.findAllByTestId('report-row')
+    expect(screen.queryByText('To funds')).not.toBeInTheDocument()
   })
 
   it('colors an over-plan variance red and an under-plan one green', async () => {
@@ -62,6 +68,42 @@ describe('Budget report table', () => {
     expect(within(rows[6]).getByText(/in progress/)).toBeInTheDocument()
     const marked = rows.filter((row) => within(row).queryByText(/in progress/))
     expect(marked).toHaveLength(1)
+  })
+})
+
+describe('Funds flow table', () => {
+  it('renders one row per month with in, out, and net', async () => {
+    stubApi({ '/api/budget-year': BUDGET_YEAR })
+    render(<BudgetReport />)
+
+    const rows = await screen.findAllByTestId('funds-row')
+    expect(rows).toHaveLength(12)
+    expect(screen.getByText('In')).toBeInTheDocument()
+    expect(screen.getByText('Out')).toBeInTheDocument()
+    expect(screen.getByText('Net')).toBeInTheDocument()
+    const march = rows[2]
+    expect(within(march).getByText('Mar')).toBeInTheDocument()
+    expect(within(march).getByText('$800.00')).toBeInTheDocument()
+    expect(within(march).getByText('-$500.00')).toBeInTheDocument()
+    // Net = In + Out, computed client-side.
+    expect(within(march).getByText('$300.00')).toBeInTheDocument()
+  })
+
+  it('leaves months outside the data blank', async () => {
+    stubApi({ '/api/budget-year': BUDGET_YEAR })
+    render(<BudgetReport />)
+
+    const rows = await screen.findAllByTestId('funds-row')
+    expect(within(rows[0]).queryByText(/\$/)).not.toBeInTheDocument()
+    expect(within(rows[11]).queryByText(/\$/)).not.toBeInTheDocument()
+  })
+
+  it('marks the in-progress month', async () => {
+    stubApi({ '/api/budget-year': BUDGET_YEAR })
+    render(<BudgetReport />)
+
+    const rows = await screen.findAllByTestId('funds-row')
+    expect(within(rows[6]).getByText(/in progress/)).toBeInTheDocument()
   })
 })
 

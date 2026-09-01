@@ -211,7 +211,8 @@ class BudgetYearMonth(BaseModel):
     actual: float | None
     variance: float | None
     cumulative_variance: float | None
-    contributions: float | None
+    funds_in: float | None
+    funds_out: float | None
     provisional: bool
 
 
@@ -386,7 +387,8 @@ def _reverse_draw_down(db: sqlite3.Connection, fund_id: int, amount: int) -> Non
     appends, dated today: snapshots resolve newest-first, so a backdated
     entry carrying the current balance would corrupt the chain.
     'spend'-source entries stay out of the headline, the feed, and the
-    budget-year actual, so a correction never moves safe-to-spend."""
+    budget-year actual, so a correction never moves safe-to-spend — and
+    in the report's funds_out it nets against the draw it corrects."""
     db.execute(
         "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
         " VALUES (?, ?, ?, ?, 'spend')",
@@ -767,18 +769,23 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     """One row per month: planned (annual_target / 12 from the spend plan
     effective for that month — the latest effective_date on or before the
     month's end, so a mid-year revision splits the year) vs actual — the
-    month's spending on a consumption basis: every expense line, paid from
-    the spendable pool or drawn from a fund alike — with the variance
-    (positive = under plan) and its within-year running total. actual
+    month's lifestyle spend: only the funded_from='discretionary' expense
+    lines. A fund-funded one-off's lifestyle cost was incurred as the
+    fund was saved, so its delivery-month draw stays out of actual, the
+    variance (positive = under plan), and the within-year running total —
+    parked money materializing, not this month's cost of living. actual
     splits by the line's category flag into mandatory (the spend that
     can't be cut) and discretionary — everything else, uncategorized
     lines included, since a line only lands on the mandatory side by
     saying so. Fund
-    contributions are transfers, not spending, so the monthly_plan/top_up
-    sum rides apart as contributions (a release reads negative), where a
-    fund restoration or windfall park can't inflate the spending story.
-    Safe-to-spend keeps its money-leaving-the-pool definition; only the
-    report reads consumption.
+    activity rides apart as the month's funds flow: funds_in sums the
+    calendar month's monthly_plan/top_up/rollover contributions (a
+    release reads negative), funds_out nets its 'spend'-source entries —
+    netting makes compensating correction entries cancel, so an edit or
+    delete never distorts the flow — and NULL-source restatements touch
+    neither. One response feeds the plan-vs-actual table and the funds
+    table below it. Safe-to-spend keeps its money-leaving-the-pool
+    definition; the report reads lifestyle.
 
     Months outside data-start → the current month are entirely null — the
     app cannot distinguish "no data" from "spent nothing", so a partial
@@ -791,8 +798,9 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
     current = _current_month()
     data_start = db.execute("SELECT MIN(budget_month) FROM expense_line").fetchone()[0]
 
-    # Split at the line's category: COALESCE sends the uncategorized —
-    # most fund-funded one-offs — to the discretionary side.
+    # Split at the line's category: COALESCE sends uncategorized lines to
+    # the discretionary side. Fund-funded lines never enter — the filter
+    # keeps the table to lifestyle spend.
     spent = {
         row["month"]: (row["mandatory"], row["discretionary"])
         for row in db.execute(
@@ -802,15 +810,26 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
             " SUM(CASE WHEN COALESCE(c.is_mandatory, 0) = 0 THEN e.amount ELSE 0 END)"
             " AS discretionary"
             " FROM expense_line e LEFT JOIN category c ON c.id = e.category_id"
-            " WHERE e.budget_month LIKE ? GROUP BY e.budget_month",
+            " WHERE e.budget_month LIKE ? AND e.funded_from = 'discretionary'"
+            " GROUP BY e.budget_month",
             (f"{target_year:04d}-%",),
         )
     }
-    contributed = {
-        row["month"]: row["contribution"]
+    # Both flows scope by calendar month — fund_entry has no budget_month.
+    funds_in = {
+        row["month"]: row["total"]
         for row in db.execute(
-            "SELECT substr(as_of_date, 1, 7) AS month, SUM(contribution) AS contribution"
-            " FROM fund_entry WHERE source IN ('monthly_plan', 'top_up')"
+            "SELECT substr(as_of_date, 1, 7) AS month, SUM(contribution) AS total"
+            " FROM fund_entry WHERE source IN ('monthly_plan', 'top_up', 'rollover')"
+            " AND substr(as_of_date, 1, 4) = ? GROUP BY month",
+            (f"{target_year:04d}",),
+        )
+    }
+    funds_out = {
+        row["month"]: row["total"]
+        for row in db.execute(
+            "SELECT substr(as_of_date, 1, 7) AS month, SUM(contribution) AS total"
+            " FROM fund_entry WHERE source = 'spend'"
             " AND substr(as_of_date, 1, 4) = ? GROUP BY month",
             (f"{target_year:04d}",),
         )
@@ -834,7 +853,8 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
                     actual=None,
                     variance=None,
                     cumulative_variance=None,
-                    contributions=None,
+                    funds_in=None,
+                    funds_out=None,
                     provisional=False,
                 )
             )
@@ -861,7 +881,8 @@ def budget_year(db: Db, year: int | None = None) -> BudgetYear:
                 actual=actual,
                 variance=variance,
                 cumulative_variance=cumulative if variance is not None else None,
-                contributions=to_dollars(contributed.get(month, 0)),
+                funds_in=to_dollars(funds_in.get(month, 0)),
+                funds_out=to_dollars(funds_out.get(month, 0)),
                 provisional=month == current,
             )
         )

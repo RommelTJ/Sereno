@@ -4,6 +4,28 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.19.0 — The budget report reads lifestyle spend, and fund activity
+gets its own table. v3.18.0's consumption-basis actual was honest cash
+accounting but the wrong instrument for "what does my lifestyle cost,
+and is it on plan?": a goal purchase saved for over years booked
+entirely in its delivery month, so a month lived exactly on plan could
+read at several times target and wreck the variance and cumulative
+columns. actual now sums only `funded_from='discretionary'` category
+lines, still split by the mandatory flag — pre-funded spending was
+already smoothed by the fund as it was saved, and the draw is parked
+money materializing — which also retires the "uncategorized draw
+counts as discretionary" rule.
+
+Fund saving and fund spending stay on the screen, visible and netted,
+in a Funds flow table below the report: In is the calendar month's
+monthly-plan, top-up, and rollover contributions (a release reads
+negative) — rollover's first appearance in the report — Out nets the
+month's `'spend'`-source entries so compensating corrections from
+edits and deletes cancel, and Net is their sum. On the budget-year
+rows `funds_in`/`funds_out` replace `contributions`, so one response
+feeds both tables. Safe-to-spend and the guardrails' trailing-spend
+numerator keep their definitions (issue #156).
+
 v3.18.0 — The budget report reads consumption, not cash flow, and
 splits it into mandatory and discretionary. Until now the report's
 actual used the Safe-to-spend definition — discretionary lines plus

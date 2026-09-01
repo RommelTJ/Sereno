@@ -225,25 +225,30 @@ The budget slice:
   (`annual_target / 12` from the spend plan effective for that month —
   the latest row on or before the month's end, so a mid-year revision
   splits the year instead of repricing January), `actual` (the month's
-  spending on a consumption basis: every expense line by its
-  `budget_month`, fund-funded one-offs included — Safe-to-spend keeps
-  its own money-leaving-the-pool definition; only the report reads
-  consumption), `mandatory` and `discretionary` (actual split by the
-  line's category flag — mandatory is the spend that can't be cut,
-  discretionary everything else, uncategorized lines included, since a
-  line only lands on the mandatory side by saying so; the two sum to
-  actual), `variance` (planned − actual, positive = under plan),
-  `cumulative_variance`, the within-year running total, and
-  `contributions` (the calendar month's monthly-plan and top-up fund
-  entries — transfers, not spending, broken out so a fund restoration or
-  windfall park can never inflate actual; a release reads negative).
-  Months outside data-start (the first logged expense's budget month,
-  echoed as `data_start`) → the current month are entirely null — the
-  app cannot distinguish "no data" from "spent nothing", so a partial
-  year stays visibly partial — and the current month rides along flagged
-  `provisional`, since it undercounts until it closes. Reading the
-  report applies the monthly-plan catch-up, like the budget month, so
-  the current month's automatic funding always lands in `contributions`.
+  lifestyle spend: only `funded_from='discretionary'` expense lines by
+  their `budget_month` — a fund-funded one-off's lifestyle cost was
+  incurred as the fund was saved, so its delivery-month draw stays out
+  of the discipline numbers; Safe-to-spend keeps its own
+  money-leaving-the-pool definition), `mandatory` and `discretionary`
+  (actual split by the line's category flag — mandatory is the spend
+  that can't be cut, discretionary everything else, uncategorized lines
+  included, since a line only lands on the mandatory side by saying so;
+  the two sum to actual), `variance` (planned − actual, positive =
+  under plan), `cumulative_variance`, the within-year running total,
+  and the month's funds flow: `funds_in` (the calendar month's
+  monthly-plan, top-up, and rollover fund entries — a release reads
+  negative) and `funds_out` (the net of its `'spend'`-source entries,
+  so a draw's compensating correction cancels and an edit or delete
+  never distorts the flow). Hand-entered NULL-source restatements touch
+  neither flow, and one response feeds both the plan-vs-actual table
+  and the funds-flow table below it. Months outside data-start (the
+  first logged expense's budget month, echoed as `data_start`) → the
+  current month are entirely null — the app cannot distinguish "no
+  data" from "spent nothing", so a partial year stays visibly partial —
+  and the current month rides along flagged `provisional`, since it
+  undercounts until it closes. Reading the report applies the
+  monthly-plan catch-up, like the budget month, so the current month's
+  automatic funding always lands in `funds_in`.
 The funds slice:
 
 - `GET /api/funds` — the active funds (sinking funds and goals: name, emoji,
