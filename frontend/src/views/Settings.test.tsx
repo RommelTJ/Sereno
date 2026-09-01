@@ -468,6 +468,40 @@ describe('Envelopes card', () => {
     expect(within(card).getByLabelText('Name')).toHaveValue('')
   })
 
+  it('posts a mandatory envelope when the checkbox is ticked', async () => {
+    const liveRoutes = {
+      ...routes(),
+      'POST /api/categories': {
+        id: 9,
+        name: 'Mortgage',
+        emoji: null,
+        is_mandatory: true,
+        planned: 2_000,
+      },
+    }
+    const fetchMock = stubApi(liveRoutes)
+    render(<Settings />)
+
+    const card = await screen.findByTestId('envelopes-card')
+    fireEvent.change(within(card).getByLabelText('Name'), {
+      target: { value: 'Mortgage' },
+    })
+    fireEvent.change(within(card).getByLabelText('$ / month'), {
+      target: { value: '2000' },
+    })
+    fireEvent.click(within(card).getByLabelText('Mandatory'))
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add' }))
+
+    await waitFor(() =>
+      expect(postBody(fetchMock, '/api/categories')).toEqual({
+        name: 'Mortgage',
+        planned: 2000,
+        is_mandatory: true,
+      }),
+    )
+    expect(within(card).getByLabelText('Mandatory')).not.toBeChecked()
+  })
+
   it('does not post a blank name or a negative amount', async () => {
     const fetchMock = stubApi(routes())
     render(<Settings />)
