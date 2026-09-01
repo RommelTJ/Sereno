@@ -153,16 +153,18 @@ export interface BudgetMonth {
   activity: ActivityItem[]
 }
 
-// One report row. actual is consumption-basis spending — every expense
-// line, fund-funded one-offs included — split by the line's category
-// flag into mandatory (can't be cut) and discretionary (everything
-// else, uncategorized lines included); the two sum to actual. Fund
-// contributions are transfers, not spending, riding apart in
-// contributions (a release reads negative). Months outside data-start →
-// the current month are entirely null — "no data", never "spent
-// nothing" — and the current month rides along flagged provisional,
-// since it undercounts until it closes. variance is planned − actual:
-// positive = under plan.
+// One report row. actual is lifestyle spend — discretionary-funded
+// category lines only, a fund-funded one-off's delivery-month draw
+// stays out — split by the line's category flag into mandatory (can't
+// be cut) and discretionary (everything else, uncategorized lines
+// included); the two sum to actual. Fund activity rides apart as the
+// month's flow: funds_in sums the calendar month's contributions (a
+// release reads negative), funds_out nets its draws so corrections
+// cancel; the client derives Net as their sum. Months outside
+// data-start → the current month are entirely null — "no data", never
+// "spent nothing" — and the current month rides along flagged
+// provisional, since it undercounts until it closes. variance is
+// planned − actual: positive = under plan.
 export interface BudgetYearMonth {
   month: string
   planned: number | null
@@ -171,7 +173,8 @@ export interface BudgetYearMonth {
   actual: number | null
   variance: number | null
   cumulative_variance: number | null
-  contributions: number | null
+  funds_in: number | null
+  funds_out: number | null
   provisional: boolean
 }
 
