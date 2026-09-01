@@ -19,6 +19,20 @@ describe('Budget report table', () => {
     expect(within(march).getAllByText('+$500.00')).toHaveLength(2)
   })
 
+  it('splits actual into mandatory and discretionary with transfers apart', async () => {
+    stubApi({ '/api/budget-year': BUDGET_YEAR })
+    render(<BudgetReport />)
+
+    const rows = await screen.findAllByTestId('report-row')
+    expect(screen.getByText('Mandatory')).toBeInTheDocument()
+    expect(screen.getByText('Discretionary')).toBeInTheDocument()
+    expect(screen.getByText('To funds')).toBeInTheDocument()
+    const march = rows[2]
+    expect(within(march).getByText('$4,200.00')).toBeInTheDocument()
+    expect(within(march).getByText('$2,800.00')).toBeInTheDocument()
+    expect(within(march).getByText('$800.00')).toBeInTheDocument()
+  })
+
   it('colors an over-plan variance red and an under-plan one green', async () => {
     stubApi({ '/api/budget-year': BUDGET_YEAR })
     render(<BudgetReport />)

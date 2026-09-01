@@ -151,16 +151,25 @@ export interface BudgetMonth {
   activity: ActivityItem[]
 }
 
-// One report row. Months outside data-start → the current month are
-// entirely null — "no data", never "spent nothing" — and the current
-// month rides along flagged provisional, since it undercounts until it
-// closes. variance is planned − actual: positive = under plan.
+// One report row. actual is consumption-basis spending — every expense
+// line, fund-funded one-offs included — split by the line's category
+// flag into mandatory (can't be cut) and discretionary (everything
+// else, uncategorized lines included); the two sum to actual. Fund
+// contributions are transfers, not spending, riding apart in
+// contributions (a release reads negative). Months outside data-start →
+// the current month are entirely null — "no data", never "spent
+// nothing" — and the current month rides along flagged provisional,
+// since it undercounts until it closes. variance is planned − actual:
+// positive = under plan.
 export interface BudgetYearMonth {
   month: string
   planned: number | null
+  mandatory: number | null
+  discretionary: number | null
   actual: number | null
   variance: number | null
   cumulative_variance: number | null
+  contributions: number | null
   provisional: boolean
 }
 
