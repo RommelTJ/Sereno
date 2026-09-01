@@ -543,13 +543,15 @@ export interface IncomeUpdateInput extends IncomeInput {
 }
 
 // POST /api/categories inserts the category and its initial plan row;
-// effective_month is omitted so the plan starts this month. A duplicate
-// active name is a 409.
+// effective_month is omitted so the plan starts this month, and
+// is_mandatory is sent only when ticked — the server defaults it false.
+// A duplicate active name is a 409.
 export interface CategoryInput {
   name: string
   emoji?: string
   planned: number
   effective_month?: string
+  is_mandatory?: boolean
 }
 
 // POST /api/categories/{id}/plan appends an effective-dated revision —

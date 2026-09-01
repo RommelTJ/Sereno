@@ -1816,7 +1816,7 @@ describe('Responsive layout', () => {
     const nameField = within(card).getByLabelText('Name')
     expect(nameField.closest('.grid')).toHaveClass(
       'grid-cols-1',
-      'sm:grid-cols-[1fr_1fr_1fr_auto]',
+      'sm:grid-cols-[1fr_1fr_1fr_auto_auto]',
     )
   })
 })

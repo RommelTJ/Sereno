@@ -207,10 +207,13 @@ export function accountInput(
 
 // Build the POST /api/categories body, or null while the form is invalid
 // (blank name, or a planned amount that isn't a non-negative number).
+// The mandatory flag rides only when ticked — the server defaults it
+// false, like the omitted emoji.
 export function envelopeInput(values: {
   name: string
   emoji: string
   planned: string
+  mandatory: boolean
 }): CategoryInput | null {
   const name = values.name.trim()
   const planned = parsePlanned(values.planned)
@@ -220,6 +223,9 @@ export function envelopeInput(values: {
   const input: CategoryInput = { name, planned }
   if (values.emoji !== '') {
     input.emoji = values.emoji
+  }
+  if (values.mandatory) {
+    input.is_mandatory = true
   }
   return input
 }
