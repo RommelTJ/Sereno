@@ -145,8 +145,20 @@ class TestGetCategories:
         insert_plan(future_id, "2026-06", 100)
         response = client.get("/api/categories", params={"month": "2026-01"})
         assert response.json() == [
-            {"id": unplanned_id, "name": "Gifts", "emoji": None, "is_fixed": False, "planned": 0},
-            {"id": future_id, "name": "Travel", "emoji": None, "is_fixed": False, "planned": 0},
+            {
+                "id": unplanned_id,
+                "name": "Gifts",
+                "emoji": None,
+                "is_mandatory": False,
+                "planned": 0,
+            },
+            {
+                "id": future_id,
+                "name": "Travel",
+                "emoji": None,
+                "is_mandatory": False,
+                "planned": 0,
+            },
         ]
 
     def test_excludes_inactive_categories(self, client):
@@ -501,7 +513,7 @@ class TestArchiveCategory:
             "id": groceries_id,
             "name": "Groceries",
             "emoji": "🛒",
-            "is_fixed": False,
+            "is_mandatory": False,
             "planned": 500,
         }
         assert query("SELECT active FROM category") == [{"active": 0}]

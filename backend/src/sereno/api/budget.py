@@ -37,26 +37,31 @@ class Category(BaseModel):
     id: int
     name: str
     emoji: str | None
-    is_fixed: bool
+    is_mandatory: bool
     planned: float
 
 
 class CategoryCreate(BaseModel):
     """effective_month dates the initial plan row; it defaults to the current
-    month. planned may be 0 — an envelope can exist before it's funded."""
+    month. planned may be 0 — an envelope can exist before it's funded.
+    is_mandatory marks spend that can't be cut (Groceries, Mortgage…) — the
+    axis the budget report splits real spending on."""
 
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     emoji: str | None = None
     planned: float = Field(ge=0)
     effective_month: str | None = Field(None, pattern=r"^\d{4}-\d{2}$")
+    is_mandatory: bool = False
 
 
 class CategoryUpdate(BaseModel):
-    """The rename body — name and emoji replace the stored values (a null
-    or omitted emoji clears it). planned stays on the /plan endpoint."""
+    """The rename body — name, emoji, and the mandatory flag replace the
+    stored values (a null or omitted emoji clears it; an omitted flag
+    reads false). planned stays on the /plan endpoint."""
 
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     emoji: str | None = None
+    is_mandatory: bool = False
 
 
 class CategoryPlanCreate(BaseModel):
@@ -223,7 +228,7 @@ def _require(db: sqlite3.Connection, table: str, row_id: int | None, label: str)
 
 def _category(db: sqlite3.Connection, category_id: int, month: str) -> Category:
     row = db.execute(
-        "SELECT c.id, c.name, c.emoji, c.is_fixed,"
+        "SELECT c.id, c.name, c.emoji, c.is_mandatory,"
         " COALESCE((SELECT p.planned FROM category_plan p"
         "           WHERE p.category_id = c.id AND p.effective_month <= ?"
         "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned"
@@ -236,7 +241,7 @@ def _category(db: sqlite3.Connection, category_id: int, month: str) -> Category:
 @router.get("/categories")
 def list_categories(db: Db, month: Month = None) -> list[Category]:
     rows = db.execute(
-        "SELECT c.id, c.name, c.emoji, c.is_fixed,"
+        "SELECT c.id, c.name, c.emoji, c.is_mandatory,"
         " COALESCE((SELECT p.planned FROM category_plan p"
         "           WHERE p.category_id = c.id AND p.effective_month <= ?"
         "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned"
@@ -255,9 +260,9 @@ def create_category(category: CategoryCreate, db: Db) -> Category:
     if duplicate:
         raise HTTPException(status_code=409, detail=f"category {category.name!r} exists")
     cursor = db.execute(
-        "INSERT INTO category (name, emoji, sort_order)"
-        " VALUES (?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM category))",
-        (category.name, category.emoji),
+        "INSERT INTO category (name, emoji, is_mandatory, sort_order)"
+        " VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM category))",
+        (category.name, category.emoji, category.is_mandatory),
     )
     category_id = cursor.lastrowid
     db.execute(
@@ -266,7 +271,7 @@ def create_category(category: CategoryCreate, db: Db) -> Category:
     )
     db.commit()
     row = db.execute(
-        "SELECT id, name, emoji, is_fixed FROM category WHERE id = ?", (category_id,)
+        "SELECT id, name, emoji, is_mandatory FROM category WHERE id = ?", (category_id,)
     ).fetchone()
     return Category(**dict(row), planned=category.planned)
 
@@ -308,8 +313,8 @@ def update_category(category_id: int, update: CategoryUpdate, db: Db) -> Categor
     if duplicate:
         raise HTTPException(status_code=409, detail=f"category {update.name!r} exists")
     db.execute(
-        "UPDATE category SET name = ?, emoji = ? WHERE id = ?",
-        (update.name, update.emoji, category_id),
+        "UPDATE category SET name = ?, emoji = ?, is_mandatory = ? WHERE id = ?",
+        (update.name, update.emoji, update.is_mandatory, category_id),
     )
     db.commit()
     return _category(db, category_id, _current_month())
