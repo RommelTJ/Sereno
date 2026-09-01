@@ -47,18 +47,25 @@ def insert_spend_plan(effective_date, annual_target):
     )
 
 
-def insert_expense(budget_month, amount, funded_from="discretionary", fund_id=None):
+def insert_expense(
+    budget_month, amount, funded_from="discretionary", fund_id=None, category_id=None
+):
     # Dollars in, cents stored — the boundary the API keeps, so tests stay
     # in the dollars the JSON contract speaks.
     return execute(
-        "INSERT INTO expense_line (txn_date, budget_month, amount, funded_from, fund_id)"
-        " VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO expense_line (txn_date, budget_month, amount, funded_from, fund_id,"
+        " category_id) VALUES (?, ?, ?, ?, ?, ?)",
         f"{budget_month}-15",
         budget_month,
         to_cents(amount),
         funded_from,
         fund_id,
+        category_id,
     )
+
+
+def insert_category(name, is_mandatory=0):
+    return execute("INSERT INTO category (name, is_mandatory) VALUES (?, ?)", name, is_mandatory)
 
 
 def insert_fund(name):
@@ -254,3 +261,49 @@ class TestBudgetYearCoverage:
         months = get_months(client, 2025)
         assert months[1]["actual"] == 0.0  # February: covered, nothing logged
         assert months[1]["contributions"] == 0.0
+
+
+class TestBudgetYearSplit:
+    """actual split by the category's flag: mandatory is the spend that
+    can't be cut, discretionary everything else — uncategorized lines
+    included, since a line only lands on the mandatory side by saying so."""
+
+    def test_expenses_split_by_their_categorys_flag(self, client):
+        insert_spend_plan("2024-12-01", 90000)
+        groceries = insert_category("Groceries", is_mandatory=1)
+        fun = insert_category("Fun")
+        insert_expense("2025-03", 3000, category_id=groceries)
+        insert_expense("2025-03", 1200, category_id=fun)
+        months = get_months(client, 2025)
+        assert months[2]["mandatory"] == 3000.0
+        assert months[2]["discretionary"] == 1200.0
+        assert months[2]["actual"] == 4200.0
+
+    def test_an_uncategorized_line_counts_discretionary(self, client):
+        insert_spend_plan("2024-12-01", 90000)
+        insert_expense("2025-03", 800)
+        months = get_months(client, 2025)
+        assert months[2]["mandatory"] == 0.0
+        assert months[2]["discretionary"] == 800.0
+
+    def test_a_fund_funded_line_follows_its_category(self, client):
+        # A categorized one-off lands on its category's side; without a
+        # category the draw reads discretionary like any unclassified line.
+        insert_spend_plan("2024-12-01", 90000)
+        repairs = insert_category("Home repairs", is_mandatory=1)
+        fund_id = insert_fund("Emergency")
+        insert_expense("2025-04", 2000, funded_from="fund", fund_id=fund_id, category_id=repairs)
+        insert_expense("2025-04", 900, funded_from="fund", fund_id=fund_id)
+        months = get_months(client, 2025)
+        assert months[3]["mandatory"] == 2000.0
+        assert months[3]["discretionary"] == 900.0
+        assert months[3]["actual"] == 2900.0
+
+    def test_the_split_is_null_outside_coverage_and_zero_on_an_empty_month(self, client):
+        insert_spend_plan("2024-12-01", 90000)
+        insert_expense("2025-02", 100)
+        months = get_months(client, 2025)
+        assert months[0]["mandatory"] is None  # January predates the data
+        assert months[0]["discretionary"] is None
+        assert months[2]["mandatory"] == 0.0  # March: covered, nothing logged
+        assert months[2]["discretionary"] == 0.0
