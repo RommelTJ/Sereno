@@ -25,12 +25,13 @@ def execute(sql, *params):
         conn.close()
 
 
-def insert_category(name, emoji=None, is_fixed=0, active=1):
+def insert_category(name, emoji=None, active=1):
+    # The mandatory flag rides its schema default — flag flips go through
+    # the API, the only writer the app has.
     return execute(
-        "INSERT INTO category (name, emoji, is_fixed, active) VALUES (?, ?, ?, ?)",
+        "INSERT INTO category (name, emoji, active) VALUES (?, ?, ?)",
         name,
         emoji,
-        is_fixed,
         active,
     )
 
@@ -121,10 +122,10 @@ class TestGetCategories:
                 "id": groceries_id,
                 "name": "Groceries",
                 "emoji": "🛒",
-                "is_fixed": False,
+                "is_mandatory": False,
                 "planned": 500,
             },
-            {"id": gas_id, "name": "Gas", "emoji": "🛢️", "is_fixed": False, "planned": 100},
+            {"id": gas_id, "name": "Gas", "emoji": "🛢️", "is_mandatory": False, "planned": 100},
         ]
 
     def test_planned_is_the_latest_plan_effective_on_or_before_the_month(self, client):
@@ -244,11 +245,11 @@ class TestPostCategories:
         assert {k: body[k] for k in body if k != "id"} == {
             "name": "Groceries",
             "emoji": "🛒",
-            "is_fixed": False,
+            "is_mandatory": False,
             "planned": 500,
         }
-        assert query("SELECT name, emoji, is_fixed, active FROM category") == [
-            {"name": "Groceries", "emoji": "🛒", "is_fixed": 0, "active": 1}
+        assert query("SELECT name, emoji, is_mandatory, active FROM category") == [
+            {"name": "Groceries", "emoji": "🛒", "is_mandatory": 0, "active": 1}
         ]
         # Raw storage holds integer cents; dollars exist only in the JSON.
         assert query("SELECT category_id, effective_month, planned FROM category_plan") == [
@@ -267,7 +268,13 @@ class TestPostCategories:
 
         categories = client.get("/api/categories", params={"month": month}).json()
         assert categories == [
-            {"id": created["id"], "name": "Travel", "emoji": "✈️", "is_fixed": False, "planned": 100}
+            {
+                "id": created["id"],
+                "name": "Travel",
+                "emoji": "✈️",
+                "is_mandatory": False,
+                "planned": 100,
+            }
         ]
 
         budget = client.get("/api/budget-month", params={"month": month}).json()
@@ -326,6 +333,18 @@ class TestPostCategories:
         insert_category("Vices", active=0)
         response = client.post("/api/categories", json={"name": "Vices", "planned": 150})
         assert response.status_code == 201
+
+    def test_creates_a_mandatory_category(self, client):
+        # is_mandatory marks spend that can't be cut (Groceries, Mortgage…)
+        # — the axis the budget report splits real spending on. Default,
+        # locked in by the other creates' shapes: discretionary.
+        response = client.post(
+            "/api/categories",
+            json={"name": "Groceries", "planned": 500, "is_mandatory": True},
+        )
+        assert response.status_code == 201
+        assert response.json()["is_mandatory"] is True
+        assert query("SELECT is_mandatory FROM category") == [{"is_mandatory": 1}]
 
 
 class TestPostCategoryPlan:
@@ -393,7 +412,7 @@ class TestPutCategory:
             "id": groceries_id,
             "name": "Food",
             "emoji": "🍽️",
-            "is_fixed": False,
+            "is_mandatory": False,
             "planned": 500,
         }
         assert query("SELECT name, emoji FROM category") == [{"name": "Food", "emoji": "🍽️"}]
@@ -449,6 +468,27 @@ class TestPutCategory:
         gas_id = insert_category("Gas")
         response = client.put(f"/api/categories/{gas_id}", json={"name": "Vices"})
         assert response.status_code == 200
+
+    def test_sets_the_mandatory_flag(self, client):
+        gas_id = insert_category("Gas")
+        response = client.put(
+            f"/api/categories/{gas_id}", json={"name": "Gas", "is_mandatory": True}
+        )
+        assert response.status_code == 200
+        assert response.json()["is_mandatory"] is True
+        assert query("SELECT is_mandatory FROM category") == [{"is_mandatory": 1}]
+
+    def test_an_omitted_mandatory_flag_clears_it(self, client):
+        # The PUT is a full replace, like the emoji: omitted means false,
+        # so the form always says where the category stands.
+        created = client.post(
+            "/api/categories",
+            json={"name": "Groceries", "planned": 500, "is_mandatory": True},
+        ).json()
+        response = client.put(f"/api/categories/{created['id']}", json={"name": "Groceries"})
+        assert response.status_code == 200
+        assert response.json()["is_mandatory"] is False
+        assert query("SELECT is_mandatory FROM category") == [{"is_mandatory": 0}]
 
 
 class TestArchiveCategory:
