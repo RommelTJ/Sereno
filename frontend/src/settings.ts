@@ -245,11 +245,13 @@ export interface EnvelopeEdit {
 }
 
 // Build the row-edit saves — one request per thing that actually changed,
-// like assumptionsEdits: a name or emoji change PUTs the category, a
-// planned change appends a plan revision. Null while the form is invalid
-// (blank name, or a planned amount that isn't a non-negative number).
+// like assumptionsEdits: a name, emoji, or mandatory-flag change PUTs the
+// category (the flag always rides along — the server reads an omitted one
+// as false), a planned change appends a plan revision. Null while the
+// form is invalid (blank name, or a planned amount that isn't a
+// non-negative number).
 export function envelopeEdits(
-  values: { name: string; emoji: string; planned: string },
+  values: { name: string; emoji: string; planned: string; mandatory: boolean },
   category: Category,
 ): EnvelopeEdit | null {
   const name = values.name.trim()
@@ -259,8 +261,12 @@ export function envelopeEdits(
   }
   const edit: EnvelopeEdit = {}
   const emoji = values.emoji === '' ? null : values.emoji
-  if (name !== category.name || emoji !== (category.emoji ?? null)) {
-    edit.update = { name, emoji }
+  if (
+    name !== category.name ||
+    emoji !== (category.emoji ?? null) ||
+    values.mandatory !== category.is_mandatory
+  ) {
+    edit.update = { name, emoji, is_mandatory: values.mandatory }
   }
   if (planned !== category.planned) {
     edit.plan = { planned }

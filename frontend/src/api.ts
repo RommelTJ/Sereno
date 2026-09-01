@@ -560,11 +560,13 @@ export interface CategoryPlanInput {
 }
 
 // PUT /api/categories/{id} renames the dimension row in place — plans and
-// expense lines keep their history; a null emoji clears it. A name matching
-// another active category is a 409.
+// expense lines keep their history; a null emoji clears it, and the
+// mandatory flag is always sent since the server reads an omitted one as
+// false. A name matching another active category is a 409.
 export interface CategoryUpdate {
   name: string
   emoji: string | null
+  is_mandatory: boolean
 }
 
 // kind is derived server-side: a blank target_date means a sinking fund, a
