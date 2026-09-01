@@ -3,10 +3,13 @@
 planned is annual_target / 12 from the spend plan effective for each month
 (the latest effective_date on or before the month's end, so a mid-year
 revision splits the year instead of repricing January). actual is the
-month's discretionary spending plus its monthly_plan/top_up fund
-contributions — the same money-leaving-the-spendable-pool definition as
-the Safe-to-spend headline, so fund-funded expense lines never count and
-a release's negative contribution reads as money back.
+month's spending on a consumption basis — every expense line, paid from
+the spendable pool or drawn from a fund alike — so a one-off paid from
+parked money still reads as money spent. Fund contributions are transfers,
+not spending: the month's monthly_plan/top_up sum rides apart as
+contributions, where a restoration or windfall park can't inflate the
+spending story. Safe-to-spend keeps its own money-leaving-the-pool
+definition; only the report changes.
 """
 
 from datetime import date
@@ -115,7 +118,7 @@ class TestBudgetYearMonths:
         assert months[0]["variance"] is None
         assert months[0]["actual"] == 100.0
 
-    def test_actual_sums_discretionary_lines_and_fund_contributions(self, client):
+    def test_actual_counts_expense_lines_never_fund_contributions(self, client):
         insert_spend_plan("2024-12-01", 90000)
         insert_expense("2025-03", 4000)
         insert_expense("2025-03", 1200)
@@ -123,19 +126,22 @@ class TestBudgetYearMonths:
         insert_fund_entry(fund_id, "2025-03-01", 500, 500, "monthly_plan")
         insert_fund_entry(fund_id, "2025-03-20", 800, 300, "top_up")
         months = get_months(client, 2025)
-        assert months[2]["actual"] == 6000.0  # 4000 + 1200 + 500 + 300
-        assert months[2]["variance"] == 1500.0  # 7500 planned − 6000 actual
+        assert months[2]["actual"] == 5200.0  # 4000 + 1200; transfers stay out
+        assert months[2]["contributions"] == 800.0  # 500 + 300, its own line
+        assert months[2]["variance"] == 2300.0  # 7500 planned − 5200 actual
 
-    def test_fund_funded_expenses_and_their_drawdowns_stay_out_of_actual(self, client):
-        # Paid from parked money: the contributions that filled the fund
-        # already counted, and the 'spend' drawdown row never does.
+    def test_fund_funded_expenses_count_and_their_drawdowns_do_not(self, client):
+        # Consumption basis: a one-off paid from parked money is real
+        # spending, while the paired 'spend' drawdown row is its transfer
+        # half and never counts anywhere.
         insert_spend_plan("2024-12-01", 90000)
         fund_id = insert_fund("Travel")
         insert_expense("2025-04", 900, funded_from="fund", fund_id=fund_id)
         insert_fund_entry(fund_id, "2025-04-15", 0, -900, "spend")
         insert_expense("2025-04", 250)
         months = get_months(client, 2025)
-        assert months[3]["actual"] == 250.0
+        assert months[3]["actual"] == 1150.0
+        assert months[3]["contributions"] == 0.0
 
     def test_hand_entered_fund_rows_never_count(self, client):
         # A NULL-source entry is a balance restatement, not a contribution.
@@ -145,16 +151,18 @@ class TestBudgetYearMonths:
         insert_expense("2025-05", 1000)
         months = get_months(client, 2025)
         assert months[4]["actual"] == 1000.0
+        assert months[4]["contributions"] == 0.0
 
-    def test_a_release_reduces_the_months_actual(self, client):
+    def test_a_release_moves_contributions_never_actual(self, client):
         insert_spend_plan("2024-12-01", 90000)
         fund_id = insert_fund("Travel")
         insert_fund_entry(fund_id, "2025-05-10", 400, -200, "top_up")
         insert_expense("2025-05", 1000)
         months = get_months(client, 2025)
-        assert months[4]["actual"] == 800.0
+        assert months[4]["actual"] == 1000.0
+        assert months[4]["contributions"] == -200.0
 
-    def test_rollover_entries_stay_out_of_actual(self, client):
+    def test_rollover_entries_stay_out_of_the_report(self, client):
         # The old month already showed its leftover as positive variance;
         # counting the rollover as new-month outflow would re-count the
         # same dollars — locked in here rather than left incidental to the
@@ -165,6 +173,7 @@ class TestBudgetYearMonths:
         insert_expense("2025-05", 1000)
         months = get_months(client, 2025)
         assert months[4]["actual"] == 1000.0
+        assert months[4]["contributions"] == 0.0
 
     def test_cumulative_variance_runs_across_the_year(self, client):
         insert_spend_plan("2024-12-01", 90000)
@@ -189,6 +198,7 @@ class TestBudgetYearCoverage:
             assert row["actual"] is None
             assert row["variance"] is None
             assert row["cumulative_variance"] is None
+            assert row["contributions"] is None
         assert months[2]["actual"] == 7000.0
 
     def test_cumulative_variance_starts_at_data_start(self, client):
@@ -206,7 +216,10 @@ class TestBudgetYearCoverage:
         insert_spend_plan("2024-12-01", 90000)
         body = client.get("/api/budget-year", params={"year": 2025}).json()
         assert body["data_start"] is None
-        assert all(row["planned"] is None and row["actual"] is None for row in body["months"])
+        assert all(
+            row["planned"] is None and row["actual"] is None and row["contributions"] is None
+            for row in body["months"]
+        )
 
     def test_defaults_to_the_current_year_with_a_provisional_current_month(self, client):
         current = date.today().strftime("%Y-%m")
@@ -228,7 +241,10 @@ class TestBudgetYearCoverage:
         months = get_months(client, date.today().year)
         future = [row for row in months if row["month"] > current]
         assert all(
-            row["planned"] is None and row["actual"] is None and row["variance"] is None
+            row["planned"] is None
+            and row["actual"] is None
+            and row["variance"] is None
+            and row["contributions"] is None
             for row in future
         )
 
@@ -237,3 +253,4 @@ class TestBudgetYearCoverage:
         insert_expense("2025-01", 100)
         months = get_months(client, 2025)
         assert months[1]["actual"] == 0.0  # February: covered, nothing logged
+        assert months[1]["contributions"] == 0.0
