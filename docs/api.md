@@ -451,8 +451,10 @@ The sourcing slice (the second Plan engine):
 - `GET /api/sourcing` — the tax-aware withdrawal waterfall: target net
   spend minus non-portfolio income leaves a gap, filled from ETH to
   exhaustion — tax-free inside the 0% long-term-capital-gains headroom
-  (the ceiling minus taxable ordinary income, converted to sale
-  proceeds through each bucket's gain fraction), then at 15% on the
+  (the ceiling minus taxable ordinary income, plus whatever standard
+  deduction that income left unused — the 0% bracket is a
+  taxable-income threshold — converted to sale proceeds through each
+  bucket's gain fraction), then at 15% on the
   gain portion, so unwinding the concentration outranks the tax saving
   — then taxable brokerage (leftover headroom first, then 15% on the
   gain portion), then the 401(k) with
