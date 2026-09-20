@@ -277,6 +277,18 @@ class TestBands:
         banded = solve(client, year, band=f"{year_at(70)}::30000")["max_amount"]
         assert banded == as_purchase
 
+    def test_a_spend_override_scales_the_saved_schedule(self, client):
+        # The solver reads ?spend= exactly as the forecast does: alone,
+        # it scales the saved schedule by spend over the plan's target
+        # — 22,500 is half the 45,000 target, so the gapless 60,000
+        # band halves — instead of solving against an untouched plan.
+        seed_portfolio()
+        seed_config()
+        year = year_at(65)
+        save_bands(client, [{"start_year": TODAY.year, "annual_amount": 60_000}])
+        explicit = solve(client, year, spend=22_500, band=f"{TODAY.year}::30000")
+        assert solve(client, year, spend=22_500)["max_amount"] == explicit["max_amount"]
+
     def test_rejects_a_malformed_band(self, client):
         params = {"year": year_at(45), "band": "2040:2050"}
         assert client.get("/api/forecast/max-affordable", params=params).status_code == 422

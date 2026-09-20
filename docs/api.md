@@ -551,7 +551,15 @@ The forecast slice (the third Plan engine):
   each simulated year spends its covering band's amount and uncovered
   years fall back to the resolved spend, compiled in the API layer to
   zero-amount ongoing deltas so the engine never changes and
-  `unaffordable[]` semantics are untouched. Repeated
+  `unaffordable[]` semantics are untouched. `?spend=` on its own
+  means "live at this overall level", the sensitivity table's own
+  reading: the saved schedule scales by spend over the plan's
+  `annual_target` — so a schedule covering every year can't swallow
+  the override — and the echoed `bands` are the scaled ones actually
+  simulated (`GET /api/spend-bands` stays the only source for the
+  saved amounts; with no spend plan there is no ratio and the bands
+  stand as saved). Beside an explicit `band=` the amounts are literal
+  and `spend` is just the level outside the bands. Repeated
   `band=start_year:end_year:amount` params (an empty end year =
   open-ended) replace the saved schedule wholesale — a lone empty
   `band=` means explicitly flat — under exactly the validation a save
@@ -576,5 +584,6 @@ The forecast slice (the third Plan engine):
   fails downstream. Read-only like every planner endpoint: a solve is
   a pure computation, so it stays a GET. Null until the forecast's
   prerequisites exist. The solve runs against the banded plan: the
-  saved spend-band schedule applies by default, and the same `band=`
+  saved spend-band schedule applies by default — scaled by a lone
+  `?spend=` exactly as the forecast scales it — and the same `band=`
   override rides along beside the fixed `purchase=` params.

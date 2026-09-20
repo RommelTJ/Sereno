@@ -631,6 +631,44 @@ class TestSavedSchedule:
         assert body["series"] == flat["series"]
         assert body["run_out_age"] == flat["run_out_age"]
 
+    def test_a_spend_override_scales_a_gapless_saved_schedule(self, client):
+        # ?spend= alone means "live at this overall level", the
+        # sensitivity table's own reading: the saved schedule scales by
+        # spend over the plan's target — 90,000 is 2x the 45,000
+        # target, so the 60,000 band doubles — or a schedule covering
+        # every year would swallow the override whole. The echoed bands
+        # are the ones simulated.
+        seed_portfolio()
+        seed_config()
+        save_bands(client, [{"start_year": TODAY.year, "annual_amount": 60_000}])
+        explicit = client.get(
+            "/api/forecast", params={"spend": 90_000, "band": f"{TODAY.year}::120000"}
+        ).json()
+        body = client.get("/api/forecast", params={"spend": 90_000}).json()
+        assert body["series"] == explicit["series"]
+        assert body["run_out_age"] == explicit["run_out_age"]
+        assert body["balance_at_100"] == explicit["balance_at_100"]
+        assert body["bands"] == [
+            {"start_year": TODAY.year, "end_year": None, "annual_amount": 120_000.0}
+        ]
+
+    def test_a_spend_override_scales_a_gapped_saved_schedule(self, client):
+        # With gaps the whole plan still moves together: the uncovered
+        # years sit at the override and the band scales beside them.
+        seed_portfolio()
+        seed_config()
+        save_bands(
+            client,
+            [{"start_year": year_at(45), "end_year": year_at(54), "annual_amount": 60_000}],
+        )
+        explicit = client.get(
+            "/api/forecast",
+            params={"spend": 90_000, "band": f"{year_at(45)}:{year_at(54)}:120000"},
+        ).json()
+        body = client.get("/api/forecast", params={"spend": 90_000}).json()
+        assert body["series"] == explicit["series"]
+        assert body["bands"] == explicit["bands"]
+
 
 class TestBandedSensitivity:
     def test_levels_scale_the_whole_schedule(self, client):
