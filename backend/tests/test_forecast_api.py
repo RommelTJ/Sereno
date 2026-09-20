@@ -73,7 +73,7 @@ def insert_assumption(return_pct=7, inflation_pct=3, eth_growth_pct=None, stakin
     )
 
 
-def insert_tax_param(tax_year=None, ltcg_0_ceiling=96_700, std_deduction=30_000):
+def insert_tax_param(tax_year=None, ltcg_0_ceiling=98_900, std_deduction=30_000):
     return execute(
         "INSERT INTO tax_param (tax_year, ltcg_0_ceiling, std_deduction, ordinary_brackets)"
         " VALUES (?, ?, ?, ?)",

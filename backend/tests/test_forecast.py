@@ -64,7 +64,7 @@ def run(
     buckets: list[Bucket] | None = None,
     social_security: Sequence[SocialSecurityBenefit] = (),
     purchases: Sequence[PlannedPurchase] = (),
-    ltcg_0_ceiling: float = 96_700.0,
+    ltcg_0_ceiling: float = 98_900.0,
     std_deduction: float = 30_000.0,
     ordinary_brackets: list[Bracket] | None = None,
 ) -> ForecastResult:
@@ -423,9 +423,9 @@ class TestPlannedPurchases:
             return amortized.balance_at_100 - lump.balance_at_100
 
         assert terminal_gap(basis=5_000_000) == pytest.approx(0)
-        # The lump year targets 288,000: 96,700 sells inside the
+        # The lump year targets 288,000: 98,900 sells inside the
         # headroom, the rest grosses up at 1/(1 − 0.15).
-        extra_tax = (288_000 - 96_700) / 0.85 * 0.15
+        extra_tax = (288_000 - 98_900) / 0.85 * 0.15
         assert terminal_gap(basis=0.0) == pytest.approx(extra_tax)
 
 

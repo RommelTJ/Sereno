@@ -58,7 +58,7 @@ def insert_spend_plan(annual_target=45_000):
     )
 
 
-def insert_tax_param(tax_year=None, ltcg_0_ceiling=96_700, std_deduction=30_000):
+def insert_tax_param(tax_year=None, ltcg_0_ceiling=98_900, std_deduction=30_000):
     return execute(
         "INSERT INTO tax_param (tax_year, ltcg_0_ceiling, std_deduction, ordinary_brackets)"
         " VALUES (?, ?, ?, ?)",
@@ -211,7 +211,7 @@ class TestWaterfall:
             "staking_income": 12_000.0,
             "income": 12_000.0,
             "gap": 33_000.0,
-            "headroom": 96_700.0,
+            "headroom": 98_900.0,
             "steps": [
                 {
                     "name": "ETH",
@@ -357,7 +357,7 @@ class TestTaxFreeBucket:
         assert step["note"] == "locked until age 65"
 
     def test_it_is_withdrawn_whole_once_the_gate_opens(self, client):
-        # 200,000 is well past the 96,700 of 0% headroom: taxed as LTCG
+        # 200,000 is well past the 98,900 of 0% headroom: taxed as LTCG
         # the draw costs 18,229 in tax it should never owe.
         seed_hsa()
         body = client.get("/api/sourcing", params={"age": 66, "spend": 200_000}).json()

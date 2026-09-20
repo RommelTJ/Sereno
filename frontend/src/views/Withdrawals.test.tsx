@@ -53,7 +53,7 @@ describe('sequencing waterfall', () => {
     const step = await screen.findByTestId('sourcing-step-0')
     expect(step).toHaveTextContent('ETH')
     expect(step).toHaveTextContent('sell $42,000.00')
-    expect(step).toHaveTextContent(/within \$96,700\.00 headroom/)
+    expect(step).toHaveTextContent(/within \$98,900\.00 headroom/)
   })
 
   it('mutes an untouched bucket to $0.00 this yr', async () => {
@@ -245,10 +245,10 @@ describe('step action derivation', () => {
 
 describe('step detail derivation', () => {
   it('prefers the gate note, then the idle label, then the tax cost', () => {
-    expect(stepDetail(SOURCING.steps[2], 96_700)).toBe('locked until age 59.5')
-    expect(stepDetail(SOURCING.steps[1], 96_700)).toBe('$0.00 this yr')
-    expect(stepDetail(SOURCING.steps[0], 96_700)).toBe(
-      'within $96,700.00 headroom · tax-free',
+    expect(stepDetail(SOURCING.steps[2], 98_900)).toBe('locked until age 59.5')
+    expect(stepDetail(SOURCING.steps[1], 98_900)).toBe('$0.00 this yr')
+    expect(stepDetail(SOURCING.steps[0], 98_900)).toBe(
+      'within $98,900.00 headroom · tax-free',
     )
     expect(stepDetail(SOURCING_SHORT.steps[1], 0)).toBe(
       'tax $3,092.78 → nets $100,000.00',
