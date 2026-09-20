@@ -4,6 +4,20 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.19.2 — A spend override moves a fully-banded plan. With a saved
+spend-band schedule covering every simulated year, `?spend=` on
+`GET /api/forecast` survived only as the baseline the band deltas
+were measured against: every year simulated at its band amount, two
+calls differing only in `spend` returned identical outcomes, and each
+echoed the level it was asked for and never ran. A lone `?spend=` now
+means what a sensitivity row already meant — "live at this overall
+level" — and scales the saved schedule by spend over the plan's
+`annual_target`, echoing the scaled `bands` so the response describes
+the run it made. `GET /api/forecast/max-affordable` reads the
+override the same way. Explicit `band=` amounts stay literal, with
+`spend` the level outside them, so the Forecast screen's baseline
+slider and dragged bands behave exactly as before (issue #159).
+
 v3.19.1 — The 0% LTCG headroom keeps the unused standard deduction.
 The sourcing waterfall measured its tax-free gain headroom as the
 ceiling minus taxable ordinary income, which threw the standard
