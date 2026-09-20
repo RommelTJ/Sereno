@@ -192,9 +192,10 @@ class TestStakingIncome:
 
 class TestWaterfall:
     def test_the_full_waterfall_at_thirty_eight(self, client):
-        # staking — 3% of the 400,000 stake — is the only income at 38,
-        # the whole gap fits ETH's 0% headroom, and the 401(k) reports
-        # its gate
+        # staking — 3% of the 400,000 stake — is the only income at 38
+        # and leaves 18,000 of the standard deduction to widen the 0%
+        # headroom, the whole gap fits inside it, and the 401(k)
+        # reports its gate
         seed_portfolio()
         insert_spend_plan(annual_target=45_000)
         insert_tax_param()
@@ -211,7 +212,7 @@ class TestWaterfall:
             "staking_income": 12_000.0,
             "income": 12_000.0,
             "gap": 33_000.0,
-            "headroom": 98_900.0,
+            "headroom": 116_900.0,
             "steps": [
                 {
                     "name": "ETH",
@@ -283,16 +284,16 @@ class TestWaterfall:
         assert body["gap"] == 100_000.0
 
     def test_open_lots_set_the_basis_and_closed_lots_do_not(self, client):
-        # zero ceiling forces a taxed sale: with basis 480,000 on
-        # 600,000 a fifth of every dollar is gain, so net N costs
-        # N / 0.97 — a counted closed lot would change the gross-up
+        # no ceiling and no deduction force a taxed sale: with basis
+        # 480,000 on 600,000 a fifth of every dollar is gain, so net N
+        # costs N / 0.97 — a counted closed lot would change the gross-up
         brokerage = insert_account("VFIAX", "brokerage_fund", priority=2)
         insert_balance(brokerage, 600_000)
         insert_tax_lot(brokerage, 240_000)
         insert_tax_lot(brokerage, 240_000)
         insert_tax_lot(brokerage, 100_000, closed_on=TODAY.isoformat())
         insert_spend_plan()
-        insert_tax_param(ltcg_0_ceiling=0)
+        insert_tax_param(ltcg_0_ceiling=0, std_deduction=0)
         body = client.get("/api/sourcing", params={"age": 38}).json()
         step = body["steps"][0]
         assert step["gross"] == pytest.approx(45_000 / 0.97)
@@ -303,7 +304,7 @@ class TestWaterfall:
         brokerage = insert_account("VFIAX", "brokerage_fund", priority=2)
         insert_balance(brokerage, 600_000, cost_basis=480_000)
         insert_spend_plan()
-        insert_tax_param(ltcg_0_ceiling=0)
+        insert_tax_param(ltcg_0_ceiling=0, std_deduction=0)
         body = client.get("/api/sourcing", params={"age": 38}).json()
         assert body["steps"][0]["gross"] == pytest.approx(45_000 / 0.97)
 
@@ -316,7 +317,7 @@ class TestWaterfall:
         insert_balance(brokerage, 550_000, as_of_date=LAST_YEAR, cost_basis=480_000)
         insert_balance(brokerage, 600_000)
         insert_spend_plan()
-        insert_tax_param(ltcg_0_ceiling=0)
+        insert_tax_param(ltcg_0_ceiling=0, std_deduction=0)
         body = client.get("/api/sourcing", params={"age": 38}).json()
         step = body["steps"][0]
         assert step["gross"] == pytest.approx(45_000 / 0.97)
@@ -357,8 +358,8 @@ class TestTaxFreeBucket:
         assert step["note"] == "locked until age 65"
 
     def test_it_is_withdrawn_whole_once_the_gate_opens(self, client):
-        # 200,000 is well past the 98,900 of 0% headroom: taxed as LTCG
-        # the draw costs 18,229 in tax it should never owe.
+        # 200,000 is well past the 0% headroom: taxed as LTCG the draw
+        # would pay 15% on the excess, tax it should never owe.
         seed_hsa()
         body = client.get("/api/sourcing", params={"age": 66, "spend": 200_000}).json()
         step = body["steps"][0]

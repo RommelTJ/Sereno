@@ -153,6 +153,7 @@ class TestBasis:
             spend=10_000,
             buckets=[brokerage(100_000, basis=50_000)],
             ltcg_0_ceiling=0,
+            std_deduction=0,
         )
         bal_38 = 104_000.0
         gain_38 = 1 - 50_000 / bal_38
@@ -423,9 +424,10 @@ class TestPlannedPurchases:
             return amortized.balance_at_100 - lump.balance_at_100
 
         assert terminal_gap(basis=5_000_000) == pytest.approx(0)
-        # The lump year targets 288,000: 98,900 sells inside the
-        # headroom, the rest grosses up at 1/(1 − 0.15).
-        extra_tax = (288_000 - 98_900) / 0.85 * 0.15
+        # The lump year targets 288,000: 128,900 — the ceiling plus the
+        # untouched standard deduction — sells inside the headroom, the
+        # rest grosses up at 1/(1 − 0.15).
+        extra_tax = (288_000 - 128_900) / 0.85 * 0.15
         assert terminal_gap(basis=0.0) == pytest.approx(extra_tax)
 
 
