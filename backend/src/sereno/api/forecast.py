@@ -18,7 +18,11 @@ sliders are what-ifs, only Settings persists config. Planned
 purchases ride along the same way: repeated
 purchase=year:amount[:ongoing_delta] params map through the derived
 age onto the simulation, echo back resolved, and report the years
-whose lump didn't fit as unaffordable. The sensitivity
+whose lump didn't fit as unaffordable. The saved spend-band schedule
+applies by default, and ?spend= alone scales it by spend over the
+plan's target — "live at this overall level" — echoing the scaled
+bands; explicit band= amounts stay literal, with spend the level
+outside them. The sensitivity
 table simulates whole percentages of the latest month's net worth
 from 2% to 6%, each level rounded to the nearest $1,000, so the 4%
 rule of thumb sits dead center. GET /forecast/max-affordable turns
@@ -291,6 +295,19 @@ def _parse_bands(raw: list[str]) -> list[BandOut]:
     return bands
 
 
+def _scale_bands(bands: Sequence[BandOut], factor: float) -> list[BandOut]:
+    """The schedule at another overall level: same years, every amount
+    times the factor."""
+    return [
+        BandOut(
+            start_year=band.start_year,
+            end_year=band.end_year,
+            annual_amount=band.annual_amount * factor,
+        )
+        for band in bands
+    ]
+
+
 def _band_deltas(
     bands: Sequence[BandOut], baseline: float, start_age: int
 ) -> list[PlannedPurchase]:
@@ -509,6 +526,13 @@ def get_forecast(
     target = inputs.target
     start_age = inputs.start_age
     tiers = inputs.tiers
+    # ?spend= over the saved schedule means "live at this overall
+    # level": the saved bands scale by spend over the plan's target,
+    # or a schedule covering every year would swallow the override.
+    # Explicit band= amounts stay literal — there spend is the level
+    # outside the bands.
+    if band is None and spend is not None and inputs.annual_target:
+        bands = _scale_bands(bands, spend / inputs.annual_target)
 
     engine_purchases = [
         PlannedPurchase(age=p.age, amount=p.amount, ongoing_delta=p.ongoing_delta)
@@ -521,14 +545,7 @@ def get_forecast(
         # whole schedule scales with it — baseline at the level, every
         # band at level over the resolved spend — or a fully-banded
         # plan would make the table inert.
-        scaled = [
-            BandOut(
-                start_year=each.start_year,
-                end_year=each.end_year,
-                annual_amount=each.annual_amount * level / target,
-            )
-            for each in bands
-        ]
+        scaled = _scale_bands(bands, level / target)
         outcome = inputs.simulate(level, engine_purchases + _band_deltas(scaled, level, start_age))
         return SensitivityRow(
             spend=level,
