@@ -652,6 +652,10 @@ def get_max_affordable(
     )
     if inputs is None:
         return None
+    # ?spend= alone scales the saved schedule, exactly as GET
+    # /api/forecast reads it.
+    if band is None and spend is not None and inputs.annual_target:
+        bands = _scale_bands(bands, spend / inputs.annual_target)
     band_deltas = _band_deltas(bands, inputs.target, start_age)
 
     def outcome(amount: float) -> ForecastResult:
