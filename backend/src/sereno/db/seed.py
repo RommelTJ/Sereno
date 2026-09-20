@@ -301,7 +301,7 @@ def seed(conn: sqlite3.Connection) -> bool:
     conn.execute(
         "INSERT INTO tax_param (tax_year, filing_status, ltcg_0_ceiling, ltcg_15_ceiling,"
         " niit_rate, niit_threshold, state_treatment, std_deduction, ordinary_brackets)"
-        " VALUES (2026, 'MFJ', 96700, 600050, 0.038, 250000, 'CA_ordinary', 30000, ?)",
+        " VALUES (2026, 'MFJ', 98900, 600050, 0.038, 250000, 'CA_ordinary', 32200, ?)",
         (brackets,),
     )
 

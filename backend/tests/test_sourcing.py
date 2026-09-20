@@ -1,7 +1,8 @@
 """The tax-aware withdrawal sourcing engine: target net spend minus
 non-portfolio income leaves a gap, filled bucket by bucket in waterfall
 order. The 0% LTCG headroom is measured in gain dollars — the ceiling
-minus taxable ordinary income — and converts to sale proceeds through
+minus taxable ordinary income, plus whatever standard deduction that
+income left unused — and converts to sale proceeds through
 each bucket's gain fraction, so a low-basis bucket sells little before
 the headroom is spent while a full-basis bucket is unbounded. The
 headroom bounds the tax-free leg, not the bucket: every LTCG bucket
@@ -31,7 +32,7 @@ def run(**overrides):
         "income": 8_000.0,
         "ordinary_income": 3_000.0,
         "buckets": [eth()],
-        "ltcg_0_ceiling": 96_700.0,
+        "ltcg_0_ceiling": 98_900.0,
         "std_deduction": 30_000.0,
         "ordinary_brackets": None,
     }
@@ -58,10 +59,29 @@ class TestHeadroom:
     def test_headroom_is_the_ceiling_minus_taxable_ordinary_income(self):
         # 40,000 ordinary − 30,000 standard deduction = 10,000 taxable
         result = run(ordinary_income=40_000)
-        assert result.headroom == pytest.approx(96_700 - 10_000)
+        assert result.headroom == pytest.approx(98_900 - 10_000)
 
-    def test_ordinary_income_under_the_deduction_leaves_the_full_ceiling(self):
-        assert run(ordinary_income=10_000).headroom == pytest.approx(96_700)
+    def test_unused_standard_deduction_extends_the_headroom(self):
+        # The 0% bracket is a taxable-income threshold: 10,000 of
+        # ordinary income leaves 20,000 of the deduction to shelter gain.
+        assert run(ordinary_income=10_000).headroom == pytest.approx(98_900 + 20_000)
+
+    def test_no_ordinary_income_adds_the_whole_deduction(self):
+        # 80% of every sale is gain, so 130,000 of gain headroom buys
+        # 162,500 of proceeds tax-free; only the last 37,500 of the
+        # 200,000 gap is grossed up at 15% on the gain portion.
+        result = run(
+            target_spend=200_000,
+            income=0,
+            ordinary_income=0,
+            buckets=[eth(balance=500_000, basis=100_000)],
+            ltcg_0_ceiling=100_000,
+        )
+        draw = result.draws[0]
+        assert result.headroom == pytest.approx(130_000)
+        assert draw.gross == pytest.approx(162_500 + 37_500 / 0.88)
+        assert draw.tax == pytest.approx(37_500 / 0.88 * 0.8 * 0.15)
+        assert draw.net == pytest.approx(200_000)
 
     def test_headroom_never_goes_negative(self):
         assert run(ordinary_income=500_000).headroom == 0
@@ -86,7 +106,7 @@ class TestEthStep:
         # net N costs N / (1 − 0.15·0.5).
         result = run(
             buckets=[eth(balance=400_000, basis=200_000)],
-            ordinary_income=116_700,  # taxable 86,700 → headroom 10,000
+            ordinary_income=118_900,  # taxable 88,900 → headroom 10,000
         )
         draw = result.draws[0]
         assert result.headroom == pytest.approx(10_000)
@@ -165,7 +185,7 @@ class TestBrokerageStep:
     def test_grosses_up_at_fifteen_percent_beyond_the_headroom(self):
         # taxable ordinary income eats the whole ceiling → every gain
         # dollar is taxed at 15%, so net N costs N / (1 − 0.15·g)
-        result = run(buckets=[brokerage()], ordinary_income=126_700)
+        result = run(buckets=[brokerage()], ordinary_income=128_900)
         draw = result.draws[0]
         assert result.headroom == 0
         assert draw.gross == pytest.approx(37_000 / 0.97)
@@ -181,7 +201,7 @@ class TestBrokerageStep:
             target_spend=100_000,
             income=0,
             buckets=[brokerage()],
-            ordinary_income=116_700,  # taxable 86,700 → headroom 10,000
+            ordinary_income=118_900,  # taxable 88,900 → headroom 10,000
         )
         draw = result.draws[0]
         assert draw.gross == pytest.approx(50_000 + 50_000 / 0.97)
@@ -192,7 +212,7 @@ class TestBrokerageStep:
     def test_the_balance_caps_a_taxed_draw_and_its_net(self):
         result = run(
             buckets=[brokerage(balance=20_000, basis=16_000)],
-            ordinary_income=126_700,  # headroom 0
+            ordinary_income=128_900,  # headroom 0
         )
         draw = result.draws[0]
         assert draw.gross == pytest.approx(20_000)
@@ -211,7 +231,7 @@ class TestBrokerageStep:
         # headroom — so the brokerage's 17,000 remainder is all taxed.
         result = run(
             buckets=[eth(balance=20_000), brokerage()],
-            ordinary_income=110_700,  # taxable 80,700 → headroom 16,000
+            ordinary_income=112_900,  # taxable 82,900 → headroom 16,000
         )
         assert result.draws[0].gross == pytest.approx(20_000)
         assert result.draws[0].tax == 0

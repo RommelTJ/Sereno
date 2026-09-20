@@ -4,6 +4,21 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.19.1 — The 0% LTCG headroom keeps the unused standard deduction.
+The sourcing waterfall measured its tax-free gain headroom as the
+ceiling minus taxable ordinary income, which threw the standard
+deduction away whenever ordinary income did not consume it — exactly
+the early-retirement year the waterfall exists for. The 0% bracket is
+a taxable-income threshold, so the unused deduction now extends the
+headroom, the same shelter the 401(k) path already gave an ordinary
+draw; `/api/sourcing`, the forecast, and the max-affordable solver
+stop charging 15% on up to a standard deduction's worth of gain that
+owes nothing. The one-pass simplification widens to match: a year
+that sells past the headroom and then taps the 401(k) lets both claim
+the same unused deduction. The seed's 2026 row and the test fixtures
+move from the 2025 ceiling (96,700) to the statutory 2026 MFJ figures
+— 98,900, and a 32,200 standard deduction in the seed (issue #158).
+
 v3.19.0 — The budget report reads lifestyle spend, and fund activity
 gets its own table. v3.18.0's consumption-basis actual was honest cash
 accounting but the wrong instrument for "what does my lifestyle cost,

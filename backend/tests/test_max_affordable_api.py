@@ -82,7 +82,7 @@ def seed_config(annual_target=45_000):
     execute(
         "INSERT INTO tax_param (tax_year, ltcg_0_ceiling, std_deduction, ordinary_brackets)"
         " VALUES (?, ?, ?, ?)",
-        (TODAY.year, 96_700, 30_000, BRACKETS_JSON),
+        (TODAY.year, 98_900, 30_000, BRACKETS_JSON),
     )
 
 

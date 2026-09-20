@@ -490,7 +490,7 @@ export const TAX_PARAMS = [
   {
     tax_year: 2026,
     filing_status: 'MFJ',
-    ltcg_0_ceiling: 96_700,
+    ltcg_0_ceiling: 98_900,
     ltcg_15_ceiling: 600_050,
     niit_rate: 0.038,
     niit_threshold: 250_000,
@@ -562,7 +562,7 @@ export const SOURCING: Sourcing = {
   staking_income: 3_000,
   income: 3_000,
   gap: 42_000,
-  headroom: 96_700,
+  headroom: 98_900,
   steps: [
     {
       name: 'ETH',

@@ -1051,7 +1051,7 @@ describe('Tax parameters card', () => {
     const card = await screen.findByTestId('tax-card')
     expect(within(card).getByText('2026 · MFJ')).toBeInTheDocument()
     expect(within(card).getByText('0% LTCG up to')).toBeInTheDocument()
-    expect(within(card).getByText('$96,700.00')).toBeInTheDocument()
+    expect(within(card).getByText('$98,900.00')).toBeInTheDocument()
     expect(within(card).getByText('15% → 20% at')).toBeInTheDocument()
     expect(within(card).getByText('$600,050.00')).toBeInTheDocument()
     expect(within(card).getByText('NIIT')).toBeInTheDocument()
@@ -1613,7 +1613,7 @@ describe('Tax parameter editing', () => {
     const card = await screen.findByTestId('tax-card')
     fireEvent.click(within(card).getByRole('button', { name: '+ Add 2026' }))
     fireEvent.change(within(card).getByLabelText('0% LTCG up to $'), {
-      target: { value: '96,700' },
+      target: { value: '98,900' },
     })
     r['/api/tax-params'] = [first]
 
@@ -1625,7 +1625,7 @@ describe('Tax parameter editing', () => {
     expect(JSON.parse(calls[0][1]?.body as string)).toEqual({
       tax_year: 2026,
       filing_status: 'MFJ',
-      ltcg_0_ceiling: 96_700,
+      ltcg_0_ceiling: 98_900,
       niit_rate: 0.038,
       state_treatment: 'CA_ordinary',
     })

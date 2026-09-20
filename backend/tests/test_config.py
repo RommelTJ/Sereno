@@ -85,7 +85,7 @@ def insert_social_security(person, effective_date, start_age=67, monthly_amount=
 def insert_tax_param(
     tax_year,
     filing_status="MFJ",
-    ltcg_0_ceiling=96700,
+    ltcg_0_ceiling=98900,
     ltcg_15_ceiling=None,
     niit_rate=0.038,
     niit_threshold=None,
@@ -242,7 +242,7 @@ class TestGetTaxParams:
             {
                 "tax_year": 2026,
                 "filing_status": "MFJ",
-                "ltcg_0_ceiling": 96700,
+                "ltcg_0_ceiling": 98900,
                 "ltcg_15_ceiling": 600050,
                 "niit_rate": 0.038,
                 "niit_threshold": 250000,
@@ -411,7 +411,7 @@ class TestPostTaxParams:
 
     def test_a_duplicate_year_conflicts(self, client):
         insert_tax_param(2026)
-        response = client.post("/api/tax-params", json={"tax_year": 2026, "ltcg_0_ceiling": 96700})
+        response = client.post("/api/tax-params", json={"tax_year": 2026, "ltcg_0_ceiling": 98900})
         assert response.status_code == 409
         assert count_rows("tax_param") == 1
 
