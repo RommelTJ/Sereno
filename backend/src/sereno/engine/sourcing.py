@@ -3,7 +3,8 @@ design handoff's Sourcing screen. Target net spend minus non-portfolio
 income leaves a gap, filled bucket by bucket in the caller's order —
 ETH to exhaustion, then taxable brokerage, then 401(k). The headroom
 is measured in gain dollars (the 0% ceiling minus taxable ordinary
-income) and converts to sale proceeds through each bucket's gain
+income, plus whatever standard deduction that income left unused)
+and converts to sale proceeds through each bucket's gain
 fraction; it bounds what a bucket sells tax-free, never how much it
 sells, so an LTCG bucket keeps going at 15% on the gain portion once
 the free ceiling is spent. A tax-free bucket — a Roth, or an HSA spent on
@@ -20,8 +21,9 @@ v1 simplifications, on purpose: federal only (state_treatment and the
 prototype's CA gross-up are out of scope until state brackets exist),
 no NIIT (0%-headroom scenarios sit far below the threshold), one-pass
 (a 401(k) draw does not retroactively shrink the headroom earlier
-steps used), and Social Security reduces the gap without counting as
-ordinary income.
+steps used — so in a year that sells past the headroom and then taps
+the 401(k), both claim the same unused standard deduction), and
+Social Security reduces the gap without counting as ordinary income.
 """
 
 from dataclasses import dataclass
@@ -175,7 +177,11 @@ def source_withdrawals(
     ordinary_brackets: list[Bracket] | None,
 ) -> SourcingResult:
     taxable_ordinary = max(0.0, ordinary_income - std_deduction)
-    headroom = max(0.0, ltcg_0_ceiling - taxable_ordinary)
+    # The 0% bracket is a taxable-income threshold, so the deduction
+    # ordinary income leaves unused shelters gain — the same shelter
+    # _gross_up_ordinary gives an ordinary draw.
+    unused_shelter = max(0.0, std_deduction - ordinary_income)
+    headroom = max(0.0, ltcg_0_ceiling - taxable_ordinary + unused_shelter)
     gap = max(0.0, target_spend - income)
 
     remaining = gap
