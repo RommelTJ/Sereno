@@ -269,34 +269,23 @@ def _gross_up_ordinary(
     ordinary_income: float,
     std_deduction: float,
     brackets: list[Bracket] | None,
-) -> tuple[float, float]:
-    """Gross and tax for an ordinary-income withdrawal delivering
-    `needed` net, stacked on the caller's ordinary income: the unused
-    standard deduction shelters the first gross dollars, then a
-    closed-form walk up the brackets. Absent brackets mean no tax to
-    model — the config column is nullable — not an error."""
-    if not brackets:
-        brackets = [Bracket(rate=0.0, upto=None)]
-    shelter = max(0.0, std_deduction - ordinary_income)
-    gross = min(needed, shelter, balance)
-    tax = 0.0
-    remaining_net = needed - gross
-    remaining_balance = balance - gross
-    taxable = max(0.0, ordinary_income - std_deduction)
-    for bracket in brackets:
-        if remaining_net <= 0 or remaining_balance <= 0:
-            break
-        capacity = bracket.upto - taxable if bracket.upto is not None else float("inf")
-        if capacity <= 0:
-            continue
-        net_rate = 1.0 - bracket.rate
-        take = min(remaining_net / net_rate, capacity, remaining_balance)
-        gross += take
-        tax += take * bracket.rate
-        remaining_net -= take * net_rate
-        remaining_balance -= take
-        taxable += take
-    return gross, tax
+    state_position: float,
+    state: StateTax,
+) -> tuple[float, float, float]:
+    """Net, federal tax, and state tax for an ordinary-income withdrawal
+    delivering `needed`, stacked on the caller's ordinary income: the
+    unused standard deduction shelters the first gross dollars, then a
+    closed-form walk up the brackets — both tables at once where the
+    state is modelled, each from its own position, since the state's
+    shelter is smaller and its walk already counts the year's gains.
+    Absent federal brackets mean no federal tax to model — the config
+    column is nullable — not an error."""
+    federal = _Leg(1.0, _segments(ordinary_income - std_deduction, brackets))
+    legs = [federal]
+    if state.modelled:
+        legs.append(_Leg(1.0, _segments(state_position, state.brackets)))
+    net = _walk(needed, balance, legs)
+    return net, federal.tax, legs[1].tax if len(legs) > 1 else 0.0
 
 
 def _ordinary_tax(
@@ -381,17 +370,24 @@ def source_withdrawals(
         elif bucket.treatment == "TAX_FREE":
             draw = _draw_tax_free(bucket, remaining)
         else:
-            gross, tax = _gross_up_ordinary(
-                remaining, bucket.balance, ordinary_running, std_deduction, ordinary_brackets
+            net, federal_tax, state_tax = _gross_up_ordinary(
+                remaining,
+                bucket.balance,
+                ordinary_running,
+                std_deduction,
+                ordinary_brackets,
+                state_position,
+                state,
             )
+            gross = net + federal_tax + state_tax
             draw = BucketDraw(
                 name=bucket.name,
                 treatment="ORDINARY",
                 gross=gross,
-                tax=tax,
-                federal_tax=tax,
-                state_tax=0.0,
-                net=gross - tax,
+                tax=federal_tax + state_tax,
+                federal_tax=federal_tax,
+                state_tax=state_tax,
+                net=net,
             )
             ordinary_running += gross
             state_position += gross
