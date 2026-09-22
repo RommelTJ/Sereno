@@ -549,6 +549,7 @@ export const FORECAST: Forecast = {
     { spend: 75_000, run_out_age: 92, balance_at_100: 350_000 },
     { spend: 90_000, run_out_age: 71, balance_at_100: 0 },
   ],
+  warnings: [],
 }
 
 // GET /api/sourcing at age 38: staking is the only income, the whole
@@ -595,4 +596,5 @@ export const SOURCING: Sourcing = {
   ],
   net_delivered: 45_000,
   shortfall: 0,
+  warnings: [],
 }

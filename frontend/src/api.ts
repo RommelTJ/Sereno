@@ -334,6 +334,14 @@ export interface SourcingStep {
   access_age: number | null
 }
 
+// What a null in the tax config switches off. Each is a legitimate
+// engine default, but each removes a whole effect from the answer in
+// the flattering direction, so the response names it rather than
+// letting an unconfigured plan read like a configured one.
+export type ModellingWarning =
+  | 'ordinary_income_untaxed'
+  | 'staking_income_not_modelled'
+
 export interface Sourcing {
   target_net: number
   annual_target: number | null
@@ -350,6 +358,8 @@ export interface Sourcing {
   steps: SourcingStep[]
   net_delivered: number
   shortfall: number
+  // Empty when the tax year and the assumptions are complete.
+  warnings: ModellingWarning[]
 }
 
 // GET /api/forecast: the longevity simulation. Spend, rates, and the
@@ -448,6 +458,8 @@ export interface Forecast {
   baseline: ForecastBaseline
   purchase_costs: PurchaseCostRow[]
   sensitivity: SensitivityRow[]
+  // Read after the overrides, so a what-if yield clears the staking one.
+  warnings: ModellingWarning[]
 }
 
 // The Forecast screen's transient what-ifs — never persisted; Settings
