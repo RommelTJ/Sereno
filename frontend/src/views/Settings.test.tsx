@@ -1077,6 +1077,21 @@ describe('Tax parameters card', () => {
     const card = await screen.findByTestId('tax-card')
     expect(within(card).getByText('no tax years loaded yet')).toBeInTheDocument()
   })
+
+  it('flags a year with no ordinary brackets', async () => {
+    // The column is nullable and the engines read a null as "no tax",
+    // so an incomplete year has to say so here the way an empty band
+    // schedule does — otherwise the forecast flatters the plan silently.
+    stubApi({
+      ...routes(),
+      '/api/tax-params': [{ ...TAX_PARAMS[0], ordinary_brackets: null }],
+    })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('tax-card')
+    expect(card).toHaveTextContent(/no ordinary brackets/)
+    expect(card).toHaveTextContent(/modelled untaxed/)
+  })
 })
 
 describe('Data model note', () => {
