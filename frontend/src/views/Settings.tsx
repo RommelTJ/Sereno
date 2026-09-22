@@ -1701,7 +1701,7 @@ function TaxCard({
             }
           />
           <ConfigLine label="State" value={taxParam.state_treatment} />
-          {taxParam.ordinary_brackets && (
+          {taxParam.ordinary_brackets && taxParam.ordinary_brackets.length > 0 ? (
             <div className="mt-2">
               <p className="text-[11.5px] text-muted-2">Ordinary brackets</p>
               {taxParam.ordinary_brackets.map((bracket) => (
@@ -1713,6 +1713,14 @@ function TaxCard({
                 </p>
               ))}
             </div>
+          ) : (
+            // The engines read a missing table as "no tax" — a
+            // default that flatters every 401(k) draw — so an
+            // incomplete year says so here, where it can be fixed.
+            <p className="mt-2 text-[12.5px] leading-7 text-amber-text">
+              no ordinary brackets — 401(k) draws and staking income are
+              modelled untaxed
+            </p>
           )}
         </div>
       )}
