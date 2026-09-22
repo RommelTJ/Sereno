@@ -206,12 +206,21 @@ function Withdrawals() {
             {sourcing.ordinary_tax > 0 && (
               // Staking is ordinary income: its tax comes back onto the
               // gap so the three lines above and below still add up.
+              // The state's share is named when there is one, since it
+              // is often the whole charge.
               <div
                 data-testid="sourcing-ordinary-tax"
-                className="flex justify-between rounded-[11px] border border-card-border p-[13px]"
+                className="rounded-[11px] border border-card-border p-[13px]"
               >
-                <span>+ Tax on staking income</span>
-                <b className="num">{`+${formatUsd(sourcing.ordinary_tax)}`}</b>
+                <div className="flex justify-between">
+                  <span>+ Tax on staking income</span>
+                  <b className="num">{`+${formatUsd(sourcing.ordinary_tax)}`}</b>
+                </div>
+                {sourcing.state_ordinary_tax > 0 && (
+                  <p className="mt-[5px] text-[11.5px] text-muted">
+                    {`fed ${formatUsd(sourcing.federal_ordinary_tax)} · state ${formatUsd(sourcing.state_ordinary_tax)}`}
+                  </p>
+                )}
               </div>
             )}
             <div className="flex justify-between rounded-[11px] bg-soft p-[13px]">
