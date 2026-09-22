@@ -120,6 +120,48 @@ describe('sequencing waterfall', () => {
   })
 })
 
+describe('modelling note', () => {
+  it('flags a tax year with no ordinary brackets', async () => {
+    // Without brackets the 401(k) step would read as tax-free the way
+    // an HSA does — the note says that is a gap in the config, not a
+    // feature of the bucket.
+    stubApi({
+      '/api/sourcing': { ...SOURCING, warnings: ['ordinary_income_untaxed'] },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const note = await screen.findByTestId('sourcing-modelling-note')
+    expect(note).toHaveTextContent(/No ordinary brackets on the 2026 tax year/)
+    expect(note).toHaveTextContent(/modelled untaxed/)
+  })
+
+  it('lists every disabled effect', async () => {
+    stubApi({
+      '/api/sourcing': {
+        ...SOURCING,
+        staking_income: 0,
+        income: 0,
+        gap: 45_000,
+        warnings: ['ordinary_income_untaxed', 'staking_income_not_modelled'],
+      },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const note = await screen.findByTestId('sourcing-modelling-note')
+    expect(note).toHaveTextContent(/No ordinary brackets/)
+    expect(note).toHaveTextContent(/No staking yield/)
+  })
+
+  it('stays out of a configured plan', async () => {
+    render(<Withdrawals />)
+
+    await screen.findByTestId('sourcing-waterfall')
+    expect(screen.queryByTestId('sourcing-modelling-note')).not.toBeInTheDocument()
+  })
+})
+
 describe('what-if controls', () => {
   it('loads without an age and shows the server-derived one', async () => {
     // The server derives the default age from its birthdate constant —

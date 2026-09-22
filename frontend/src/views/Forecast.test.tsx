@@ -113,6 +113,41 @@ describe('verdict hero', () => {
     const hero = await screen.findByTestId('forecast-verdict')
     expect(hero).toHaveTextContent('Lasts to age 71')
   })
+
+  it('flags a tax year with no ordinary brackets under the verdict', async () => {
+    // A green verdict funded by untaxed 401(k) decades is wrong in
+    // the flattering direction — the note sits with the verdict so
+    // the two are read together.
+    stubApi({
+      '/api/forecast': { ...FORECAST, warnings: ['ordinary_income_untaxed'] },
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
+    })
+    render(<Forecast />)
+
+    const hero = await screen.findByTestId('forecast-verdict')
+    const note = within(hero).getByTestId('forecast-modelling-note')
+    expect(note).toHaveTextContent(/No ordinary brackets on the 2026 tax year/)
+  })
+
+  it('flags an unmodelled staking yield', async () => {
+    stubApi({
+      '/api/forecast': { ...FORECAST, warnings: ['staking_income_not_modelled'] },
+      '/api/accounts': ACCOUNTS,
+      '/api/spend-bands': [],
+    })
+    render(<Forecast />)
+
+    const note = await screen.findByTestId('forecast-modelling-note')
+    expect(note).toHaveTextContent(/No staking yield on the assumptions/)
+  })
+
+  it('keeps the note out of a configured plan', async () => {
+    render(<Forecast />)
+
+    await screen.findByTestId('forecast-verdict')
+    expect(screen.queryByTestId('forecast-modelling-note')).not.toBeInTheDocument()
+  })
 })
 
 describe('bridge card', () => {
