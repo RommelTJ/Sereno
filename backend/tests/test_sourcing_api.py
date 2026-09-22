@@ -225,6 +225,7 @@ class TestWaterfall:
             "ss_income": 0.0,
             "staking_income": 12_000.0,
             "income": 12_000.0,
+            "ordinary_tax": 0.0,
             "gap": 33_000.0,
             "headroom": 116_900.0,
             "steps": [
