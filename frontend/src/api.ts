@@ -342,6 +342,9 @@ export interface Sourcing {
   ss_income: number
   staking_income: number
   income: number
+  // The tax the staking income owes as ordinary income, charged
+  // against it before the gap is measured.
+  ordinary_tax: number
   gap: number
   headroom: number
   steps: SourcingStep[]

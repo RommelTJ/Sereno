@@ -561,6 +561,7 @@ export const SOURCING: Sourcing = {
   ss_income: 0,
   staking_income: 3_000,
   income: 3_000,
+  ordinary_tax: 0,
   gap: 42_000,
   headroom: 98_900,
   steps: [
