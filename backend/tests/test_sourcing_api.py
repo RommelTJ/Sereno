@@ -58,14 +58,52 @@ def insert_spend_plan(annual_target=45_000):
     )
 
 
+STATE_BRACKETS_JSON = json.dumps(
+    [
+        {"rate": 0.01, "upto": 20_000},
+        {"rate": 0.02, "upto": 50_000},
+        {"rate": 0.05, "upto": None},
+    ]
+)
+
+
 def insert_tax_param(
-    tax_year=None, ltcg_0_ceiling=98_900, std_deduction=30_000, brackets=BRACKETS_JSON
+    tax_year=None,
+    ltcg_0_ceiling=98_900,
+    std_deduction=30_000,
+    brackets=BRACKETS_JSON,
+    state_treatment="NONE",
+    state_brackets=None,
+    state_std_deduction=None,
+    state_exemption_credit=None,
 ):
     return execute(
-        "INSERT INTO tax_param (tax_year, ltcg_0_ceiling, std_deduction, ordinary_brackets)"
-        " VALUES (?, ?, ?, ?)",
-        (tax_year or TODAY.year, ltcg_0_ceiling, std_deduction, brackets),
+        "INSERT INTO tax_param (tax_year, ltcg_0_ceiling, std_deduction, ordinary_brackets,"
+        " state_treatment, state_brackets, state_std_deduction, state_exemption_credit)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            tax_year or TODAY.year,
+            ltcg_0_ceiling,
+            std_deduction,
+            brackets,
+            state_treatment,
+            state_brackets,
+            state_std_deduction,
+            state_exemption_credit,
+        ),
     )
+
+
+def insert_california(**overrides):
+    """A CA_ordinary year with the short state table and a 10,000 state
+    deduction — the state sees 2,000 of the 12,000 staking reward."""
+    params = {
+        "state_treatment": "CA_ordinary",
+        "state_brackets": STATE_BRACKETS_JSON,
+        "state_std_deduction": 10_000,
+    }
+    params.update(overrides)
+    return insert_tax_param(**params)
 
 
 def insert_account(name, kind, *, tax_treatment="LTCG", priority=None, access_age=None, owner=None):
@@ -252,6 +290,92 @@ class TestWarnings:
         body = client.get("/api/sourcing", params={"age": 38}).json()
         assert body["warnings"] == []
 
+    def test_a_california_year_without_state_brackets_flags_state_tax(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_california(state_brackets=None)
+        insert_assumption(staking_yield_pct=3.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["warnings"] == ["state_tax_not_modelled"]
+
+    def test_empty_state_brackets_flag_the_same_way(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_california(state_brackets="[]")
+        insert_assumption(staking_yield_pct=3.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["warnings"] == ["state_tax_not_modelled"]
+
+    def test_a_state_with_no_income_tax_needs_no_schedule(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_tax_param(state_treatment="NONE", state_brackets=None)
+        insert_assumption(staking_yield_pct=3.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["warnings"] == []
+
+    def test_a_configured_california_year_carries_no_warnings(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_california()
+        insert_assumption(staking_yield_pct=3.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["warnings"] == []
+
+    def test_every_effect_missing_reports_federal_then_state_then_staking(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_california(brackets=None, state_brackets=None)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["warnings"] == [
+            "ordinary_income_untaxed",
+            "state_tax_not_modelled",
+            "staking_income_not_modelled",
+        ]
+
+
+class TestStateTax:
+    def test_a_california_year_taxes_the_sale_the_federal_bracket_leaves_free(self, client):
+        # 12,000 of staking leaves the federal deduction largely unused,
+        # so the whole draw sits in the 0% federal bracket — and the
+        # state, 2,000 into its 1% band after its own 10,000 deduction,
+        # is the entire tax bill: 20 on the reward, then 1% and 2% on
+        # the 99%-gain sale, walked from where the reward left off.
+        seed_portfolio()
+        insert_spend_plan(annual_target=45_000)
+        insert_california()
+        insert_assumption(staking_yield_pct=3.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["federal_ordinary_tax"] == 0.0
+        assert body["state_ordinary_tax"] == pytest.approx(20.0)
+        assert body["ordinary_tax"] == pytest.approx(20.0)
+        assert body["gap"] == pytest.approx(33_020.0)
+        eth = body["steps"][0]
+        first_gross = 18_000 / 0.99  # the rest of the 1% band, nets at 1 − 0.0099
+        rest_gross = (33_020 - first_gross * 0.9901) / 0.9802
+        assert eth["federal_tax"] == 0.0
+        assert eth["state_tax"] == pytest.approx(180 + rest_gross * 0.99 * 0.02)
+        assert eth["tax"] == pytest.approx(eth["state_tax"])
+        assert eth["gross"] == pytest.approx(first_gross + rest_gross)
+        assert eth["net"] == pytest.approx(33_020.0)
+        assert body["net_delivered"] == pytest.approx(45_000.0)
+        assert body["warnings"] == []
+
+    def test_every_step_reports_both_halves(self, client):
+        seed_portfolio()
+        insert_spend_plan(annual_target=200_000)
+        insert_california()
+        insert_assumption(staking_yield_pct=3.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        for step in body["steps"]:
+            assert step["tax"] == pytest.approx(step["federal_tax"] + step["state_tax"])
+            assert step["net"] == pytest.approx(step["gross"] - step["tax"])
+        # A 188,000 gap sells past the 116,900 of headroom, so the ETH
+        # step owes both levels at once.
+        eth = body["steps"][0]
+        assert eth["federal_tax"] > 0
+        assert eth["state_tax"] > 0
+
 
 class TestWaterfall:
     def test_the_full_waterfall_at_thirty_eight(self, client):
@@ -275,6 +399,8 @@ class TestWaterfall:
             "staking_income": 12_000.0,
             "income": 12_000.0,
             "ordinary_tax": 0.0,
+            "federal_ordinary_tax": 0.0,
+            "state_ordinary_tax": 0.0,
             "gap": 33_000.0,
             "headroom": 116_900.0,
             "steps": [
@@ -283,6 +409,8 @@ class TestWaterfall:
                     "treatment": "LTCG",
                     "gross": 33_000.0,
                     "tax": 0.0,
+                    "federal_tax": 0.0,
+                    "state_tax": 0.0,
                     "net": 33_000.0,
                     "note": None,
                     "access_age": None,
@@ -292,6 +420,8 @@ class TestWaterfall:
                     "treatment": "LTCG",
                     "gross": 0.0,
                     "tax": 0.0,
+                    "federal_tax": 0.0,
+                    "state_tax": 0.0,
                     "net": 0.0,
                     "note": None,
                     "access_age": None,
@@ -301,6 +431,8 @@ class TestWaterfall:
                     "treatment": "ORDINARY",
                     "gross": 0.0,
                     "tax": 0.0,
+                    "federal_tax": 0.0,
+                    "state_tax": 0.0,
                     "net": 0.0,
                     "note": "locked until age 59.5",
                     "access_age": 59.5,

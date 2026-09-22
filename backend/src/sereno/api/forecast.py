@@ -53,8 +53,10 @@ from sereno.api.sourcing import (
     ModellingWarning,
     current_age,
     current_tax_param,
+    engine_brackets,
     load_tiered_buckets,
     modelling_warnings,
+    state_tax_for,
 )
 from sereno.api.spend_bands import effective_schedule, validate_bands
 from sereno.db.connection import get_db
@@ -65,7 +67,7 @@ from sereno.engine.forecast import (
     SocialSecurityBenefit,
     simulate_forecast,
 )
-from sereno.engine.sourcing import Bracket, Bucket
+from sereno.engine.sourcing import Bracket, Bucket, StateTax
 from sereno.money import to_dollars
 
 router = APIRouter()
@@ -364,6 +366,7 @@ class _Resolved:
     tax_year: int
     ltcg_0_ceiling: float
     std_deduction: float
+    state: StateTax
     warnings: list[ModellingWarning]
 
     def simulate(self, spend_level: float, purchases: Sequence[PlannedPurchase]) -> ForecastResult:
@@ -380,6 +383,7 @@ class _Resolved:
             ltcg_0_ceiling=self.ltcg_0_ceiling,
             std_deduction=self.std_deduction,
             ordinary_brackets=self.brackets,
+            state=self.state,
         )
 
 
@@ -450,11 +454,8 @@ def _resolve_inputs(
             return ss_start
         return entry_start if entry_start is not None else resolved_start
 
-    brackets = (
-        [Bracket(rate=b.rate, upto=b.upto) for b in tax.ordinary_brackets]
-        if tax.ordinary_brackets is not None
-        else None
-    )
+    brackets = engine_brackets(tax.ordinary_brackets)
+    state = state_tax_for(tax)
     return _Resolved(
         target=target,
         annual_target=plan.annual_target if plan else None,
@@ -482,7 +483,8 @@ def _resolve_inputs(
         tax_year=tax.tax_year,
         ltcg_0_ceiling=tax.ltcg_0_ceiling,
         std_deduction=tax.std_deduction or 0.0,
-        warnings=modelling_warnings(brackets, resolved_staking_yield),
+        state=state,
+        warnings=modelling_warnings(brackets, resolved_staking_yield, state),
     )
 
 

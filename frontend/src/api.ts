@@ -307,6 +307,11 @@ export interface TaxBracket {
   upto: number | null
 }
 
+// How the year's state prices the portfolio: CA_ordinary walks
+// ordinary income plus realized gains up the state brackets; NONE is
+// a state with no income tax.
+export type StateTreatment = 'CA_ordinary' | 'NONE'
+
 export interface TaxParam {
   tax_year: number
   filing_status: string
@@ -314,9 +319,14 @@ export interface TaxParam {
   ltcg_15_ceiling: number | null
   niit_rate: number
   niit_threshold: number | null
-  state_treatment: string
+  state_treatment: StateTreatment
   std_deduction: number | null
   ordinary_brackets: TaxBracket[] | null
+  // The state schedule: null means none entered — the engines model
+  // no state tax and the responses say so — not a zero-rate state.
+  state_brackets: TaxBracket[] | null
+  state_std_deduction: number | null
+  state_exemption_credit: number | null
 }
 
 // GET /api/sourcing: the tax-aware waterfall evaluated at an optional
@@ -327,7 +337,12 @@ export interface SourcingStep {
   name: string
   treatment: 'LTCG' | 'ORDINARY' | 'TAX_FREE'
   gross: number
+  // The draw's whole tax cost and its two halves — the split is the
+  // point in a year the federal 0% bracket covers and the state does
+  // not.
   tax: number
+  federal_tax: number
+  state_tax: number
   net: number
   note: string | null
   // The owner's own gate age, not one shifted onto your age axis.
@@ -340,6 +355,7 @@ export interface SourcingStep {
 // letting an unconfigured plan read like a configured one.
 export type ModellingWarning =
   | 'ordinary_income_untaxed'
+  | 'state_tax_not_modelled'
   | 'staking_income_not_modelled'
 
 export interface Sourcing {
@@ -351,8 +367,11 @@ export interface Sourcing {
   staking_income: number
   income: number
   // The tax the staking income owes as ordinary income, charged
-  // against it before the gap is measured.
+  // against it before the gap is measured — both levels together,
+  // and each on its own.
   ordinary_tax: number
+  federal_ordinary_tax: number
+  state_ordinary_tax: number
   gap: number
   headroom: number
   steps: SourcingStep[]
@@ -685,9 +704,12 @@ export interface TaxParamBody {
   ltcg_15_ceiling?: number
   niit_rate: number
   niit_threshold?: number
-  state_treatment: string
+  state_treatment: StateTreatment
   std_deduction?: number
   ordinary_brackets?: TaxBracket[]
+  state_brackets?: TaxBracket[]
+  state_std_deduction?: number
+  state_exemption_credit?: number
 }
 
 export interface TaxParamInput extends TaxParamBody {

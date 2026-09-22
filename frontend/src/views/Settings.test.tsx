@@ -1092,6 +1092,59 @@ describe('Tax parameters card', () => {
     expect(card).toHaveTextContent(/no ordinary brackets/)
     expect(card).toHaveTextContent(/modelled untaxed/)
   })
+
+  it('shows the state schedule beside the federal one', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('tax-card')
+    expect(within(card).getByText('State')).toBeInTheDocument()
+    expect(within(card).getByText('CA · gains as ordinary')).toBeInTheDocument()
+    expect(within(card).getByText('State std deduction')).toBeInTheDocument()
+    expect(within(card).getByText('$11,080.00')).toBeInTheDocument()
+    expect(within(card).getByText('State exemption credit')).toBeInTheDocument()
+    expect(within(card).getByText('$298.00')).toBeInTheDocument()
+    expect(within(card).getByText('State brackets')).toBeInTheDocument()
+    expect(within(card).getByText('1% to $21,512.00')).toBeInTheDocument()
+    expect(within(card).getByText('2% to $50,998.00')).toBeInTheDocument()
+    expect(within(card).getByText('9.3% and up')).toBeInTheDocument()
+  })
+
+  it('flags a California year with no state brackets', async () => {
+    // Same rule as the federal table: the engine charges nothing for a
+    // missing schedule, and that flatters the plan silently unless the
+    // card says so where it can be fixed.
+    stubApi({
+      ...routes(),
+      '/api/tax-params': [{ ...TAX_PARAMS[0], state_brackets: null }],
+    })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('tax-card')
+    expect(card).toHaveTextContent(/no state brackets/)
+    expect(card).toHaveTextContent(/modelled at zero/)
+    expect(within(card).queryByText('State brackets')).not.toBeInTheDocument()
+  })
+
+  it('needs no schedule for a state with no income tax', async () => {
+    stubApi({
+      ...routes(),
+      '/api/tax-params': [
+        {
+          ...TAX_PARAMS[0],
+          state_treatment: 'NONE',
+          state_brackets: null,
+          state_std_deduction: null,
+          state_exemption_credit: null,
+        },
+      ],
+    })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('tax-card')
+    expect(within(card).getByText('No state income tax')).toBeInTheDocument()
+    expect(card).not.toHaveTextContent(/no state brackets/)
+    expect(within(card).queryByText('State std deduction')).not.toBeInTheDocument()
+  })
 })
 
 describe('Data model note', () => {
@@ -1537,6 +1590,11 @@ describe('Tax parameter editing', () => {
         { rate: 0.1, upto: 25_000 },
         ...TAX_PARAMS[0].ordinary_brackets.slice(1),
       ],
+      state_std_deduction: 11_500,
+      state_brackets: [
+        { rate: 0.01, upto: 22_000 },
+        ...TAX_PARAMS[0].state_brackets.slice(1),
+      ],
     }
     const r: Record<string, unknown> = {
       ...routes(),
@@ -1555,12 +1613,20 @@ describe('Tax parameter editing', () => {
     fireEvent.change(within(card).getByLabelText('Bracket 1 up to $'), {
       target: { value: '25,000' },
     })
+    fireEvent.change(within(card).getByLabelText('State std deduction $'), {
+      target: { value: '11,500' },
+    })
+    fireEvent.change(within(card).getByLabelText('State bracket 1 up to $'), {
+      target: { value: '22,000' },
+    })
     r['/api/tax-params'] = [revised]
 
     fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
 
     expect(await within(card).findByText('$97,350.00')).toBeInTheDocument()
     expect(within(card).getByText('10% to $25,000.00')).toBeInTheDocument()
+    expect(within(card).getByText('$11,500.00')).toBeInTheDocument()
+    expect(within(card).getByText('1% to $22,000.00')).toBeInTheDocument()
     const puts = fetchMock.mock.calls.filter(
       ([input, init]) =>
         input === '/api/tax-params/2026' && init?.method === 'PUT',
@@ -1580,7 +1646,113 @@ describe('Tax parameter editing', () => {
         { rate: 0.22, upto: 211_400 },
         { rate: 0.24, upto: null },
       ],
+      state_brackets: [
+        { rate: 0.01, upto: 22_000 },
+        { rate: 0.02, upto: 50_998 },
+        { rate: 0.093, upto: null },
+      ],
+      state_std_deduction: 11_500,
+      state_exemption_credit: 298,
     })
+  })
+
+  it('offers the two state treatments the engine can price', async () => {
+    const revised = { ...TAX_PARAMS[0], state_treatment: 'NONE' }
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'PUT /api/tax-params/2026': revised,
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('tax-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    const select = within(card).getByLabelText('State treatment')
+    expect(select).toHaveValue('CA_ordinary')
+    expect(
+      within(select).getAllByRole('option').map((option) => option.textContent),
+    ).toEqual(['CA · gains as ordinary', 'No state income tax'])
+    fireEvent.change(select, { target: { value: 'NONE' } })
+    r['/api/tax-params'] = [revised]
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    // The card re-renders once on Save and again on the refetch, so a
+    // handle taken from the first render can be detached by the time
+    // a matcher runs — the find itself is the assertion.
+    await within(card).findByText('No state income tax')
+    const body = putBody(fetchMock, '/api/tax-params/2026')
+    expect(body.state_treatment).toBe('NONE')
+  })
+
+  it('adds a bracket row to either table', async () => {
+    // Neither table had a way to grow: rows came only from the year
+    // being revised, so a year with no state schedule could never get
+    // one through the form.
+    const revised = {
+      ...TAX_PARAMS[0],
+      ordinary_brackets: [
+        ...TAX_PARAMS[0].ordinary_brackets.slice(0, 3),
+        { rate: 0.24, upto: 400_000 },
+        { rate: 0.32, upto: null },
+      ],
+      state_brackets: [
+        ...TAX_PARAMS[0].state_brackets.slice(0, 2),
+        { rate: 0.093, upto: 721_318 },
+        { rate: 0.123, upto: null },
+      ],
+    }
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'PUT /api/tax-params/2026': revised,
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('tax-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(within(card).getByLabelText('Bracket 4 up to $'), {
+      target: { value: '400,000' },
+    })
+    fireEvent.click(within(card).getByRole('button', { name: '+ Add bracket' }))
+    fireEvent.change(within(card).getByLabelText('Bracket 5 rate %'), {
+      target: { value: '32' },
+    })
+    fireEvent.change(within(card).getByLabelText('State bracket 3 up to $'), {
+      target: { value: '721,318' },
+    })
+    fireEvent.click(
+      within(card).getByRole('button', { name: '+ Add state bracket' }),
+    )
+    fireEvent.change(within(card).getByLabelText('State bracket 4 rate %'), {
+      target: { value: '12.3' },
+    })
+    r['/api/tax-params'] = [revised]
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    expect(await within(card).findByText('32% and up')).toBeInTheDocument()
+    expect(within(card).getByText('12.3% and up')).toBeInTheDocument()
+    const body = putBody(fetchMock, '/api/tax-params/2026')
+    expect(body.ordinary_brackets).toEqual(revised.ordinary_brackets)
+    expect(body.state_brackets).toEqual(revised.state_brackets)
+  })
+
+  it('drops a blank added row rather than posting it', async () => {
+    const r: Record<string, unknown> = {
+      ...routes(),
+      'PUT /api/tax-params/2026': TAX_PARAMS[0],
+    }
+    const fetchMock = stubApi(r)
+    render(<Settings />)
+    const card = await screen.findByTestId('tax-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(
+      within(card).getByRole('button', { name: '+ Add state bracket' }),
+    )
+    fireEvent.click(within(card).getByRole('button', { name: 'Save' }))
+
+    await within(card).findByText('CA · gains as ordinary')
+    const body = putBody(fetchMock, '/api/tax-params/2026')
+    expect(body.state_brackets).toEqual(TAX_PARAMS[0].state_brackets)
   })
 
   it('adds the next year prefilled from the current one', async () => {
@@ -1613,6 +1785,9 @@ describe('Tax parameter editing', () => {
       state_treatment: 'CA_ordinary',
       std_deduction: 30_000,
       ordinary_brackets: TAX_PARAMS[0].ordinary_brackets,
+      state_brackets: TAX_PARAMS[0].state_brackets,
+      state_std_deduction: 11_080,
+      state_exemption_credit: 298,
     })
   })
 

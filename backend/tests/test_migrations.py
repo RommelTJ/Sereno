@@ -414,3 +414,25 @@ def test_spend_band_rows_require_a_real_version_and_the_core_fields(conn):
             conn.execute(f"INSERT INTO spend_band ({columns}) VALUES ({values})")  # noqa: S608
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute("INSERT INTO spend_band_version (id) VALUES (2)")
+
+
+def test_state_tax_columns_join_the_tax_param(conn):
+    # 0020 adds the state schedule beside the federal one: a JSON bracket
+    # table, the state's own standard deduction, and a flat exemption
+    # credit. All three are additive and nullable — an existing year
+    # reads as "no state schedule entered", never as a zero-rate state.
+    migrate(conn)
+    conn.execute(
+        "INSERT INTO tax_param (tax_year, ltcg_0_ceiling, state_brackets,"
+        " state_std_deduction, state_exemption_credit)"
+        ' VALUES (2026, 98900, \'[{"rate": 0.01, "upto": 21512}]\', 11080, 298)'
+    )
+    conn.execute("INSERT INTO tax_param (tax_year, ltcg_0_ceiling) VALUES (2027, 99000)")
+    rows = conn.execute(
+        "SELECT tax_year, state_treatment, state_brackets, state_std_deduction,"
+        " state_exemption_credit FROM tax_param ORDER BY tax_year"
+    ).fetchall()
+    assert [tuple(row) for row in rows] == [
+        (2026, "CA_ordinary", '[{"rate": 0.01, "upto": 21512}]', 11080, 298),
+        (2027, "CA_ordinary", None, None, None),
+    ]

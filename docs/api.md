@@ -357,7 +357,14 @@ The config slice (the one input source for the Plan engines):
 - `GET /api/social-security` — the same rule resolved per person
   (`you` first, then `spouse`).
 - `GET /api/tax-params` — every tax year ascending, with
-  `ordinary_brackets` parsed into typed `{rate, upto}` pairs.
+  `ordinary_brackets` and `state_brackets` parsed into typed
+  `{rate, upto}` pairs. `state_treatment` is one of `CA_ordinary` (the
+  state taxes ordinary income and realized gains alike, walked up
+  `state_brackets` from `state_std_deduction`, less a flat
+  `state_exemption_credit`) or `NONE` (no state income tax); anything
+  else is a 422 on write. The three state columns are nullable: null
+  means no schedule entered — the engines charge nothing and the
+  sourcing and forecast responses flag it — not a zero-rate state.
 - `POST /api/assumptions` / `/api/spend-plan` / `/api/social-security` —
   appends a new effective-dated row; config rows are never updated, so
   every raise, cut, and revised estimate stays queryable history. The
@@ -482,7 +489,13 @@ The sourcing slice (the second Plan engine):
   standard deduction, then walked up the year's brackets — and only
   its after-tax amount fills the gap; the response reports that charge
   as `ordinary_tax`, so `target_net − income + ordinary_tax = gap`, and
-  the same taxable figure is what shrinks the 0% headroom. `?age=` is *your*
+  the same taxable figure is what shrinks the 0% headroom. The state
+  walks the same income up its own table under the year's
+  `state_treatment` — `CA_ordinary` taxes ordinary income and realized
+  gains alike, from the state's own smaller `state_std_deduction`, less
+  the flat `state_exemption_credit`, which comes off the year's first
+  state tax in order: the reward, then the draws — and `ordinary_tax`
+  splits into `federal_ordinary_tax` and `state_ordinary_tax`. `?age=` is *your*
   age, defaulting to the one derived
   from the backend's sanitized `BIRTHDATE` constant (January 1, 1988 —
   deliberately not a real birthday; no birthdate lives in the schema);
@@ -493,7 +506,12 @@ The sourcing slice (the second Plan engine):
   what-if level
   (it also stands in for
   a missing spend plan). Each step reports gross, tax, net, and any
-  gate note; whatever the waterfall cannot deliver comes back as
+  gate note — and `tax` split into `federal_tax` and `state_tax`, since
+  a sale the federal 0% bracket covers still owes the state: every draw
+  is grossed up for both legs at once, each from its own position in
+  its own table (the state's walk already counts the gains sold ahead
+  of a 401(k) draw; the federal ordinary walk never sees gains). Whatever
+  the waterfall cannot deliver comes back as
   `shortfall` — never a naive 4%-per-bucket draw. Null until a tax
   year, a balance, and a spend target exist. A null in the tax config
   is a legitimate engine default, not an error — but each one removes
@@ -501,12 +519,16 @@ The sourcing slice (the second Plan engine):
   `warnings` names every effect the config leaves out:
   `ordinary_income_untaxed` when the tax year's `ordinary_brackets`
   is null or empty (every 401(k) dollar and all staking income come
-  out untaxed), and `staking_income_not_modelled` when the
+  out untaxed), `state_tax_not_modelled` when `state_treatment` is
+  `CA_ordinary` but `state_brackets` is null or empty (every draw and
+  reward owes the state nothing; a `NONE` state needs no schedule and
+  raises no flag), and `staking_income_not_modelled` when the
   assumptions row's `staking_yield_pct` is null (`staking_income` is
   `0.0` because nothing models it, not because the stack earns
-  nothing). Empty when the plan is complete, brackets first when
-  both are missing. Deliberately federal-only
-  and one-pass in v1: no state tax, no NIIT, and Social Security
+  nothing). Empty when the plan is complete, federal brackets first,
+  then the state, then the income. Deliberately one-pass in v1: no
+  NIIT, no per-bucket state exemption (Treasury interest is
+  state-exempt, but no bucket says so yet), and Social Security
   reduces the gap without counting as ordinary income.
 
 The forecast slice (the third Plan engine):
@@ -542,11 +564,14 @@ The forecast slice (the third Plan engine):
   exactly the series' last point — and the sensitivity table: whole percentages of the
   latest month's net worth from 2% to 6% — the 4% rule of thumb dead
   center — rounded to the nearest $1,000 and each simulated at the
-  same assumptions. The current tax year's parameters apply to every
+  same assumptions. The current tax year's parameters — the state
+  schedule included — apply to every
   simulated year; null until a tax year, balances, a spend target,
   and return/inflation figures exist. `warnings` carries the same
   codes as `GET /api/sourcing` — `ordinary_income_untaxed` for a
-  null or empty bracket table, `staking_income_not_modelled` for a
+  null or empty bracket table, `state_tax_not_modelled` for a
+  `CA_ordinary` year with no state brackets,
+  `staking_income_not_modelled` for a
   null staking yield — read against the *resolved* inputs, so a
   `?staking_yield_pct=` override clears the staking one because the
   run it describes models the income. Every simulated year inherits

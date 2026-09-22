@@ -27,6 +27,9 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from sereno.api.config import (
+    Bracket as ConfigBracket,
+)
+from sereno.api.config import (
     TaxParam,
     get_assumptions,
     get_social_security,
@@ -38,6 +41,7 @@ from sereno.engine.sourcing import (
     Bracket,
     Bucket,
     BucketTreatment,
+    StateTax,
     source_withdrawals,
     staking_income,
 )
@@ -84,22 +88,49 @@ _BUCKET_TREATMENTS: dict[str, BucketTreatment] = {
 # removes a whole effect from the answer in the flattering direction,
 # so the response names it rather than letting an unconfigured plan
 # read like a configured one.
-ModellingWarning = Literal["ordinary_income_untaxed", "staking_income_not_modelled"]
+ModellingWarning = Literal[
+    "ordinary_income_untaxed", "state_tax_not_modelled", "staking_income_not_modelled"
+]
 
 
 def modelling_warnings(
-    brackets: list[Bracket] | None, staking_yield_pct: float | None
+    brackets: list[Bracket] | None, staking_yield_pct: float | None, state: StateTax
 ) -> list[ModellingWarning]:
     """Which effects the config leaves out: no brackets (null or empty,
     exactly as the engine reads them) means every 401(k) dollar and
-    all staking income come out untaxed; no yield means the ETH
-    stack earns nothing. Brackets first — the bigger flattery."""
+    all staking income come out untaxed; a state that taxes income
+    but has no schedule entered means every draw and reward owes it
+    nothing; no yield means the ETH stack earns nothing. Federal
+    brackets first — the bigger flattery — then the state, then the
+    income. A NONE state needs no schedule and raises no flag."""
     warnings: list[ModellingWarning] = []
     if not brackets:
         warnings.append("ordinary_income_untaxed")
+    if state.treatment == "CA_ordinary" and not state.brackets:
+        warnings.append("state_tax_not_modelled")
     if staking_yield_pct is None:
         warnings.append("staking_income_not_modelled")
     return warnings
+
+
+def engine_brackets(brackets: list[ConfigBracket] | None) -> list[Bracket] | None:
+    """The stored table as the engine reads it — null stays null, so
+    the engine's own "no schedule" default applies."""
+    if brackets is None:
+        return None
+    return [Bracket(rate=b.rate, upto=b.upto) for b in brackets]
+
+
+def state_tax_for(tax: TaxParam) -> StateTax:
+    """The year's state schedule as the engine prices it. A null
+    deduction or credit is simply zero; null brackets under CA_ordinary
+    are what modelling_warnings flags."""
+    return StateTax(
+        treatment=tax.state_treatment,
+        brackets=engine_brackets(tax.state_brackets),
+        std_deduction=tax.state_std_deduction or 0.0,
+        exemption_credit=tax.state_exemption_credit or 0.0,
+    )
 
 
 _TREATMENT_LABELS: dict[BucketTreatment, str] = {
@@ -147,7 +178,12 @@ class SourcingStep(BaseModel):
     name: str
     treatment: Literal["LTCG", "ORDINARY", "TAX_FREE"]
     gross: float
+    # The draw's whole tax cost and its two halves — the split is the
+    # point in a year the federal 0% bracket covers and the state does
+    # not.
     tax: float
+    federal_tax: float
+    state_tax: float
     net: float
     note: str | None
     # The owner's own gate age, not one shifted onto the caller's axis:
@@ -164,8 +200,11 @@ class Sourcing(BaseModel):
     staking_income: float
     income: float
     # The tax the staking income owes as ordinary income, charged
-    # against it before the gap is measured.
+    # against it before the gap is measured — both levels together,
+    # and each on its own.
     ordinary_tax: float
+    federal_ordinary_tax: float
+    state_ordinary_tax: float
     gap: float
     headroom: float
     steps: list[SourcingStep]
@@ -348,11 +387,8 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
     staking_yield_pct = assumptions.staking_yield_pct if assumptions else None
     staking = staking_income(eth_balance, staking_yield_pct)
 
-    brackets = (
-        [Bracket(rate=b.rate, upto=b.upto) for b in tax.ordinary_brackets]
-        if tax.ordinary_brackets is not None
-        else None
-    )
+    brackets = engine_brackets(tax.ordinary_brackets)
+    state = state_tax_for(tax)
     result = source_withdrawals(
         target_spend=target,
         age=resolved_age,
@@ -362,6 +398,7 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
         ltcg_0_ceiling=tax.ltcg_0_ceiling,
         std_deduction=tax.std_deduction or 0.0,
         ordinary_brackets=brackets,
+        state=state,
     )
     return Sourcing(
         target_net=result.target_net,
@@ -372,6 +409,8 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
         staking_income=staking,
         income=result.income,
         ordinary_tax=result.ordinary_tax,
+        federal_ordinary_tax=result.federal_ordinary_tax,
+        state_ordinary_tax=result.state_ordinary_tax,
         gap=result.gap,
         headroom=result.headroom,
         steps=[
@@ -380,6 +419,8 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
                 treatment=draw.treatment,
                 gross=draw.gross,
                 tax=draw.tax,
+                federal_tax=draw.federal_tax,
+                state_tax=draw.state_tax,
                 net=draw.net,
                 note=draw.note,
                 access_age=bucket.access_age,
@@ -388,5 +429,5 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
         ],
         net_delivered=result.net_delivered,
         shortfall=result.shortfall,
-        warnings=modelling_warnings(brackets, staking_yield_pct),
+        warnings=modelling_warnings(brackets, staking_yield_pct, state),
     )

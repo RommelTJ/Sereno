@@ -4,6 +4,33 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.20.0 — State income tax is modelled. `tax_param.state_treatment`
+has said `CA_ordinary` since the first schema and nothing read it:
+the engines were federal-only, so a California plan reported zero
+tax in exactly the low-income years the 0% federal bracket makes
+attractive — the years state tax is the whole bill. Migration 0020
+adds `state_brackets`, `state_std_deduction`, and a flat
+`state_exemption_credit` beside the federal columns, and the
+sourcing waterfall now grosses every draw up for the federal leg and
+the state leg together — one marginal walk over both tables at once,
+each from its own position with its own deduction, the state's walk
+counting realized gains as ordinary income and the credit taken off
+the year's first state tax in order. Every step and the staking
+charge report their federal and state halves apart
+(`federal_tax`/`state_tax`, `federal_ordinary_tax`/
+`state_ordinary_tax`), the forecast inherits the schedule every
+simulated year, and a `CA_ordinary` year with no state brackets is
+flagged `state_tax_not_modelled` the way #161 flags the federal
+table; `NONE` is a state with no income tax and needs no schedule.
+`state_treatment` admits only those two spellings (422 otherwise).
+The Withdrawals waterfall shows the split on each taxed step and
+under the staking-tax row, the Settings tax card shows the state
+schedule and flags a California year without one, and the tax form
+gains a state-treatment select, the state fields, and an add-row
+button under both bracket tables — a year with no schedule could
+never get one through the form before. The seed carries the 2024
+California MFJ schedule as a placeholder (issue #162).
+
 v3.19.4 — A disabled tax effect says so. `tax_param.ordinary_brackets`
 and `assumption.staking_yield_pct` are nullable on purpose, and the
 engines read a null as a legitimate default — but a null bracket

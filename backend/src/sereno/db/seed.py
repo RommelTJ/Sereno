@@ -298,11 +298,29 @@ def seed(conn: sqlite3.Connection) -> bool:
             {"rate": 0.24, "upto": None},
         ]
     )
+    # The California MFJ schedule, 2024 tax-year figures as the stand-in
+    # until the 2026 indexing is published — statutory, not personal.
+    # The exemption credit is the flat per-person credit for two people.
+    state_brackets = json.dumps(
+        [
+            {"rate": 0.01, "upto": 21512},
+            {"rate": 0.02, "upto": 50998},
+            {"rate": 0.04, "upto": 80490},
+            {"rate": 0.06, "upto": 111732},
+            {"rate": 0.08, "upto": 141212},
+            {"rate": 0.093, "upto": 721318},
+            {"rate": 0.103, "upto": 865574},
+            {"rate": 0.113, "upto": 1442628},
+            {"rate": 0.123, "upto": None},
+        ]
+    )
     conn.execute(
         "INSERT INTO tax_param (tax_year, filing_status, ltcg_0_ceiling, ltcg_15_ceiling,"
-        " niit_rate, niit_threshold, state_treatment, std_deduction, ordinary_brackets)"
-        " VALUES (2026, 'MFJ', 98900, 600050, 0.038, 250000, 'CA_ordinary', 32200, ?)",
-        (brackets,),
+        " niit_rate, niit_threshold, state_treatment, std_deduction, ordinary_brackets,"
+        " state_brackets, state_std_deduction, state_exemption_credit)"
+        " VALUES (2026, 'MFJ', 98900, 600050, 0.038, 250000, 'CA_ordinary', 32200, ?,"
+        " ?, 11080, 298)",
+        (brackets, state_brackets),
     )
 
     conn.commit()

@@ -30,9 +30,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 from sereno.engine.sourcing import (
+    NO_STATE_TAX,
     Bracket,
     Bucket,
     BucketDraw,
+    StateTax,
     source_withdrawals,
     staking_income,
 )
@@ -117,6 +119,7 @@ def simulate_forecast(
     ltcg_0_ceiling: float,
     std_deduction: float,
     ordinary_brackets: list[Bracket] | None,
+    state: StateTax = NO_STATE_TAX,
 ) -> ForecastResult:
     real_rate = (return_pct - inflation_pct) / 100
     eth_rate = real_rate if eth_growth_pct is None else (eth_growth_pct - inflation_pct) / 100
@@ -151,6 +154,7 @@ def simulate_forecast(
             ltcg_0_ceiling=ltcg_0_ceiling,
             std_deduction=std_deduction,
             ordinary_brackets=ordinary_brackets,
+            state=state,
         )
         if lump > 0 and year.shortfall > _SHORTFALL_TOLERANCE:
             # An unaffordable purchase, not a run-out: the lump simply
@@ -168,6 +172,7 @@ def simulate_forecast(
                 ltcg_0_ceiling=ltcg_0_ceiling,
                 std_deduction=std_deduction,
                 ordinary_brackets=ordinary_brackets,
+                state=state,
             )
             if year.shortfall <= _SHORTFALL_TOLERANCE:
                 unaffordable.append(UnaffordablePurchase(age=age, short=short))

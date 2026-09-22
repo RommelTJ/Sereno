@@ -57,14 +57,19 @@ export function tierGateAge(steps: SourcingStep[], tier: string): number | null 
 }
 
 // The sub-line for a waterfall step: the engine's gate note wins, an
-// untouched bucket is "$0.00 this yr", a taxed draw shows its cost, and a
-// tax-free sale names the headroom that made it free.
+// untouched bucket is "$0.00 this yr", a taxed draw shows its cost —
+// split into its federal and state halves whenever the state takes a
+// share, since a sale the federal 0% bracket covers still owes the
+// state — and a tax-free sale names the headroom that made it free.
 export function stepDetail(step: SourcingStep, headroom: number): string {
   if (step.note) {
     return step.note
   }
   if (step.gross === 0) {
     return '$0.00 this yr'
+  }
+  if (step.state_tax > 0) {
+    return `fed ${formatUsd(step.federal_tax)} · state ${formatUsd(step.state_tax)} → nets ${formatUsd(step.net)}`
   }
   if (step.tax > 0) {
     return `tax ${formatUsd(step.tax)} → nets ${formatUsd(step.net)}`

@@ -18,6 +18,7 @@ import type {
   SocialSecurityInput,
   SpendPlan,
   SpendPlanInput,
+  StateTreatment,
   TaxBracket,
   TaxParam,
   TaxParamBody,
@@ -290,6 +291,11 @@ export function formatRate(rate: number): string {
   return `${+(rate * 100).toFixed(2)}%`
 }
 
+// The stored treatment in words: what the engines do with it.
+export function stateTreatmentLabel(treatment: StateTreatment): string {
+  return treatment === 'NONE' ? 'No state income tax' : 'CA · gains as ordinary'
+}
+
 export function bracketLabel(bracket: TaxBracket): string {
   return bracket.upto == null
     ? `${formatRate(bracket.rate)} and up`
@@ -555,9 +561,35 @@ export interface TaxFormValues {
   ltcg15: string
   niitRate: string
   niitThreshold: string
-  stateTreatment: string
+  stateTreatment: StateTreatment
   stdDeduction: string
   brackets: TaxBracketValues[]
+  stateStdDeduction: string
+  stateExemptionCredit: string
+  stateBrackets: TaxBracketValues[]
+}
+
+// A blank row for either table: the form adds one when a year has no
+// schedule yet, since rows otherwise come only from the year revised.
+export const EMPTY_BRACKET: TaxBracketValues = { rate: '', upto: '' }
+
+function bracketValues(brackets: TaxBracket[] | null): TaxBracketValues[] {
+  return (brackets ?? []).map((bracket) => ({
+    rate: String(+(bracket.rate * 100).toFixed(2)),
+    upto: bracket.upto != null ? String(bracket.upto) : '',
+  }))
+}
+
+// Rows without a rate are dropped; a blank "up to" is the top bracket.
+function parseBrackets(rows: TaxBracketValues[]): TaxBracket[] {
+  const brackets: TaxBracket[] = []
+  for (const row of rows) {
+    const rate = toFraction(row.rate)
+    if (rate != null) {
+      brackets.push({ rate, upto: parseNumber(row.upto) ?? null })
+    }
+  }
+  return brackets
 }
 
 // Prefill from the displayed year (revising it, or seeding the next
@@ -573,6 +605,9 @@ export function taxFormValues(param: TaxParam | null): TaxFormValues {
       stateTreatment: 'CA_ordinary',
       stdDeduction: '',
       brackets: [],
+      stateStdDeduction: '',
+      stateExemptionCredit: '',
+      stateBrackets: [],
     }
   }
   return {
@@ -584,42 +619,48 @@ export function taxFormValues(param: TaxParam | null): TaxFormValues {
       param.niit_threshold != null ? String(param.niit_threshold) : '',
     stateTreatment: param.state_treatment,
     stdDeduction: param.std_deduction != null ? String(param.std_deduction) : '',
-    brackets: (param.ordinary_brackets ?? []).map((bracket) => ({
-      rate: String(+(bracket.rate * 100).toFixed(2)),
-      upto: bracket.upto != null ? String(bracket.upto) : '',
-    })),
+    brackets: bracketValues(param.ordinary_brackets),
+    stateStdDeduction:
+      param.state_std_deduction != null ? String(param.state_std_deduction) : '',
+    stateExemptionCredit:
+      param.state_exemption_credit != null
+        ? String(param.state_exemption_credit)
+        : '',
+    stateBrackets: bracketValues(param.state_brackets),
   }
 }
 
 // The shared POST/PUT body; null while the required fields are blank.
 // Blank optionals are omitted, a blank bracket "up to" is the top
-// bracket (upto null), and bracket rows without a rate are dropped.
+// bracket (upto null), and bracket rows without a rate are dropped —
+// in either table.
 export function taxParamBody(values: TaxFormValues): TaxParamBody | null {
   const ltcg0 = parseNumber(values.ltcg0)
   const niitRate = toFraction(values.niitRate)
   const filingStatus = values.filingStatus.trim()
-  const stateTreatment = values.stateTreatment.trim()
-  if (ltcg0 == null || niitRate == null || !filingStatus || !stateTreatment) {
+  if (ltcg0 == null || niitRate == null || !filingStatus) {
     return null
   }
   const ltcg15 = parseNumber(values.ltcg15)
   const niitThreshold = parseNumber(values.niitThreshold)
   const stdDeduction = parseNumber(values.stdDeduction)
-  const brackets: TaxBracket[] = []
-  for (const row of values.brackets) {
-    const rate = toFraction(row.rate)
-    if (rate != null) {
-      brackets.push({ rate, upto: parseNumber(row.upto) ?? null })
-    }
-  }
+  const brackets = parseBrackets(values.brackets)
+  const stateStdDeduction = parseNumber(values.stateStdDeduction)
+  const stateExemptionCredit = parseNumber(values.stateExemptionCredit)
+  const stateBrackets = parseBrackets(values.stateBrackets)
   return {
     filing_status: filingStatus,
     ltcg_0_ceiling: ltcg0,
     ...(ltcg15 != null && { ltcg_15_ceiling: ltcg15 }),
     niit_rate: niitRate,
     ...(niitThreshold != null && { niit_threshold: niitThreshold }),
-    state_treatment: stateTreatment,
+    state_treatment: values.stateTreatment,
     ...(stdDeduction != null && { std_deduction: stdDeduction }),
     ...(brackets.length > 0 && { ordinary_brackets: brackets }),
+    ...(stateBrackets.length > 0 && { state_brackets: stateBrackets }),
+    ...(stateStdDeduction != null && { state_std_deduction: stateStdDeduction }),
+    ...(stateExemptionCredit != null && {
+      state_exemption_credit: stateExemptionCredit,
+    }),
   }
 }
