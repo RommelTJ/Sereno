@@ -12,7 +12,13 @@ for net spendable; it never draws 4% per bucket.
 
 import pytest
 
-from sereno.engine.sourcing import Bracket, Bucket, source_withdrawals
+from sereno.engine.sourcing import (
+    NO_STATE_TAX,
+    Bracket,
+    Bucket,
+    StateTax,
+    source_withdrawals,
+)
 
 
 def eth(balance=400_000.0, basis=4_000.0):
@@ -35,6 +41,7 @@ def run(**overrides):
         "ltcg_0_ceiling": 98_900.0,
         "std_deduction": 30_000.0,
         "ordinary_brackets": None,
+        "state": NO_STATE_TAX,
     }
     defaults.update(overrides)
     return source_withdrawals(**defaults)
@@ -252,6 +259,22 @@ BRACKETS = [
     Bracket(rate=0.24, upto=None),
 ]
 
+# A short graduated state table — CA-shaped, not CA's figures — with a
+# deduction a third the size of the federal one, so the two shelters
+# run out at different incomes.
+STATE_BRACKETS = [
+    Bracket(rate=0.01, upto=20_000),
+    Bracket(rate=0.02, upto=50_000),
+    Bracket(rate=0.05, upto=None),
+]
+
+CA = StateTax(
+    treatment="CA_ordinary",
+    brackets=STATE_BRACKETS,
+    std_deduction=10_000.0,
+    exemption_credit=0.0,
+)
+
 
 class TestOrdinaryIncomeTax:
     def test_the_tax_on_ordinary_income_comes_off_the_income_credited(self):
@@ -280,6 +303,48 @@ class TestOrdinaryIncomeTax:
         result = run(income=40_000, ordinary_income=40_000, ordinary_brackets=None)
         assert result.ordinary_tax == 0
         assert result.gap == pytest.approx(5_000)
+
+
+class TestStateOrdinaryIncomeTax:
+    def test_the_state_walks_its_own_table_over_the_same_income(self):
+        # Federal: 40,000 − 30,000 = 10,000 at 10%. State: 40,000 −
+        # 10,000 = 30,000, of which 20,000 at 1% and 10,000 at 2%. Both
+        # come off the income before it fills the gap; the federal
+        # headroom only ever sees the federal figure.
+        result = run(income=40_000, ordinary_income=40_000, ordinary_brackets=BRACKETS, state=CA)
+        assert result.federal_ordinary_tax == pytest.approx(1_000)
+        assert result.state_ordinary_tax == pytest.approx(400)
+        assert result.ordinary_tax == pytest.approx(1_400)
+        assert result.gap == pytest.approx(6_400)
+        assert result.headroom == pytest.approx(88_900)
+
+    def test_a_state_with_no_income_tax_charges_nothing(self):
+        none = StateTax(
+            treatment="NONE", brackets=STATE_BRACKETS, std_deduction=10_000.0, exemption_credit=0.0
+        )
+        result = run(income=40_000, ordinary_income=40_000, ordinary_brackets=BRACKETS, state=none)
+        assert result.state_ordinary_tax == 0
+        assert result.ordinary_tax == pytest.approx(1_000)
+
+    def test_without_state_brackets_nothing_is_modelled(self):
+        # The column is nullable like ordinary_brackets: absent means no
+        # schedule entered, and the API is what says so.
+        blank = StateTax(
+            treatment="CA_ordinary", brackets=None, std_deduction=10_000.0, exemption_credit=0.0
+        )
+        result = run(income=40_000, ordinary_income=40_000, ordinary_brackets=BRACKETS, state=blank)
+        assert result.state_ordinary_tax == 0
+        assert result.ordinary_tax == pytest.approx(1_000)
+
+    def test_the_state_is_charged_even_when_the_federal_table_is_missing(self):
+        result = run(income=40_000, ordinary_income=40_000, ordinary_brackets=None, state=CA)
+        assert result.federal_ordinary_tax == 0
+        assert result.state_ordinary_tax == pytest.approx(400)
+        assert result.gap == pytest.approx(5_400)
+
+    def test_the_state_deduction_shelters_its_income_first(self):
+        result = run(income=8_000, ordinary_income=8_000, ordinary_brackets=BRACKETS, state=CA)
+        assert result.state_ordinary_tax == 0
 
 
 class TestFour01kStep:
