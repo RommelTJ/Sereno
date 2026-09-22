@@ -25,7 +25,7 @@ from sereno.engine.forecast import (
     SocialSecurityBenefit,
     simulate_forecast,
 )
-from sereno.engine.sourcing import Bracket, Bucket
+from sereno.engine.sourcing import NO_STATE_TAX, Bracket, Bucket, StateTax
 
 
 def eth(balance: float, basis: float | None = None) -> Bucket:
@@ -67,6 +67,7 @@ def run(
     ltcg_0_ceiling: float = 98_900.0,
     std_deduction: float = 30_000.0,
     ordinary_brackets: list[Bracket] | None = None,
+    state: StateTax = NO_STATE_TAX,
 ) -> ForecastResult:
     return simulate_forecast(
         start_age=start_age,
@@ -81,6 +82,7 @@ def run(
         ltcg_0_ceiling=ltcg_0_ceiling,
         std_deduction=std_deduction,
         ordinary_brackets=ordinary_brackets,
+        state=state,
     )
 
 
@@ -141,6 +143,40 @@ class TestRunOut:
         # untouched bucket has compounded 62 times: ages 38 through 99.
         result = run(spend=0, buckets=[brokerage(100_000)])
         assert result.balance_at_100 == pytest.approx(100_000 * 1.04**62)
+
+
+class TestStateTax:
+    # A flat 5% state with no shelter: every gain dollar sold owes it,
+    # so a zero-basis bucket grosses 40,000 / 0.95 a year.
+    FLAT = StateTax(
+        treatment="CA_ordinary",
+        brackets=[Bracket(rate=0.05, upto=None)],
+        std_deduction=0.0,
+        exemption_credit=0.0,
+    )
+
+    def test_state_tax_brings_the_run_out_forward(self):
+        # Zero real return: 120,000 covers three 40,000 years untaxed,
+        # but only two once each year grosses 42,105.
+        untaxed = run(return_pct=5, inflation_pct=5, buckets=[brokerage(120_000, basis=0)])
+        taxed = run(
+            return_pct=5, inflation_pct=5, buckets=[brokerage(120_000, basis=0)], state=self.FLAT
+        )
+        assert untaxed.run_out_age == 41
+        assert taxed.run_out_age == 40
+
+    def test_state_tax_lowers_the_age_100_balance(self):
+        untaxed = run(buckets=[brokerage(2_000_000, basis=0)])
+        taxed = run(buckets=[brokerage(2_000_000, basis=0)], state=self.FLAT)
+        assert taxed.balance_at_100 < untaxed.balance_at_100
+
+    def test_a_state_with_no_income_tax_changes_nothing(self):
+        none = StateTax(
+            treatment="NONE", brackets=self.FLAT.brackets, std_deduction=0.0, exemption_credit=0.0
+        )
+        untaxed = run(buckets=[brokerage(2_000_000, basis=0)])
+        same = run(buckets=[brokerage(2_000_000, basis=0)], state=none)
+        assert same.balance_at_100 == pytest.approx(untaxed.balance_at_100)
 
 
 class TestBasis:
