@@ -79,6 +79,29 @@ _BUCKET_TREATMENTS: dict[str, BucketTreatment] = {
     "TAX_FREE": "TAX_FREE",
 }
 
+# What a null in the tax config switches off. Each is a legitimate
+# engine default — the columns are nullable on purpose — but each
+# removes a whole effect from the answer in the flattering direction,
+# so the response names it rather than letting an unconfigured plan
+# read like a configured one.
+ModellingWarning = Literal["ordinary_income_untaxed", "staking_income_not_modelled"]
+
+
+def modelling_warnings(
+    brackets: list[Bracket] | None, staking_yield_pct: float | None
+) -> list[ModellingWarning]:
+    """Which effects the config leaves out: no brackets (null or empty,
+    exactly as the engine reads them) means every 401(k) dollar and
+    all staking income come out untaxed; no yield means the ETH
+    stack earns nothing. Brackets first — the bigger flattery."""
+    warnings: list[ModellingWarning] = []
+    if not brackets:
+        warnings.append("ordinary_income_untaxed")
+    if staking_yield_pct is None:
+        warnings.append("staking_income_not_modelled")
+    return warnings
+
+
 _TREATMENT_LABELS: dict[BucketTreatment, str] = {
     "LTCG": "capital gains",
     "ORDINARY": "ordinary",
@@ -148,6 +171,9 @@ class Sourcing(BaseModel):
     steps: list[SourcingStep]
     net_delivered: float
     shortfall: float
+    # The effects the config leaves out of this answer — empty when
+    # the tax year and the assumptions are complete.
+    warnings: list[ModellingWarning]
 
 
 def _whole_years(birthdate: date, today: date) -> int:
@@ -319,7 +345,8 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
     )
     eth_balance = sum(b.balance for b in buckets if b.is_eth)
     assumptions = get_assumptions(db)
-    staking = staking_income(eth_balance, assumptions.staking_yield_pct if assumptions else None)
+    staking_yield_pct = assumptions.staking_yield_pct if assumptions else None
+    staking = staking_income(eth_balance, staking_yield_pct)
 
     brackets = (
         [Bracket(rate=b.rate, upto=b.upto) for b in tax.ordinary_brackets]
@@ -361,4 +388,5 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
         ],
         net_delivered=result.net_delivered,
         shortfall=result.shortfall,
+        warnings=modelling_warnings(brackets, staking_yield_pct),
     )
