@@ -18,6 +18,7 @@ import type {
   SocialSecurityInput,
   SpendPlan,
   SpendPlanInput,
+  StateTreatment,
   TaxBracket,
   TaxParam,
   TaxParamBody,
@@ -288,6 +289,11 @@ export function formatPct(value: number | null | undefined): string {
 // 0.038 → "3.8%" — for values stored as fractions (niit_rate, brackets).
 export function formatRate(rate: number): string {
   return `${+(rate * 100).toFixed(2)}%`
+}
+
+// The stored treatment in words: what the engines do with it.
+export function stateTreatmentLabel(treatment: StateTreatment): string {
+  return treatment === 'NONE' ? 'No state income tax' : 'CA · gains as ordinary'
 }
 
 export function bracketLabel(bracket: TaxBracket): string {

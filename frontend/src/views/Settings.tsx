@@ -92,6 +92,7 @@ import {
   assumptionsEdits,
   assumptionsFormValues,
   bracketLabel,
+  stateTreatmentLabel,
   classificationInput,
   classificationValues,
   envelopeEdits,
@@ -1700,7 +1701,30 @@ function TaxCard({
                 : '—'
             }
           />
-          <ConfigLine label="State" value={taxParam.state_treatment} />
+          <ConfigLine
+            label="State"
+            value={stateTreatmentLabel(taxParam.state_treatment)}
+          />
+          {taxParam.state_treatment === 'CA_ordinary' && (
+            <>
+              <ConfigLine
+                label="State std deduction"
+                value={
+                  taxParam.state_std_deduction != null
+                    ? formatUsd(taxParam.state_std_deduction)
+                    : '—'
+                }
+              />
+              <ConfigLine
+                label="State exemption credit"
+                value={
+                  taxParam.state_exemption_credit != null
+                    ? formatUsd(taxParam.state_exemption_credit)
+                    : '—'
+                }
+              />
+            </>
+          )}
           {taxParam.ordinary_brackets && taxParam.ordinary_brackets.length > 0 ? (
             <div className="mt-2">
               <p className="text-[11.5px] text-muted-2">Ordinary brackets</p>
@@ -1722,6 +1746,27 @@ function TaxCard({
               modelled untaxed
             </p>
           )}
+          {taxParam.state_treatment === 'CA_ordinary' &&
+            (taxParam.state_brackets && taxParam.state_brackets.length > 0 ? (
+              <div className="mt-2">
+                <p className="text-[11.5px] text-muted-2">State brackets</p>
+                {taxParam.state_brackets.map((bracket) => (
+                  <p
+                    key={bracket.rate}
+                    className="num text-[12.5px] leading-7 text-muted"
+                  >
+                    {bracketLabel(bracket)}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              // The same rule as the federal table: a missing schedule
+              // charges nothing, and in a year the federal 0% bracket
+              // covers that is the whole tax bill gone missing.
+              <p className="mt-2 text-[12.5px] leading-7 text-amber-text">
+                no state brackets — state tax is modelled at zero
+              </p>
+            ))}
         </div>
       )}
     </Card>
