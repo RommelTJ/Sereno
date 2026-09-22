@@ -92,11 +92,15 @@ def insert_tax_param(
     state_treatment="CA_ordinary",
     std_deduction=None,
     ordinary_brackets=None,
+    state_brackets=None,
+    state_std_deduction=None,
+    state_exemption_credit=None,
 ):
     return execute(
         "INSERT INTO tax_param (tax_year, filing_status, ltcg_0_ceiling, ltcg_15_ceiling,"
-        " niit_rate, niit_threshold, state_treatment, std_deduction, ordinary_brackets)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " niit_rate, niit_threshold, state_treatment, std_deduction, ordinary_brackets,"
+        " state_brackets, state_std_deduction, state_exemption_credit)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             tax_year,
             filing_status,
@@ -107,8 +111,14 @@ def insert_tax_param(
             state_treatment,
             std_deduction,
             json.dumps(ordinary_brackets) if ordinary_brackets is not None else None,
+            json.dumps(state_brackets) if state_brackets is not None else None,
+            state_std_deduction,
+            state_exemption_credit,
         ),
     )
+
+
+STATE_BRACKETS = [{"rate": 0.01, "upto": 21512}, {"rate": 0.02, "upto": None}]
 
 
 class TestGetAssumptions:
@@ -235,6 +245,9 @@ class TestGetTaxParams:
             niit_threshold=250000,
             std_deduction=30000,
             ordinary_brackets=brackets,
+            state_brackets=STATE_BRACKETS,
+            state_std_deduction=11080,
+            state_exemption_credit=298,
         )
         response = client.get("/api/tax-params")
         assert response.status_code == 200
@@ -249,6 +262,9 @@ class TestGetTaxParams:
                 "state_treatment": "CA_ordinary",
                 "std_deduction": 30000,
                 "ordinary_brackets": brackets,
+                "state_brackets": STATE_BRACKETS,
+                "state_std_deduction": 11080,
+                "state_exemption_credit": 298,
             },
             {
                 "tax_year": 2027,
@@ -260,6 +276,9 @@ class TestGetTaxParams:
                 "state_treatment": "CA_ordinary",
                 "std_deduction": None,
                 "ordinary_brackets": None,
+                "state_brackets": None,
+                "state_std_deduction": None,
+                "state_exemption_credit": None,
             },
         ]
 
@@ -387,11 +406,17 @@ class TestPostTaxParams:
                 "state_treatment": "CA_ordinary",
                 "std_deduction": 30500,
                 "ordinary_brackets": brackets,
+                "state_brackets": STATE_BRACKETS,
+                "state_std_deduction": 11080,
+                "state_exemption_credit": 298,
             },
         )
         assert response.status_code == 201
         assert response.json()["tax_year"] == 2027
         assert response.json()["ordinary_brackets"] == brackets
+        assert response.json()["state_brackets"] == STATE_BRACKETS
+        assert response.json()["state_std_deduction"] == 11080
+        assert response.json()["state_exemption_credit"] == 298
         assert client.get("/api/tax-params").json() == [response.json()]
 
     def test_defaults_match_the_schema(self, client):
@@ -407,7 +432,28 @@ class TestPostTaxParams:
             "state_treatment": "CA_ordinary",
             "std_deduction": None,
             "ordinary_brackets": None,
+            "state_brackets": None,
+            "state_std_deduction": None,
+            "state_exemption_credit": None,
         }
+
+    def test_a_state_with_no_income_tax_is_accepted(self, client):
+        response = client.post(
+            "/api/tax-params",
+            json={"tax_year": 2027, "ltcg_0_ceiling": 99000, "state_treatment": "NONE"},
+        )
+        assert response.status_code == 201
+        assert response.json()["state_treatment"] == "NONE"
+
+    def test_an_unknown_state_treatment_is_rejected(self, client):
+        # The engine branches on the value now, so a spelling it cannot
+        # price must not be stored as if it were a schedule.
+        response = client.post(
+            "/api/tax-params",
+            json={"tax_year": 2027, "ltcg_0_ceiling": 99000, "state_treatment": "WA_flat"},
+        )
+        assert response.status_code == 422
+        assert count_rows("tax_param") == 0
 
     def test_a_duplicate_year_conflicts(self, client):
         insert_tax_param(2026)
@@ -431,6 +477,9 @@ class TestPutTaxParams:
                 "state_treatment": "CA_ordinary",
                 "std_deduction": 30250,
                 "ordinary_brackets": brackets,
+                "state_brackets": STATE_BRACKETS,
+                "state_std_deduction": 11080,
+                "state_exemption_credit": 298,
             },
         )
         assert response.status_code == 200
@@ -444,9 +493,20 @@ class TestPutTaxParams:
             "state_treatment": "CA_ordinary",
             "std_deduction": 30250,
             "ordinary_brackets": brackets,
+            "state_brackets": STATE_BRACKETS,
+            "state_std_deduction": 11080,
+            "state_exemption_credit": 298,
         }
         assert client.get("/api/tax-params").json() == [response.json()]
         assert count_rows("tax_param") == 1  # a revision, not a second row
+
+    def test_omitting_the_state_schedule_clears_it(self, client):
+        insert_tax_param(2026, state_brackets=STATE_BRACKETS, state_std_deduction=11080)
+        response = client.put("/api/tax-params/2026", json={"ltcg_0_ceiling": 98900})
+        assert response.status_code == 200
+        assert response.json()["state_brackets"] is None
+        assert response.json()["state_std_deduction"] is None
+        assert response.json()["state_exemption_credit"] is None
 
     def test_an_unknown_year_is_a_404(self, client):
         response = client.put("/api/tax-params/2031", json={"ltcg_0_ceiling": 99000})
