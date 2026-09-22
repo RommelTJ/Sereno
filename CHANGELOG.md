@@ -4,6 +4,24 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.19.3 — Staking income is spent after its tax. The sourcing
+waterfall credited staking rewards against the year's gap at their
+gross amount and passed the same figure as ordinary income, which
+shrank the 0% LTCG headroom but was never itself taxed — only bucket
+draws carried a tax line — so the plan spent the untaxed reward and
+paid the headroom penalty, the wrong half of the trade. The engine
+now charges the tax on its own ordinary income in the year it lands
+(the standard deduction shelters it first, then the year's brackets)
+and credits only the after-tax amount to the gap; a 401(k) draw still
+stacks on top of it, so the walk stays consistent. `/api/sourcing`
+reports the charge as `ordinary_tax`, the forecast and the
+max-affordable solver inherit it every simulated year, and the
+Withdrawals waterfall shows a `+ Tax on staking income` row whenever
+there is some, so its lines keep adding up. At today's yields the
+reward sits under the standard deduction and nothing changes; the
+fix matters for the years the stack is large enough to owe (issue
+#160).
+
 v3.19.2 — A spend override moves a fully-banded plan. With a saved
 spend-band schedule covering every simulated year, `?spend=` on
 `GET /api/forecast` survived only as the baseline the band deltas
