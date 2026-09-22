@@ -74,12 +74,27 @@ def insert_assumption(return_pct=7, inflation_pct=3, eth_growth_pct=None, stakin
 
 
 def insert_tax_param(
-    tax_year=None, ltcg_0_ceiling=98_900, std_deduction=30_000, brackets=BRACKETS_JSON
+    tax_year=None,
+    ltcg_0_ceiling=98_900,
+    std_deduction=30_000,
+    brackets=BRACKETS_JSON,
+    state_treatment="NONE",
+    state_brackets=None,
+    state_std_deduction=None,
 ):
     return execute(
-        "INSERT INTO tax_param (tax_year, ltcg_0_ceiling, std_deduction, ordinary_brackets)"
-        " VALUES (?, ?, ?, ?)",
-        (tax_year or TODAY.year, ltcg_0_ceiling, std_deduction, brackets),
+        "INSERT INTO tax_param (tax_year, ltcg_0_ceiling, std_deduction, ordinary_brackets,"
+        " state_treatment, state_brackets, state_std_deduction)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            tax_year or TODAY.year,
+            ltcg_0_ceiling,
+            std_deduction,
+            brackets,
+            state_treatment,
+            state_brackets,
+            state_std_deduction,
+        ),
     )
 
 
