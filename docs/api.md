@@ -495,7 +495,17 @@ The sourcing slice (the second Plan engine):
   a missing spend plan). Each step reports gross, tax, net, and any
   gate note; whatever the waterfall cannot deliver comes back as
   `shortfall` — never a naive 4%-per-bucket draw. Null until a tax
-  year, a balance, and a spend target exist. Deliberately federal-only
+  year, a balance, and a spend target exist. A null in the tax config
+  is a legitimate engine default, not an error — but each one removes
+  a whole effect from the answer in the flattering direction, so
+  `warnings` names every effect the config leaves out:
+  `ordinary_income_untaxed` when the tax year's `ordinary_brackets`
+  is null or empty (every 401(k) dollar and all staking income come
+  out untaxed), and `staking_income_not_modelled` when the
+  assumptions row's `staking_yield_pct` is null (`staking_income` is
+  `0.0` because nothing models it, not because the stack earns
+  nothing). Empty when the plan is complete, brackets first when
+  both are missing. Deliberately federal-only
   and one-pass in v1: no state tax, no NIIT, and Social Security
   reduces the gap without counting as ordinary income.
 
@@ -534,7 +544,14 @@ The forecast slice (the third Plan engine):
   center — rounded to the nearest $1,000 and each simulated at the
   same assumptions. The current tax year's parameters apply to every
   simulated year; null until a tax year, balances, a spend target,
-  and return/inflation figures exist.
+  and return/inflation figures exist. `warnings` carries the same
+  codes as `GET /api/sourcing` — `ordinary_income_untaxed` for a
+  null or empty bracket table, `staking_income_not_modelled` for a
+  null staking yield — read against the *resolved* inputs, so a
+  `?staking_yield_pct=` override clears the staking one because the
+  run it describes models the income. Every simulated year inherits
+  the same defaults, so a green verdict funded by untaxed 401(k)
+  decades is flagged rather than passed through.
   Planned one-off purchases ride along as repeated
   `purchase=year:amount[:ongoing_delta]` params
   (`?purchase=2036:800000&purchase=2041:70000:9000`): each lump lands
