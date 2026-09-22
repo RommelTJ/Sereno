@@ -545,6 +545,93 @@ class TestFour01kStep:
         assert draw.tax == 0
 
 
+class TestStateTaxOn401k:
+    def test_the_smaller_state_shelter_runs_out_first(self):
+        # No other income at 60: the federal deduction covers the whole
+        # 20,000 draw, but the state's 10,000 runs out halfway, so the
+        # second half is grossed up at the state's 1%.
+        result = run(
+            target_spend=20_000,
+            age=60,
+            income=0,
+            ordinary_income=0,
+            buckets=[four01k()],
+            ordinary_brackets=BRACKETS,
+            state=CA,
+        )
+        draw = result.draws[0]
+        assert draw.federal_tax == 0
+        assert draw.state_tax == pytest.approx(10_000 / 0.99 * 0.01)
+        assert draw.gross == pytest.approx(10_000 + 10_000 / 0.99)
+        assert draw.net == pytest.approx(20_000)
+        assert draw.tax == pytest.approx(draw.federal_tax + draw.state_tax)
+
+    def test_both_tables_are_walked_together_past_their_shelters(self):
+        # 40,000 of staking puts the federal walk 10,000 into its 10%
+        # bracket (14,800 of room) and the state 30,000 into its 2%
+        # (20,000 of room). The draw crosses the federal boundary first,
+        # then the state's, so three net rates apply in turn.
+        result = run(
+            target_spend=60_000,
+            age=60,
+            income=40_000,
+            ordinary_income=40_000,
+            buckets=[four01k()],
+            ordinary_brackets=BRACKETS,
+            state=CA,
+        )
+        assert result.gap == pytest.approx(21_400)
+        draw = result.draws[0]
+        first = 14_800  # 10% + 2% → nets 13,024
+        second = 5_200  # 12% + 2% → nets 4,472
+        third = (21_400 - 13_024 - 4_472) / 0.83  # 12% + 5%
+        assert draw.gross == pytest.approx(first + second + third)
+        assert draw.federal_tax == pytest.approx(first * 0.10 + second * 0.12 + third * 0.12)
+        assert draw.state_tax == pytest.approx(first * 0.02 + second * 0.02 + third * 0.05)
+        assert draw.net == pytest.approx(21_400)
+        assert result.shortfall == 0
+
+    def test_the_state_walk_stacks_on_gains_realized_earlier_in_the_year(self):
+        # ETH's 20,000 of gain used the state's shelter and half its 1%
+        # band; the 401(k) draw starts the state walk there while the
+        # federal ordinary walk still has its whole deduction, since
+        # federal brackets never see capital gains.
+        result = run(
+            target_spend=40_000,
+            age=60,
+            income=0,
+            ordinary_income=0,
+            buckets=[eth(balance=20_000, basis=0), four01k()],
+            ordinary_brackets=BRACKETS,
+            state=CA,
+        )
+        eth_draw, retirement_draw = result.draws
+        assert eth_draw.state_tax == pytest.approx(100)
+        assert eth_draw.net == pytest.approx(19_900)
+        assert retirement_draw.federal_tax == 0
+        in_first_band = 10_000  # nets 9,900 at 1%
+        rest = (20_100 - 9_900) / 0.98  # at 2%
+        assert retirement_draw.state_tax == pytest.approx(100 + rest * 0.02)
+        assert retirement_draw.gross == pytest.approx(in_first_band + rest)
+        assert retirement_draw.net == pytest.approx(20_100)
+
+    def test_the_balance_caps_the_draw_inside_the_state_shelter(self):
+        result = run(
+            target_spend=20_000,
+            age=60,
+            income=0,
+            ordinary_income=0,
+            buckets=[four01k(balance=5_000)],
+            ordinary_brackets=BRACKETS,
+            state=CA,
+        )
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(5_000)
+        assert draw.state_tax == 0
+        assert draw.net == pytest.approx(5_000)
+        assert result.shortfall == pytest.approx(15_000)
+
+
 class TestUnfillableGap:
     def test_the_waterfall_reports_what_it_could_not_deliver(self):
         # ETH 5,000 + brokerage 10,000 inside the headroom, 401(k)
