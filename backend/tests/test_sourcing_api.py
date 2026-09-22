@@ -58,11 +58,13 @@ def insert_spend_plan(annual_target=45_000):
     )
 
 
-def insert_tax_param(tax_year=None, ltcg_0_ceiling=98_900, std_deduction=30_000):
+def insert_tax_param(
+    tax_year=None, ltcg_0_ceiling=98_900, std_deduction=30_000, brackets=BRACKETS_JSON
+):
     return execute(
         "INSERT INTO tax_param (tax_year, ltcg_0_ceiling, std_deduction, ordinary_brackets)"
         " VALUES (?, ?, ?, ?)",
-        (tax_year or TODAY.year, ltcg_0_ceiling, std_deduction, BRACKETS_JSON),
+        (tax_year or TODAY.year, ltcg_0_ceiling, std_deduction, brackets),
     )
 
 
@@ -204,6 +206,53 @@ class TestStakingIncome:
         assert body["gap"] == pytest.approx(6_000.0)
 
 
+class TestWarnings:
+    """A null in the tax config is a legitimate engine default, not an
+    error — but it removes a whole effect from the answer in the
+    flattering direction, so the response has to say which."""
+
+    def test_missing_brackets_flag_ordinary_income_as_untaxed(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_tax_param(brackets=None)
+        insert_assumption(staking_yield_pct=3.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["warnings"] == ["ordinary_income_untaxed"]
+
+    def test_empty_brackets_flag_the_same_way(self, client):
+        # The engine reads an empty list as no brackets, so the
+        # warning must too.
+        seed_portfolio()
+        insert_spend_plan()
+        insert_tax_param(brackets="[]")
+        insert_assumption(staking_yield_pct=3.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["warnings"] == ["ordinary_income_untaxed"]
+
+    def test_a_missing_yield_flags_staking_as_not_modelled(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_tax_param()
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["staking_income"] == 0.0
+        assert body["warnings"] == ["staking_income_not_modelled"]
+
+    def test_both_missing_report_both_brackets_first(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_tax_param(brackets=None)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["warnings"] == ["ordinary_income_untaxed", "staking_income_not_modelled"]
+
+    def test_a_configured_plan_carries_no_warnings(self, client):
+        seed_portfolio()
+        insert_spend_plan()
+        insert_tax_param()
+        insert_assumption(staking_yield_pct=3.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["warnings"] == []
+
+
 class TestWaterfall:
     def test_the_full_waterfall_at_thirty_eight(self, client):
         # staking — 3% of the 400,000 stake — is the only income at 38
@@ -259,6 +308,7 @@ class TestWaterfall:
             ],
             "net_delivered": 45_000.0,
             "shortfall": 0.0,
+            "warnings": [],
         }
 
     def test_social_security_covers_the_gap_past_its_start_age(self, client):

@@ -36,6 +36,7 @@ import {
 } from '../forecast.ts'
 import { formatSignedUsd } from '../budgetReport.ts'
 import { formatUsd } from '../ledger.ts'
+import { modellingNotes } from '../modelling.ts'
 import { formatGateAge, hasWithdrawalBuckets } from '../sourcing.ts'
 
 function BandRow({
@@ -761,6 +762,19 @@ function Forecast() {
             >
               {delta}
             </p>
+          )}
+          {forecast.warnings.length > 0 && (
+            // A verdict funded by untaxed 401(k) decades is wrong in
+            // the flattering direction, so the note sits with the
+            // verdict rather than somewhere the eye skips.
+            <div
+              data-testid="forecast-modelling-note"
+              className="mt-3 rounded-[11px] border border-dashed border-amber bg-amber-soft p-3 text-xs text-amber-text"
+            >
+              {modellingNotes(forecast.warnings, forecast.tax_year).map((note) => (
+                <p key={note}>{note}</p>
+              ))}
+            </div>
           )}
         </div>
         {bridge != null && gateAge != null && (

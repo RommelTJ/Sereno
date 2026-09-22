@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Account, Sourcing, SourcingStep } from '../api.ts'
 import { fetchAccounts, fetchSourcing } from '../api.ts'
 import { formatUsd } from '../ledger.ts'
+import { modellingNotes } from '../modelling.ts'
 import {
   formatGateAge,
   hasTier,
@@ -175,6 +176,20 @@ function Withdrawals() {
               />
             </label>
           </div>
+
+          {sourcing.warnings.length > 0 && (
+            // A null bracket table or staking yield is an engine
+            // default that flatters the plan; the waterfall below
+            // still adds up, so this is the only place the gap shows.
+            <div
+              data-testid="sourcing-modelling-note"
+              className="mt-3.5 rounded-[11px] border border-dashed border-amber bg-amber-soft p-3 text-xs text-amber-text"
+            >
+              {modellingNotes(sourcing.warnings, sourcing.tax_year).map((note) => (
+                <p key={note}>{note}</p>
+              ))}
+            </div>
+          )}
 
           <div
             data-testid="sourcing-waterfall"

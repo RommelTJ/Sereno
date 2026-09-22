@@ -50,9 +50,11 @@ from sereno.api.sourcing import (
     ETH_PRIORITY,
     HSA_PRIORITY,
     RETIREMENT_PRIORITY,
+    ModellingWarning,
     current_age,
     current_tax_param,
     load_tiered_buckets,
+    modelling_warnings,
 )
 from sereno.api.spend_bands import effective_schedule, validate_bands
 from sereno.db.connection import get_db
@@ -192,6 +194,10 @@ class Forecast(BaseModel):
     baseline: BaselineOut
     purchase_costs: list[PurchaseCostRow]
     sensitivity: list[SensitivityRow]
+    # The effects the resolved config leaves out of every simulated
+    # year — read after the overrides, so a what-if yield clears the
+    # staking one. Empty when the plan is complete.
+    warnings: list[ModellingWarning]
 
 
 def _first_unlock_age(buckets: list[Bucket]) -> float | None:
@@ -358,6 +364,7 @@ class _Resolved:
     tax_year: int
     ltcg_0_ceiling: float
     std_deduction: float
+    warnings: list[ModellingWarning]
 
     def simulate(self, spend_level: float, purchases: Sequence[PlannedPurchase]) -> ForecastResult:
         return simulate_forecast(
@@ -443,6 +450,11 @@ def _resolve_inputs(
             return ss_start
         return entry_start if entry_start is not None else resolved_start
 
+    brackets = (
+        [Bracket(rate=b.rate, upto=b.upto) for b in tax.ordinary_brackets]
+        if tax.ordinary_brackets is not None
+        else None
+    )
     return _Resolved(
         target=target,
         annual_target=plan.annual_target if plan else None,
@@ -464,16 +476,13 @@ def _resolve_inputs(
                 start_age=benefit_start(spouse.start_age if spouse else None),
             ),
         ),
-        brackets=(
-            [Bracket(rate=b.rate, upto=b.upto) for b in tax.ordinary_brackets]
-            if tax.ordinary_brackets is not None
-            else None
-        ),
+        brackets=brackets,
         buckets=buckets,
         tiers=[tier for tier, _ in tiered],
         tax_year=tax.tax_year,
         ltcg_0_ceiling=tax.ltcg_0_ceiling,
         std_deduction=tax.std_deduction or 0.0,
+        warnings=modelling_warnings(brackets, resolved_staking_yield),
     )
 
 
@@ -599,6 +608,7 @@ def get_forecast(
         ),
         purchase_costs=[cost_row(index) for index in range(len(purchases))],
         sensitivity=[sensitivity_row(level) for level in _sensitivity_levels(db)],
+        warnings=inputs.warnings,
     )
 
 

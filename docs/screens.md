@@ -289,7 +289,12 @@ serves them at <http://localhost:5173>.
   whole waterfall server-side (the age defaults to the server's
   birthdate-derived current age). Right, the per-bucket rule cards
   and the engine rule: never 0.04 × balance per bucket; solve for
-  net spendable. Until tax parameters, a spend target, and balances
+  net spendable. When the response carries `warnings`, an amber
+  modelling note above the waterfall names each effect the config
+  leaves out — no ordinary brackets on the tax year (401(k) draws and
+  staking income modelled untaxed), or no staking yield on the
+  assumptions — so an unconfigured plan never reads as a configured
+  one. Until tax parameters, a spend target, and balances
   exist, the view points at Settings & data — and when no account has
   a withdrawal priority, the empty state points at the account Edit
   instead.
@@ -302,7 +307,10 @@ serves them at <http://localhost:5173>.
   (`first_unlock_age`, the earliest gate on your own age axis, minus
   the derived current age). The card names that age rather than a
   literal, and disappears entirely when nothing in the portfolio is
-  gated. The balance-by-bucket chart draws
+  gated. The same amber modelling note as Withdrawal sourcing sits
+  inside the verdict hero whenever the forecast reports `warnings`,
+  so a verdict funded by untaxed 401(k) decades is read together with
+  the reason it flatters. The balance-by-bucket chart draws
   one CSS stacked bar per simulated year, the current age → 100 with
   axis labels thinned to every fifth age: ETH, brokerage, 401(k), HSA,
   and the Social
@@ -396,7 +404,10 @@ serves them at <http://localhost:5173>.
   at-retirement initial withdrawal rate, and the guardrail band), the Social Security
   panel (You/Spouse $/mo and start age), the latest year's tax
   parameters (LTCG ceilings, NIIT, standard deduction, ordinary
-  brackets), and the dark append-only data-model note pointing at
+  brackets — or, where the year has none, an amber "no ordinary
+  brackets" line saying the engines model 401(k) draws and staking
+  income untaxed until they are entered), and the dark append-only
+  data-model note pointing at
   `docs/design/schema.sql`. The Envelopes card manages the spending
   categories: each envelope's emoji, name, and current planned amount
   with a per-row Edit covering those plus a Mandatory checkbox — spend

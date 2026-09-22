@@ -4,6 +4,21 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.19.4 — A disabled tax effect says so. `tax_param.ordinary_brackets`
+and `assumption.staking_yield_pct` are nullable on purpose, and the
+engines read a null as a legitimate default — but a null bracket
+table makes every 401(k) dollar and all staking income tax-free for
+the rest of the simulation, and a null yield makes a staked position
+earn nothing, each flattering the plan with no signal in the
+response. `GET /api/sourcing` and `GET /api/forecast` now carry
+`warnings`, naming each effect the config leaves out
+(`ordinary_income_untaxed`, `staking_income_not_modelled`) — the
+forecast reads them after its overrides, so a what-if yield clears
+the staking one. The Withdrawals waterfall and the Forecast verdict
+show the notes in amber, and the Settings tax card flags a year with
+no ordinary brackets the way an empty spend schedule is flagged, so
+an unconfigured plan can be told from a configured one (issue #161).
+
 v3.19.3 — Staking income is spent after its tax. The sourcing
 waterfall credited staking rewards against the year's gap at their
 gross amount and passed the same figure as ordinary income, which
