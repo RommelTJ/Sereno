@@ -36,6 +36,11 @@ from typing import Literal
 
 BucketTreatment = Literal["LTCG", "ORDINARY", "TAX_FREE"]
 
+# How the state prices the year: CA_ordinary taxes ordinary income and
+# realized gains alike, walked up one table; NONE is a state with no
+# income tax at all.
+StateTreatment = Literal["CA_ordinary", "NONE"]
+
 # The federal rate above the 0% bracket. Flat by design: a gap big
 # enough to push realized gains past the 15% → 20% threshold
 # (tax_param.ltcg_15_ceiling) is out of scope for v1.
@@ -46,6 +51,27 @@ LTCG_RATE = 0.15
 class Bracket:
     rate: float
     upto: float | None
+
+
+@dataclass(frozen=True)
+class StateTax:
+    """The year's state schedule. Absent brackets under CA_ordinary mean
+    no schedule entered — nothing is charged, and the API layer is what
+    says so — the same null-safety ordinary_brackets has. The exemption
+    credit is flat and non-refundable: it comes off the year's first
+    state tax, whichever income owes it."""
+
+    treatment: StateTreatment
+    brackets: list[Bracket] | None
+    std_deduction: float
+    exemption_credit: float
+
+    @property
+    def modelled(self) -> bool:
+        return self.treatment == "CA_ordinary" and bool(self.brackets)
+
+
+NO_STATE_TAX = StateTax(treatment="NONE", brackets=None, std_deduction=0.0, exemption_credit=0.0)
 
 
 @dataclass(frozen=True)
@@ -79,8 +105,11 @@ class SourcingResult:
     target_net: float
     income: float
     # The tax owed on the caller's own ordinary income, charged against
-    # the income before it is credited to the gap.
+    # the income before it is credited to the gap — federal and state
+    # together, and each on its own.
     ordinary_tax: float
+    federal_ordinary_tax: float
+    state_ordinary_tax: float
     gap: float
     headroom: float
     draws: tuple[BucketDraw, ...]
@@ -203,6 +232,7 @@ def source_withdrawals(
     ltcg_0_ceiling: float,
     std_deduction: float,
     ordinary_brackets: list[Bracket] | None,
+    state: StateTax = NO_STATE_TAX,
 ) -> SourcingResult:
     taxable_ordinary = max(0.0, ordinary_income - std_deduction)
     # The 0% bracket is a taxable-income threshold, so the deduction
@@ -212,8 +242,15 @@ def source_withdrawals(
     headroom = max(0.0, ltcg_0_ceiling - taxable_ordinary + unused_shelter)
     # The ordinary income is part of the income, and its tax is owed
     # whether or not a bucket is sold: only the after-tax dollars fill
-    # the gap.
-    ordinary_tax = _ordinary_tax(ordinary_income, std_deduction, ordinary_brackets)
+    # the gap. The state walks the same income up its own table from
+    # its own, smaller shelter.
+    federal_ordinary_tax = _ordinary_tax(ordinary_income, std_deduction, ordinary_brackets)
+    state_ordinary_tax = (
+        _ordinary_tax(ordinary_income, state.std_deduction, state.brackets)
+        if state.modelled
+        else 0.0
+    )
+    ordinary_tax = federal_ordinary_tax + state_ordinary_tax
     gap = max(0.0, target_spend - (income - ordinary_tax))
 
     remaining = gap
@@ -254,6 +291,8 @@ def source_withdrawals(
         target_net=target_spend,
         income=income,
         ordinary_tax=ordinary_tax,
+        federal_ordinary_tax=federal_ordinary_tax,
+        state_ordinary_tax=state_ordinary_tax,
         gap=gap,
         headroom=headroom,
         draws=tuple(draws),
