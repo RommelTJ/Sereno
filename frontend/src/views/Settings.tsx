@@ -92,6 +92,7 @@ import {
   assumptionsEdits,
   assumptionsFormValues,
   bracketLabel,
+  EMPTY_BRACKET,
   stateTreatmentLabel,
   classificationInput,
   classificationValues,
@@ -1562,16 +1563,76 @@ function TaxCard({
     }
   }
 
-  const set = (key: Exclude<keyof TaxFormValues, 'brackets'>) => (value: string) =>
-    setValues((current) => ({ ...current, [key]: value }))
+  const set =
+    (key: Exclude<keyof TaxFormValues, 'brackets' | 'stateBrackets' | 'stateTreatment'>) =>
+    (value: string) =>
+      setValues((current) => ({ ...current, [key]: value }))
 
-  const setBracket = (index: number, key: 'rate' | 'upto', value: string) =>
+  const setStateTreatment = (value: string) =>
     setValues((current) => ({
       ...current,
-      brackets: current.brackets.map((row, i) =>
+      stateTreatment: value === 'NONE' ? 'NONE' : 'CA_ordinary',
+    }))
+
+  type BracketTable = 'brackets' | 'stateBrackets'
+
+  const setBracket = (
+    table: BracketTable,
+    index: number,
+    key: 'rate' | 'upto',
+    value: string,
+  ) =>
+    setValues((current) => ({
+      ...current,
+      [table]: current[table].map((row, i) =>
         i === index ? { ...row, [key]: value } : row,
       ),
     }))
+
+  const addBracket = (table: BracketTable) =>
+    setValues((current) => ({
+      ...current,
+      [table]: [...current[table], EMPTY_BRACKET],
+    }))
+
+  const bracketRows = (
+    table: BracketTable,
+    idPrefix: string,
+    label: string,
+    addLabel: string,
+  ) => (
+    <>
+      {values[table].length > 0 && (
+        <p className="mt-3 text-[11.5px] text-muted-2">
+          {label} · blank up-to = top bracket
+        </p>
+      )}
+      {values[table].map((row, index) => (
+        <div
+          // Rows are positional form state; there is no stable id.
+          // eslint-disable-next-line react/no-array-index-key
+          key={index}
+          className="mt-[7px] grid grid-cols-1 gap-[11px] sm:grid-cols-2"
+        >
+          <EditField
+            id={`${idPrefix}-rate-${index}`}
+            label={`${label === 'Ordinary brackets' ? 'Bracket' : 'State bracket'} ${index + 1} rate %`}
+            value={row.rate}
+            onChange={(value) => setBracket(table, index, 'rate', value)}
+          />
+          <EditField
+            id={`${idPrefix}-upto-${index}`}
+            label={`${label === 'Ordinary brackets' ? 'Bracket' : 'State bracket'} ${index + 1} up to $`}
+            value={row.upto}
+            onChange={(value) => setBracket(table, index, 'upto', value)}
+          />
+        </div>
+      ))}
+      <div className="mt-2">
+        <GhostButton label={addLabel} onClick={() => addBracket(table)} />
+      </div>
+    </>
+  )
 
   return (
     <Card
@@ -1601,11 +1662,15 @@ function TaxCard({
               value={values.filingStatus}
               onChange={set('filingStatus')}
             />
-            <EditField
+            <SelectField
               id="tax-state"
               label="State treatment"
               value={values.stateTreatment}
-              onChange={set('stateTreatment')}
+              options={[
+                { value: 'CA_ordinary', label: 'CA · gains as ordinary' },
+                { value: 'NONE', label: 'No state income tax' },
+              ]}
+              onChange={setStateTreatment}
             />
             <EditField
               id="tax-ltcg0"
@@ -1637,33 +1702,26 @@ function TaxCard({
               value={values.stdDeduction}
               onChange={set('stdDeduction')}
             />
+            <EditField
+              id="tax-state-std"
+              label="State std deduction $"
+              value={values.stateStdDeduction}
+              onChange={set('stateStdDeduction')}
+            />
+            <EditField
+              id="tax-state-credit"
+              label="State exemption credit $"
+              value={values.stateExemptionCredit}
+              onChange={set('stateExemptionCredit')}
+            />
           </div>
-          {values.brackets.length > 0 && (
-            <p className="mt-3 text-[11.5px] text-muted-2">
-              Ordinary brackets · blank up-to = top bracket
-            </p>
+          {bracketRows('brackets', 'tax-bracket', 'Ordinary brackets', '+ Add bracket')}
+          {bracketRows(
+            'stateBrackets',
+            'tax-state-bracket',
+            'State brackets',
+            '+ Add state bracket',
           )}
-          {values.brackets.map((row, index) => (
-            <div
-              // Rows are positional form state; there is no stable id.
-              // eslint-disable-next-line react/no-array-index-key
-              key={index}
-              className="mt-[7px] grid grid-cols-1 gap-[11px] sm:grid-cols-2"
-            >
-              <EditField
-                id={`tax-bracket-rate-${index}`}
-                label={`Bracket ${index + 1} rate %`}
-                value={row.rate}
-                onChange={(value) => setBracket(index, 'rate', value)}
-              />
-              <EditField
-                id={`tax-bracket-upto-${index}`}
-                label={`Bracket ${index + 1} up to $`}
-                value={row.upto}
-                onChange={(value) => setBracket(index, 'upto', value)}
-              />
-            </div>
-          ))}
         </div>
       )}
       {mode === 'view' && !taxParam && (

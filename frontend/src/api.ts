@@ -704,7 +704,7 @@ export interface TaxParamBody {
   ltcg_15_ceiling?: number
   niit_rate: number
   niit_threshold?: number
-  state_treatment: string
+  state_treatment: StateTreatment
   std_deduction?: number
   ordinary_brackets?: TaxBracket[]
   state_brackets?: TaxBracket[]
