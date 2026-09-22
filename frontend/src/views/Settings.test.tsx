@@ -1092,6 +1092,59 @@ describe('Tax parameters card', () => {
     expect(card).toHaveTextContent(/no ordinary brackets/)
     expect(card).toHaveTextContent(/modelled untaxed/)
   })
+
+  it('shows the state schedule beside the federal one', async () => {
+    render(<Settings />)
+
+    const card = await screen.findByTestId('tax-card')
+    expect(within(card).getByText('State')).toBeInTheDocument()
+    expect(within(card).getByText('CA · gains as ordinary')).toBeInTheDocument()
+    expect(within(card).getByText('State std deduction')).toBeInTheDocument()
+    expect(within(card).getByText('$11,080.00')).toBeInTheDocument()
+    expect(within(card).getByText('State exemption credit')).toBeInTheDocument()
+    expect(within(card).getByText('$298.00')).toBeInTheDocument()
+    expect(within(card).getByText('State brackets')).toBeInTheDocument()
+    expect(within(card).getByText('1% to $21,512.00')).toBeInTheDocument()
+    expect(within(card).getByText('2% to $50,998.00')).toBeInTheDocument()
+    expect(within(card).getByText('9.3% and up')).toBeInTheDocument()
+  })
+
+  it('flags a California year with no state brackets', async () => {
+    // Same rule as the federal table: the engine charges nothing for a
+    // missing schedule, and that flatters the plan silently unless the
+    // card says so where it can be fixed.
+    stubApi({
+      ...routes(),
+      '/api/tax-params': [{ ...TAX_PARAMS[0], state_brackets: null }],
+    })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('tax-card')
+    expect(card).toHaveTextContent(/no state brackets/)
+    expect(card).toHaveTextContent(/modelled at zero/)
+    expect(within(card).queryByText('State brackets')).not.toBeInTheDocument()
+  })
+
+  it('needs no schedule for a state with no income tax', async () => {
+    stubApi({
+      ...routes(),
+      '/api/tax-params': [
+        {
+          ...TAX_PARAMS[0],
+          state_treatment: 'NONE',
+          state_brackets: null,
+          state_std_deduction: null,
+          state_exemption_credit: null,
+        },
+      ],
+    })
+    render(<Settings />)
+
+    const card = await screen.findByTestId('tax-card')
+    expect(within(card).getByText('No state income tax')).toBeInTheDocument()
+    expect(card).not.toHaveTextContent(/no state brackets/)
+    expect(within(card).queryByText('State std deduction')).not.toBeInTheDocument()
+  })
 })
 
 describe('Data model note', () => {

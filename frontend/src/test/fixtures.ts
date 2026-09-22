@@ -502,6 +502,13 @@ export const TAX_PARAMS = [
       { rate: 0.22, upto: 211_400 },
       { rate: 0.24, upto: null },
     ],
+    state_brackets: [
+      { rate: 0.01, upto: 21_512 },
+      { rate: 0.02, upto: 50_998 },
+      { rate: 0.093, upto: null },
+    ],
+    state_std_deduction: 11_080,
+    state_exemption_credit: 298,
   },
 ]
 
