@@ -90,6 +90,34 @@ describe('sequencing waterfall', () => {
     await screen.findByTestId('sourcing-waterfall')
     expect(screen.queryByTestId('sourcing-shortfall')).not.toBeInTheDocument()
   })
+
+  it('charges the tax on staking income between the income and the gap', async () => {
+    // A 40,000 staking year owes 1,000 of ordinary tax, so the gap is
+    // 45,000 − 40,000 + 1,000 and the waterfall shows the tax it adds.
+    stubApi({
+      '/api/sourcing': {
+        ...SOURCING,
+        staking_income: 40_000,
+        income: 40_000,
+        ordinary_tax: 1_000,
+        gap: 6_000,
+      },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const waterfall = await screen.findByTestId('sourcing-waterfall')
+    const row = within(waterfall).getByTestId('sourcing-ordinary-tax')
+    expect(row).toHaveTextContent(/Tax on staking income/)
+    expect(row).toHaveTextContent('+$1,000.00')
+  })
+
+  it('hides the tax row when the staking income owes nothing', async () => {
+    render(<Withdrawals />)
+
+    await screen.findByTestId('sourcing-waterfall')
+    expect(screen.queryByTestId('sourcing-ordinary-tax')).not.toBeInTheDocument()
+  })
 })
 
 describe('what-if controls', () => {

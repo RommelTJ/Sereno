@@ -253,6 +253,35 @@ BRACKETS = [
 ]
 
 
+class TestOrdinaryIncomeTax:
+    def test_the_tax_on_ordinary_income_comes_off_the_income_credited(self):
+        # 40,000 of staking − 30,000 deduction = 10,000 taxable at 10%:
+        # the reward is spendable at 39,000, not 40,000, and the
+        # headroom still shrinks by the same taxable 10,000
+        result = run(income=40_000, ordinary_income=40_000, ordinary_brackets=BRACKETS)
+        assert result.ordinary_tax == pytest.approx(1_000)
+        assert result.gap == pytest.approx(6_000)
+        assert result.headroom == pytest.approx(88_900)
+
+    def test_the_tax_walks_the_brackets(self):
+        # 30,000 taxable: 24,800 at 10%, then 5,200 at 12%
+        result = run(
+            target_spend=80_000, income=60_000, ordinary_income=60_000, ordinary_brackets=BRACKETS
+        )
+        assert result.ordinary_tax == pytest.approx(2_480 + 5_200 * 0.12)
+        assert result.gap == pytest.approx(80_000 - (60_000 - 3_104))
+
+    def test_the_deduction_shelters_ordinary_income_first(self):
+        result = run(income=20_000, ordinary_income=20_000, ordinary_brackets=BRACKETS)
+        assert result.ordinary_tax == 0
+        assert result.gap == pytest.approx(25_000)
+
+    def test_without_brackets_ordinary_income_is_untaxed(self):
+        result = run(income=40_000, ordinary_income=40_000, ordinary_brackets=None)
+        assert result.ordinary_tax == 0
+        assert result.gap == pytest.approx(5_000)
+
+
 class TestFour01kStep:
     def test_blocked_under_the_access_age(self):
         result = run(age=38, buckets=[four01k()], ordinary_brackets=BRACKETS)
@@ -294,14 +323,20 @@ class TestFour01kStep:
 
     def test_existing_taxable_income_starts_the_walk_mid_bracket(self):
         # 54,800 ordinary − 30,000 deduction = 24,800 taxable: the 10%
-        # bracket is already full, so the whole draw is taxed at 12%
+        # bracket is already full, so the whole draw is taxed at 12%.
+        # The income's own 2,480 of tax leaves 52,320 credited, so the
+        # target is set to keep the gap at 37,000.
         result = run(
+            target_spend=89_320,
+            income=54_800,
             age=60,
             ordinary_income=54_800,
             buckets=[four01k()],
             ordinary_brackets=BRACKETS,
         )
         draw = result.draws[0]
+        assert result.ordinary_tax == pytest.approx(2_480)
+        assert result.gap == pytest.approx(37_000)
         assert draw.gross == pytest.approx(37_000 / 0.88)
         assert draw.tax == pytest.approx(37_000 / 0.88 * 0.12)
 

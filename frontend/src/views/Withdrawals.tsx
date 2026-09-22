@@ -188,6 +188,17 @@ function Withdrawals() {
               <span>2 · − Non-portfolio income</span>
               <b className="num">{`−${formatUsd(sourcing.income)}`}</b>
             </div>
+            {sourcing.ordinary_tax > 0 && (
+              // Staking is ordinary income: its tax comes back onto the
+              // gap so the three lines above and below still add up.
+              <div
+                data-testid="sourcing-ordinary-tax"
+                className="flex justify-between rounded-[11px] border border-card-border p-[13px]"
+              >
+                <span>+ Tax on staking income</span>
+                <b className="num">{`+${formatUsd(sourcing.ordinary_tax)}`}</b>
+              </div>
+            )}
             <div className="flex justify-between rounded-[11px] bg-soft p-[13px]">
               <span>3 · = Gap from portfolio</span>
               <b className="num">{formatUsd(sourcing.gap)}</b>

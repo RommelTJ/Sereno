@@ -477,7 +477,12 @@ The sourcing slice (the second Plan engine):
   reduces the gap before any bucket is sold: Social Security past its
   start age, and staking as the assumptions row's `staking_yield_pct`
   applied to the ETH bucket's balance — the income tracks the stake it
-  is paid on, and a null yield models none. `?age=` is *your*
+  is paid on, and a null yield models none. Staking is ordinary
+  income, so it is taxed in the year it lands — sheltered by the
+  standard deduction, then walked up the year's brackets — and only
+  its after-tax amount fills the gap; the response reports that charge
+  as `ordinary_tax`, so `target_net − income + ordinary_tax = gap`, and
+  the same taxable figure is what shrinks the 0% headroom. `?age=` is *your*
   age, defaulting to the one derived
   from the backend's sanitized `BIRTHDATE` constant (January 1, 1988 —
   deliberately not a real birthday; no birthdate lives in the schema);
@@ -507,7 +512,8 @@ The forecast slice (the third Plan engine):
   Social Security (per person, from that
   person's start age) and staking income (`staking_yield_pct` on that
   year's staked balance, so it decays as the stack is drawn down and
-  stops when the stack does) reduce the year's need, and the remainder
+  stops when the stack does — credited after the ordinary tax it owes
+  in the year it lands) reduce the year's need, and the remainder
   is withdrawn
   through the sourcing waterfall — the 0% LTCG headroom, the
   gross-ups, and each bucket's own access gate apply every simulated

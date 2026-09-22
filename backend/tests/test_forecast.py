@@ -303,6 +303,20 @@ class TestStaking:
         )
         assert result.series[40 - 38].balances[0] == pytest.approx(63_000 - (40_000 - 1_890))
 
+    def test_the_yields_ordinary_tax_comes_off_the_income(self):
+        # With no deduction the 3,000 reward is taxed 300 at 10% in the
+        # year it lands, so only 2,700 of it pays the need and the draw
+        # is 37,300 rather than 37,000.
+        result = run(
+            return_pct=5,
+            inflation_pct=5,
+            staking_yield_pct=3,
+            std_deduction=0,
+            ordinary_brackets=[Bracket(rate=0.10, upto=24_800), Bracket(rate=0.12, upto=None)],
+            buckets=[eth(100_000), brokerage(1_000_000)],
+        )
+        assert result.series[39 - 38].balances[0] == pytest.approx(62_700)
+
     def test_a_null_yield_models_no_staking_income(self):
         result = run(
             return_pct=5,

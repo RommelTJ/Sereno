@@ -140,6 +140,9 @@ class Sourcing(BaseModel):
     ss_income: float
     staking_income: float
     income: float
+    # The tax the staking income owes as ordinary income, charged
+    # against it before the gap is measured.
+    ordinary_tax: float
     gap: float
     headroom: float
     steps: list[SourcingStep]
@@ -341,6 +344,7 @@ def get_sourcing(db: Db, age: Age = None, spend: Spend = None) -> Sourcing | Non
         ss_income=ss_income,
         staking_income=staking,
         income=result.income,
+        ordinary_tax=result.ordinary_tax,
         gap=result.gap,
         headroom=result.headroom,
         steps=[
