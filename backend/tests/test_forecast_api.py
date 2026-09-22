@@ -134,7 +134,10 @@ def seed_portfolio(eth_balance=400_000):
     insert_balance(retirement, 500_000)
 
 
-def seed_config(eth_growth_pct=None, staking_yield_pct=None, brackets=BRACKETS_JSON):
+STATE_BRACKETS_JSON = json.dumps([{"rate": 0.05, "upto": None}])
+
+
+def seed_config(eth_growth_pct=None, staking_yield_pct=None, brackets=BRACKETS_JSON, **state):
     insert_spend_plan(annual_target=45_000)
     insert_assumption(
         return_pct=7,
@@ -142,7 +145,7 @@ def seed_config(eth_growth_pct=None, staking_yield_pct=None, brackets=BRACKETS_J
         eth_growth_pct=eth_growth_pct,
         staking_yield_pct=staking_yield_pct,
     )
-    insert_tax_param(brackets=brackets)
+    insert_tax_param(brackets=brackets, **state)
 
 
 def year_at(age):
@@ -380,6 +383,36 @@ class TestWarnings:
         seed_config(staking_yield_pct=3)
         body = client.get("/api/forecast").json()
         assert body["warnings"] == []
+
+    def test_a_california_year_without_state_brackets_flags_state_tax(self, client):
+        seed_portfolio()
+        seed_config(staking_yield_pct=3, state_treatment="CA_ordinary")
+        body = client.get("/api/forecast").json()
+        assert body["warnings"] == ["state_tax_not_modelled"]
+
+    def test_a_state_with_no_income_tax_needs_no_schedule(self, client):
+        seed_portfolio()
+        seed_config(staking_yield_pct=3, state_treatment="NONE")
+        body = client.get("/api/forecast").json()
+        assert body["warnings"] == []
+
+
+class TestStateTax:
+    def test_a_california_year_lowers_the_age_100_balance(self, client):
+        # Every simulated year grosses its draws up for the state too,
+        # so the same portfolio ends lower than under a no-tax state.
+        seed_portfolio()
+        seed_config(staking_yield_pct=3, state_treatment="NONE")
+        untaxed = client.get("/api/forecast").json()
+        execute("DELETE FROM tax_param", ())
+        insert_tax_param(
+            state_treatment="CA_ordinary",
+            state_brackets=STATE_BRACKETS_JSON,
+            state_std_deduction=10_000,
+        )
+        taxed = client.get("/api/forecast").json()
+        assert taxed["warnings"] == []
+        assert taxed["balance_at_100"] < untaxed["balance_at_100"]
 
 
 class TestPurchases:
