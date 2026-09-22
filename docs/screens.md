@@ -274,7 +274,9 @@ serves them at <http://localhost:5173>.
   "where does the money come from?" view, every figure from
   `GET /api/sourcing`. Left, the sequencing waterfall: target net
   spend, minus non-portfolio income (Social Security past its start
-  age, staking as the configured yield on the staked balance), the gap
+  age, staking as the configured yield on the staked balance), plus
+  the ordinary tax the staking income owes — a row that appears only
+  when there is some, so the lines always add up — the gap
   from
   the portfolio, then one step per bucket — ETH sold to exhaustion
   (tax-free inside the 0% LTCG headroom, then 15% on the gain),
