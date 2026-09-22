@@ -73,11 +73,13 @@ def insert_assumption(return_pct=7, inflation_pct=3, eth_growth_pct=None, stakin
     )
 
 
-def insert_tax_param(tax_year=None, ltcg_0_ceiling=98_900, std_deduction=30_000):
+def insert_tax_param(
+    tax_year=None, ltcg_0_ceiling=98_900, std_deduction=30_000, brackets=BRACKETS_JSON
+):
     return execute(
         "INSERT INTO tax_param (tax_year, ltcg_0_ceiling, std_deduction, ordinary_brackets)"
         " VALUES (?, ?, ?, ?)",
-        (tax_year or TODAY.year, ltcg_0_ceiling, std_deduction, BRACKETS_JSON),
+        (tax_year or TODAY.year, ltcg_0_ceiling, std_deduction, brackets),
     )
 
 
@@ -117,7 +119,7 @@ def seed_portfolio(eth_balance=400_000):
     insert_balance(retirement, 500_000)
 
 
-def seed_config(eth_growth_pct=None, staking_yield_pct=None):
+def seed_config(eth_growth_pct=None, staking_yield_pct=None, brackets=BRACKETS_JSON):
     insert_spend_plan(annual_target=45_000)
     insert_assumption(
         return_pct=7,
@@ -125,7 +127,7 @@ def seed_config(eth_growth_pct=None, staking_yield_pct=None):
         eth_growth_pct=eth_growth_pct,
         staking_yield_pct=staking_yield_pct,
     )
-    insert_tax_param()
+    insert_tax_param(brackets=brackets)
 
 
 def year_at(age):
@@ -331,6 +333,38 @@ class TestForecast:
         assert body["ss_spouse"] == 0.0
         assert body["ss_start"] == 67.0
         assert all(point["ss_income"] == 0 for point in body["series"])
+
+
+class TestWarnings:
+    """A null in the tax config is a legitimate engine default, not an
+    error — but every simulated year inherits it, so a plan whose
+    post-59½ decades draw an untaxed 401(k) must say so."""
+
+    def test_missing_brackets_flag_ordinary_income_as_untaxed(self, client):
+        seed_portfolio()
+        seed_config(staking_yield_pct=3, brackets=None)
+        body = client.get("/api/forecast").json()
+        assert body["warnings"] == ["ordinary_income_untaxed"]
+
+    def test_a_missing_stored_yield_flags_staking_as_not_modelled(self, client):
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast").json()
+        assert body["warnings"] == ["staking_income_not_modelled"]
+
+    def test_a_staking_yield_query_clears_the_staking_warning(self, client):
+        # The what-if slider models the income, so the run it describes
+        # no longer leaves it out.
+        seed_portfolio()
+        seed_config()
+        body = client.get("/api/forecast", params={"staking_yield_pct": 3}).json()
+        assert body["warnings"] == []
+
+    def test_a_configured_plan_carries_no_warnings(self, client):
+        seed_portfolio()
+        seed_config(staking_yield_pct=3)
+        body = client.get("/api/forecast").json()
+        assert body["warnings"] == []
 
 
 class TestPurchases:
