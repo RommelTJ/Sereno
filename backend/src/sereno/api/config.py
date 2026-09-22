@@ -79,6 +79,13 @@ class Bracket(BaseModel):
     upto: float | None
 
 
+# How the year's state prices the portfolio: CA_ordinary walks ordinary
+# income plus realized gains up state_brackets; NONE is a state with no
+# income tax. The engine branches on the value, so the API admits only
+# the spellings it can price.
+StateTreatment = Literal["CA_ordinary", "NONE"]
+
+
 class TaxParam(BaseModel):
     tax_year: int
     filing_status: str
@@ -86,9 +93,14 @@ class TaxParam(BaseModel):
     ltcg_15_ceiling: float | None
     niit_rate: float
     niit_threshold: float | None
-    state_treatment: str
+    state_treatment: StateTreatment
     std_deduction: float | None
     ordinary_brackets: list[Bracket] | None
+    # The state schedule: null means none entered — the engines model
+    # no state tax and the responses say so — not a zero-rate state.
+    state_brackets: list[Bracket] | None
+    state_std_deduction: float | None
+    state_exemption_credit: float | None
 
 
 class TaxParamUpdate(BaseModel):
@@ -100,9 +112,12 @@ class TaxParamUpdate(BaseModel):
     ltcg_15_ceiling: float | None = None
     niit_rate: float = 0.038
     niit_threshold: float | None = None
-    state_treatment: str = "CA_ordinary"
+    state_treatment: StateTreatment = "CA_ordinary"
     std_deduction: float | None = None
     ordinary_brackets: list[Bracket] | None = None
+    state_brackets: list[Bracket] | None = None
+    state_std_deduction: float | None = None
+    state_exemption_credit: float | None = None
 
 
 class TaxParamCreate(TaxParamUpdate):
@@ -119,7 +134,8 @@ _SOCIAL_SECURITY_QUERY = (
 
 _TAX_PARAM_COLUMNS = (
     "tax_year, filing_status, ltcg_0_ceiling, ltcg_15_ceiling, niit_rate,"
-    " niit_threshold, state_treatment, std_deduction, ordinary_brackets"
+    " niit_threshold, state_treatment, std_deduction, ordinary_brackets,"
+    " state_brackets, state_std_deduction, state_exemption_credit"
 )
 
 
@@ -133,8 +149,13 @@ def effective_row(db: sqlite3.Connection, table: str, columns: str) -> sqlite3.R
 
 def _tax_param(row: sqlite3.Row) -> TaxParam:
     fields = dict(row)
-    raw = fields.pop("ordinary_brackets")
-    return TaxParam(**fields, ordinary_brackets=json.loads(raw) if raw is not None else None)
+    ordinary = fields.pop("ordinary_brackets")
+    state = fields.pop("state_brackets")
+    return TaxParam(
+        **fields,
+        ordinary_brackets=json.loads(ordinary) if ordinary is not None else None,
+        state_brackets=json.loads(state) if state is not None else None,
+    )
 
 
 def _brackets_json(brackets: list[Bracket] | None) -> str | None:
@@ -246,8 +267,9 @@ def create_tax_param(param: TaxParamCreate, db: Db) -> TaxParam:
     try:
         db.execute(
             "INSERT INTO tax_param (tax_year, filing_status, ltcg_0_ceiling, ltcg_15_ceiling,"
-            " niit_rate, niit_threshold, state_treatment, std_deduction, ordinary_brackets)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " niit_rate, niit_threshold, state_treatment, std_deduction, ordinary_brackets,"
+            " state_brackets, state_std_deduction, state_exemption_credit)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 param.tax_year,
                 param.filing_status,
@@ -258,6 +280,9 @@ def create_tax_param(param: TaxParamCreate, db: Db) -> TaxParam:
                 param.state_treatment,
                 param.std_deduction,
                 _brackets_json(brackets),
+                _brackets_json(param.state_brackets),
+                param.state_std_deduction,
+                param.state_exemption_credit,
             ),
         )
     except sqlite3.IntegrityError as exc:
@@ -277,7 +302,8 @@ def update_tax_param(tax_year: int, param: TaxParamUpdate, db: Db) -> TaxParam:
     cursor = db.execute(
         "UPDATE tax_param SET filing_status = ?, ltcg_0_ceiling = ?, ltcg_15_ceiling = ?,"
         " niit_rate = ?, niit_threshold = ?, state_treatment = ?, std_deduction = ?,"
-        " ordinary_brackets = ? WHERE tax_year = ?",
+        " ordinary_brackets = ?, state_brackets = ?, state_std_deduction = ?,"
+        " state_exemption_credit = ? WHERE tax_year = ?",
         (
             param.filing_status,
             param.ltcg_0_ceiling,
@@ -287,6 +313,9 @@ def update_tax_param(tax_year: int, param: TaxParamUpdate, db: Db) -> TaxParam:
             param.state_treatment,
             param.std_deduction,
             _brackets_json(param.ordinary_brackets),
+            _brackets_json(param.state_brackets),
+            param.state_std_deduction,
+            param.state_exemption_credit,
             tax_year,
         ),
     )
