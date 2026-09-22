@@ -22,6 +22,7 @@ const SOURCING_SHORT = {
       ...SOURCING.steps[1],
       gross: 103_092.78,
       tax: 3_092.78,
+      federal_tax: 3_092.78,
       net: 100_000,
     },
     SOURCING.steps[2],
@@ -117,6 +118,73 @@ describe('sequencing waterfall', () => {
 
     await screen.findByTestId('sourcing-waterfall')
     expect(screen.queryByTestId('sourcing-ordinary-tax')).not.toBeInTheDocument()
+  })
+
+  it('splits the staking tax into its federal and state halves', async () => {
+    stubApi({
+      '/api/sourcing': {
+        ...SOURCING,
+        staking_income: 40_000,
+        income: 40_000,
+        ordinary_tax: 1_400,
+        federal_ordinary_tax: 1_000,
+        state_ordinary_tax: 400,
+        gap: 6_400,
+      },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const row = await screen.findByTestId('sourcing-ordinary-tax')
+    expect(row).toHaveTextContent('+$1,400.00')
+    expect(row).toHaveTextContent('fed $1,000.00 · state $400.00')
+  })
+
+  it('keeps the staking tax row whole when the state owes nothing', async () => {
+    stubApi({
+      '/api/sourcing': {
+        ...SOURCING,
+        staking_income: 40_000,
+        income: 40_000,
+        ordinary_tax: 1_000,
+        federal_ordinary_tax: 1_000,
+        gap: 6_000,
+      },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const row = await screen.findByTestId('sourcing-ordinary-tax')
+    expect(row).toHaveTextContent('+$1,000.00')
+    expect(row).not.toHaveTextContent(/state/)
+  })
+
+  it('shows a sale the federal bracket leaves free but the state taxes', async () => {
+    // The whole draw sits inside the 0% federal headroom, so the
+    // state is the entire cost — the case the split exists for.
+    stubApi({
+      '/api/sourcing': {
+        ...SOURCING,
+        steps: [
+          {
+            ...SOURCING.steps[0],
+            gross: 44_100,
+            tax: 2_100,
+            federal_tax: 0,
+            state_tax: 2_100,
+            net: 42_000,
+          },
+          SOURCING.steps[1],
+          SOURCING.steps[2],
+        ],
+      },
+      '/api/accounts': ACCOUNTS,
+    })
+    render(<Withdrawals />)
+
+    const step = await screen.findByTestId('sourcing-step-0')
+    expect(step).toHaveTextContent('sell $44,100.00')
+    expect(step).toHaveTextContent('fed $0.00 · state $2,100.00 → nets $42,000.00')
   })
 })
 
@@ -314,6 +382,32 @@ describe('step action derivation', () => {
 })
 
 describe('step detail derivation', () => {
+  it('names both halves when the state takes a share', () => {
+    const taxed = {
+      ...SOURCING.steps[0],
+      gross: 46_250,
+      tax: 9_250,
+      federal_tax: 6_937.5,
+      state_tax: 2_312.5,
+      net: 37_000,
+    }
+    expect(stepDetail(taxed, 0)).toBe(
+      'fed $6,937.50 · state $2,312.50 → nets $37,000.00',
+    )
+  })
+
+  it('keeps the plain tax line for a federal-only cost', () => {
+    const taxed = {
+      ...SOURCING.steps[0],
+      gross: 38_144.33,
+      tax: 1_144.33,
+      federal_tax: 1_144.33,
+      state_tax: 0,
+      net: 37_000,
+    }
+    expect(stepDetail(taxed, 0)).toBe('tax $1,144.33 → nets $37,000.00')
+  })
+
   it('prefers the gate note, then the idle label, then the tax cost', () => {
     expect(stepDetail(SOURCING.steps[2], 98_900)).toBe('locked until age 59.5')
     expect(stepDetail(SOURCING.steps[1], 98_900)).toBe('$0.00 this yr')
