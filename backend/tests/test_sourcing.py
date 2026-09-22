@@ -247,6 +247,108 @@ class TestBrokerageStep:
         assert result.shortfall == 0
 
 
+# A flat 5% state with a deduction the default 3,000 of ordinary income
+# exactly uses up, so every gain dollar sold is state-taxable from the
+# first — the arithmetic stays closed-form.
+FLAT_STATE = StateTax(
+    treatment="CA_ordinary",
+    brackets=[Bracket(rate=0.05, upto=None)],
+    std_deduction=3_000.0,
+    exemption_credit=0.0,
+)
+
+
+class TestStateTaxOnGains:
+    def test_the_state_taxes_a_sale_the_federal_headroom_leaves_free(self):
+        # The whole 37,000 gap sits inside the 0% federal bracket, so
+        # federal tax is zero and the state is the entire bill: net N
+        # costs N / (1 − 0.05·g) with g = 1 on a zero-basis stack.
+        result = run(buckets=[eth(basis=0)], state=FLAT_STATE)
+        draw = result.draws[0]
+        assert draw.federal_tax == 0
+        assert draw.state_tax == pytest.approx(37_000 / 0.95 * 0.05)
+        assert draw.tax == pytest.approx(draw.federal_tax + draw.state_tax)
+        assert draw.gross == pytest.approx(37_000 / 0.95)
+        assert draw.net == pytest.approx(37_000)
+        assert result.net_delivered == pytest.approx(45_000)
+
+    def test_the_gain_fraction_scales_the_state_tax(self):
+        # Half of every sale is basis, so the state sees half the gross.
+        result = run(buckets=[eth(basis=200_000)], state=FLAT_STATE)
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(37_000 / 0.975)
+        assert draw.state_tax == pytest.approx(37_000 / 0.975 * 0.5 * 0.05)
+
+    def test_a_full_basis_sale_owes_the_state_nothing(self):
+        result = run(buckets=[eth(basis=400_000)], state=FLAT_STATE)
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(37_000)
+        assert draw.state_tax == 0
+
+    def test_past_the_federal_headroom_both_rates_apply_together(self):
+        # No headroom at all (the federal deduction is spent too): 15%
+        # federal and 5% state on every gain dollar, so net N costs
+        # N / 0.80.
+        result = run(
+            buckets=[eth(basis=0)], ltcg_0_ceiling=0, std_deduction=3_000, state=FLAT_STATE
+        )
+        draw = result.draws[0]
+        assert result.headroom == 0
+        assert draw.gross == pytest.approx(37_000 / 0.80)
+        assert draw.federal_tax == pytest.approx(37_000 / 0.80 * 0.15)
+        assert draw.state_tax == pytest.approx(37_000 / 0.80 * 0.05)
+        assert draw.net == pytest.approx(37_000)
+
+    def test_a_straddling_sale_keeps_the_federal_break_where_it_was(self):
+        # 10,000 of headroom: the first 10,000 of gain is state-only
+        # (nets 9,500), the rest is grossed up at both rates. State tax
+        # never widens or narrows the federal headroom.
+        result = run(
+            buckets=[eth(basis=0)], ltcg_0_ceiling=10_000, std_deduction=3_000, state=FLAT_STATE
+        )
+        draw = result.draws[0]
+        assert result.headroom == pytest.approx(10_000)
+        taxed_gross = (37_000 - 9_500) / 0.80
+        assert draw.gross == pytest.approx(10_000 + taxed_gross)
+        assert draw.federal_tax == pytest.approx(taxed_gross * 0.15)
+        assert draw.state_tax == pytest.approx((10_000 + taxed_gross) * 0.05)
+        assert draw.net == pytest.approx(37_000)
+
+    def test_the_brokerage_continues_in_the_state_bracket_eth_left_off(self):
+        # A two-rate state: ETH's 20,000 of gain fills the 1% band
+        # exactly, so the brokerage's first dollar is already at 5%.
+        stepped = StateTax(
+            treatment="CA_ordinary",
+            brackets=[Bracket(rate=0.01, upto=20_000), Bracket(rate=0.05, upto=None)],
+            std_deduction=3_000.0,
+            exemption_credit=0.0,
+        )
+        result = run(buckets=[eth(balance=20_000, basis=0), brokerage(basis=0)], state=stepped)
+        eth_draw, brokerage_draw = result.draws
+        assert eth_draw.gross == pytest.approx(20_000)
+        assert eth_draw.state_tax == pytest.approx(200)
+        assert eth_draw.net == pytest.approx(19_800)
+        remaining = 37_000 - 19_800
+        assert brokerage_draw.gross == pytest.approx(remaining / 0.95)
+        assert brokerage_draw.state_tax == pytest.approx(remaining / 0.95 * 0.05)
+        assert brokerage_draw.federal_tax == 0
+        assert result.shortfall == 0
+
+    def test_a_state_with_no_income_tax_leaves_the_sale_untouched(self):
+        none = StateTax(
+            treatment="NONE",
+            brackets=[Bracket(rate=0.05, upto=None)],
+            std_deduction=3_000.0,
+            exemption_credit=0.0,
+        )
+        result = run(buckets=[eth(basis=0)], state=none)
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(37_000)
+        assert draw.state_tax == 0
+        assert draw.federal_tax == 0
+        assert draw.tax == 0
+
+
 def four01k(balance=500_000.0):
     return Bucket(name="401(k)", balance=balance, basis=0.0, treatment="ORDINARY", access_age=59.5)
 
