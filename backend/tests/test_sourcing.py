@@ -10,6 +10,8 @@ keeps selling past it at 15% on the gain portion. The engine solves
 for net spendable; it never draws 4% per bucket.
 """
 
+from dataclasses import replace
+
 import pytest
 
 from sereno.engine.sourcing import (
@@ -630,6 +632,54 @@ class TestStateTaxOn401k:
         assert draw.state_tax == 0
         assert draw.net == pytest.approx(5_000)
         assert result.shortfall == pytest.approx(15_000)
+
+
+class TestStateExemptionCredit:
+    def test_the_credit_comes_off_the_tax_on_ordinary_income_first(self):
+        result = run(
+            income=40_000,
+            ordinary_income=40_000,
+            ordinary_brackets=BRACKETS,
+            state=replace(CA, exemption_credit=300),
+        )
+        assert result.state_ordinary_tax == pytest.approx(100)
+        assert result.ordinary_tax == pytest.approx(1_100)
+        assert result.gap == pytest.approx(6_100)
+
+    def test_what_the_income_leaves_covers_the_first_draw_exactly(self):
+        # No state tax on the income, so the whole 300 reaches the sale:
+        # at 5% it makes the first 6,000 of gain free, and the gross-up
+        # solves for that rather than refunding it after the fact.
+        result = run(buckets=[eth(basis=0)], state=replace(FLAT_STATE, exemption_credit=300))
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(6_000 + 31_000 / 0.95)
+        assert draw.state_tax == pytest.approx(draw.gross * 0.05 - 300)
+        assert draw.net == pytest.approx(37_000)
+
+    def test_the_credit_is_split_across_the_income_and_the_draw_in_order(self):
+        # 37,000 of state-taxable income owes 1,850; a 2,000 credit clears
+        # it and leaves 150 for the sale — 3,000 of gain at 5%.
+        result = run(
+            target_spend=60_000,
+            income=40_000,
+            ordinary_income=40_000,
+            ordinary_brackets=BRACKETS,
+            buckets=[eth(basis=0)],
+            state=replace(FLAT_STATE, exemption_credit=2_000),
+        )
+        assert result.state_ordinary_tax == 0
+        assert result.gap == pytest.approx(21_000)
+        draw = result.draws[0]
+        assert draw.gross == pytest.approx(3_000 + 18_000 / 0.95)
+        assert draw.state_tax == pytest.approx(draw.gross * 0.05 - 150)
+
+    def test_the_credit_never_refunds(self):
+        result = run(buckets=[eth(basis=0)], state=replace(FLAT_STATE, exemption_credit=10_000))
+        draw = result.draws[0]
+        assert result.state_ordinary_tax == 0
+        assert draw.state_tax == 0
+        assert draw.gross == pytest.approx(37_000)
+        assert result.gap == pytest.approx(37_000)
 
 
 class TestUnfillableGap:
