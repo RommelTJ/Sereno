@@ -323,14 +323,20 @@ class TestFour01kStep:
 
     def test_existing_taxable_income_starts_the_walk_mid_bracket(self):
         # 54,800 ordinary − 30,000 deduction = 24,800 taxable: the 10%
-        # bracket is already full, so the whole draw is taxed at 12%
+        # bracket is already full, so the whole draw is taxed at 12%.
+        # The income's own 2,480 of tax leaves 52,320 credited, so the
+        # target is set to keep the gap at 37,000.
         result = run(
+            target_spend=89_320,
+            income=54_800,
             age=60,
             ordinary_income=54_800,
             buckets=[four01k()],
             ordinary_brackets=BRACKETS,
         )
         draw = result.draws[0]
+        assert result.ordinary_tax == pytest.approx(2_480)
+        assert result.gap == pytest.approx(37_000)
         assert draw.gross == pytest.approx(37_000 / 0.88)
         assert draw.tax == pytest.approx(37_000 / 0.88 * 0.12)
 

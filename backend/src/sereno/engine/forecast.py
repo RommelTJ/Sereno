@@ -9,7 +9,9 @@ ETH bucket, which grows at its own nominal rate minus inflation when
 eth_growth_pct is given (null keeps the blended rate, so the stored
 column stays optional) — staking pays that year's yield on the balance
 then staked, so the income decays with the stack rather than holding
-flat until a threshold ends it, and a null yield models none — and the
+flat until a threshold ends it, and a null yield models none; the
+reward is ordinary income, so the waterfall charges its tax in the
+year it lands and spends only the rest — and the
 year's spending need is withdrawn through the
 sourcing waterfall — so the 0% LTCG headroom, the gross-ups, and the
 59½ gate all apply per simulated year. ETH drains before the brokerage

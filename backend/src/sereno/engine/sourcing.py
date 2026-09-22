@@ -1,7 +1,12 @@
 """Tax-aware withdrawal sourcing: the sequencing waterfall from the
 design handoff's Sourcing screen. Target net spend minus non-portfolio
 income leaves a gap, filled bucket by bucket in the caller's order —
-ETH to exhaustion, then taxable brokerage, then 401(k). The headroom
+ETH to exhaustion, then taxable brokerage, then 401(k). The ordinary
+part of that income — staking rewards — owes tax in the year it lands,
+sheltered by the standard deduction and then walked up the brackets,
+and only its after-tax amount is credited against the gap; the same
+figure shrinks the headroom, so the two halves of the trade stay
+consistent. The headroom
 is measured in gain dollars (the 0% ceiling minus taxable ordinary
 income, plus whatever standard deduction that income left unused)
 and converts to sale proceeds through each bucket's gain
@@ -73,6 +78,9 @@ class BucketDraw:
 class SourcingResult:
     target_net: float
     income: float
+    # The tax owed on the caller's own ordinary income, charged against
+    # the income before it is credited to the gap.
+    ordinary_tax: float
     gap: float
     headroom: float
     draws: tuple[BucketDraw, ...]
@@ -165,6 +173,26 @@ def _gross_up_ordinary(
     return gross, tax
 
 
+def _ordinary_tax(
+    ordinary_income: float, std_deduction: float, brackets: list[Bracket] | None
+) -> float:
+    """Tax on ordinary income the caller already holds — a known gross,
+    so a plain walk up the brackets rather than the gross-up solve an
+    ordinary draw needs. Absent brackets mean no tax to model."""
+    if not brackets:
+        return 0.0
+    taxable = max(0.0, ordinary_income - std_deduction)
+    tax = 0.0
+    floor = 0.0
+    for bracket in brackets:
+        ceiling = bracket.upto if bracket.upto is not None else float("inf")
+        tax += max(0.0, min(taxable, ceiling) - floor) * bracket.rate
+        if taxable <= ceiling:
+            break
+        floor = ceiling
+    return tax
+
+
 def source_withdrawals(
     *,
     target_spend: float,
@@ -182,7 +210,11 @@ def source_withdrawals(
     # _gross_up_ordinary gives an ordinary draw.
     unused_shelter = max(0.0, std_deduction - ordinary_income)
     headroom = max(0.0, ltcg_0_ceiling - taxable_ordinary + unused_shelter)
-    gap = max(0.0, target_spend - income)
+    # The ordinary income is part of the income, and its tax is owed
+    # whether or not a bucket is sold: only the after-tax dollars fill
+    # the gap.
+    ordinary_tax = _ordinary_tax(ordinary_income, std_deduction, ordinary_brackets)
+    gap = max(0.0, target_spend - (income - ordinary_tax))
 
     remaining = gap
     remaining_headroom = headroom
@@ -221,6 +253,7 @@ def source_withdrawals(
     return SourcingResult(
         target_net=target_spend,
         income=income,
+        ordinary_tax=ordinary_tax,
         gap=gap,
         headroom=headroom,
         draws=tuple(draws),
