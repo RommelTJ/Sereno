@@ -19,16 +19,22 @@ which gates it whatever its treatment, read against its owner's age —
 age_offset carries how far that owner sits from the caller's age axis,
 so two people of different ages share one simulation without the
 engine ever learning whose bucket is whose. The engine solves for net
-spendable — never a flat 4% per bucket. Pure math over the caller's numbers; loading balances,
-basis, and tax parameters is the API layer's job.
+spendable — never a flat 4% per bucket. State tax rides on the same
+walk: under CA_ordinary the state taxes ordinary income and realized
+gains alike, so every draw is grossed up for the federal leg and the
+state leg together — each from its own position in its own table,
+with its own deduction — and reports the two halves apart, because a
+year the federal 0% bracket covers still owes the state. Pure math
+over the caller's numbers; loading balances, basis, and tax
+parameters is the API layer's job.
 
-v1 simplifications, on purpose: federal only (state_treatment and the
-prototype's CA gross-up are out of scope until state brackets exist),
-no NIIT (0%-headroom scenarios sit far below the threshold), one-pass
-(a 401(k) draw does not retroactively shrink the headroom earlier
-steps used — so in a year that sells past the headroom and then taps
-the 401(k), both claim the same unused standard deduction), and
-Social Security reduces the gap without counting as ordinary income.
+v1 simplifications, on purpose: no NIIT (0%-headroom scenarios sit
+far below the threshold), no per-bucket state exemption (Treasury
+interest is state-exempt, but no bucket says so yet), one-pass (a
+401(k) draw does not retroactively shrink the headroom earlier steps
+used — so in a year that sells past the headroom and then taps the
+401(k), both claim the same unused standard deduction), and Social
+Security reduces the gap without counting as ordinary income.
 """
 
 from dataclasses import dataclass
@@ -167,14 +173,32 @@ def _segments(position: float, brackets: list[Bracket] | None) -> list[tuple[flo
 class _Leg:
     """One tax's view of a draw: the share of each gross dollar it sees
     (the gain fraction for a sale, all of it for an ordinary draw), the
-    schedule ahead of it, and the tax it has accrued."""
+    schedule ahead of it, any flat credit still to take off the next
+    tax it would owe, and the tax it has accrued."""
 
     fraction: float
     segments: list[tuple[float, float]]
+    credit: float = 0.0
     tax: float = 0.0
 
     def taxed(self, gross: float) -> float:
         return gross * self.fraction
+
+
+@dataclass(frozen=True)
+class _StatePosition:
+    """Where the state walk stands between draws: the taxable income
+    reached so far (negative while the deduction is unused) and the
+    exemption credit not yet consumed."""
+
+    taxable: float
+    credit: float
+
+
+def _state_leg(position: _StatePosition, state: StateTax, fraction: float) -> _Leg | None:
+    if not state.modelled:
+        return None
+    return _Leg(fraction, _segments(position.taxable, state.brackets), credit=position.credit)
 
 
 def _walk(needed: float, balance: float, legs: list[_Leg]) -> float:
@@ -195,7 +219,14 @@ def _walk(needed: float, balance: float, legs: list[_Leg]) -> float:
         cap = remaining_balance
         for leg in legs:
             rate, room = leg.segments[0]
-            if leg.fraction > 0:
+            if leg.fraction <= 0:
+                continue
+            if leg.credit > 0 and rate > 0:
+                # A credit is a stretch of the schedule at an effective
+                # 0%: it lasts credit/rate of taxable dollars, and the
+                # gross-up runs to that boundary like any other.
+                cap = min(cap, min(room, leg.credit / rate) / leg.fraction)
+            else:
                 net_rate -= rate * leg.fraction
                 cap = min(cap, room / leg.fraction)
         take = min(remaining_net / net_rate, cap)
@@ -204,7 +235,10 @@ def _walk(needed: float, balance: float, legs: list[_Leg]) -> float:
         for leg in legs:
             rate, room = leg.segments[0]
             used = leg.taxed(take)
-            leg.tax += used * rate
+            owed = used * rate
+            covered = min(owed, leg.credit)
+            leg.credit -= covered
+            leg.tax += owed - covered
             if leg.fraction > 0 and room - used <= _NET_EPSILON:
                 leg.segments.pop(0)
             else:
@@ -213,8 +247,8 @@ def _walk(needed: float, balance: float, legs: list[_Leg]) -> float:
 
 
 def _draw_ltcg(
-    bucket: Bucket, needed: float, headroom: float, state_position: float, state: StateTax
-) -> tuple[BucketDraw, float, float]:
+    bucket: Bucket, needed: float, headroom: float, position: _StatePosition, state: StateTax
+) -> tuple[BucketDraw, float, _StatePosition]:
     """Sell inside the 0% headroom first — gain headroom buys headroom/g
     of proceeds (unbounded when nothing is gain), free of federal tax —
     then keep selling at 15% on the gain portion. The state, where it
@@ -225,12 +259,10 @@ def _draw_ltcg(
     stops: only the balance and the need bound the draw."""
     gain_fraction = _gain_fraction(bucket)
     federal = _Leg(gain_fraction, [(0.0, headroom), (LTCG_RATE, float("inf"))])
-    legs = [federal]
-    if state.modelled:
-        legs.append(_Leg(gain_fraction, _segments(state_position, state.brackets)))
-    net = _walk(needed, bucket.balance, legs)
+    state_leg = _state_leg(position, state, gain_fraction)
+    net = _walk(needed, bucket.balance, [federal] + ([state_leg] if state_leg else []))
     federal_tax = federal.tax
-    state_tax = legs[1].tax if len(legs) > 1 else 0.0
+    state_tax = state_leg.tax if state_leg else 0.0
     tax = federal_tax + state_tax
     gross = net + tax
     draw = BucketDraw(
@@ -243,7 +275,8 @@ def _draw_ltcg(
         net=net,
     )
     gain = gross * gain_fraction
-    return draw, max(0.0, headroom - gain), state_position + gain
+    credit = state_leg.credit if state_leg else position.credit
+    return draw, max(0.0, headroom - gain), _StatePosition(position.taxable + gain, credit)
 
 
 def _draw_tax_free(bucket: Bucket, needed: float) -> BucketDraw:
@@ -269,11 +302,12 @@ def _gross_up_ordinary(
     ordinary_income: float,
     std_deduction: float,
     brackets: list[Bracket] | None,
-    state_position: float,
+    position: _StatePosition,
     state: StateTax,
-) -> tuple[float, float, float]:
-    """Net, federal tax, and state tax for an ordinary-income withdrawal
-    delivering `needed`, stacked on the caller's ordinary income: the
+) -> tuple[float, float, float, float]:
+    """Net, federal tax, state tax, and the state credit left for an
+    ordinary-income withdrawal delivering `needed`, stacked on the
+    caller's ordinary income: the
     unused standard deduction shelters the first gross dollars, then a
     closed-form walk up the brackets — both tables at once where the
     state is modelled, each from its own position, since the state's
@@ -281,11 +315,11 @@ def _gross_up_ordinary(
     Absent federal brackets mean no federal tax to model — the config
     column is nullable — not an error."""
     federal = _Leg(1.0, _segments(ordinary_income - std_deduction, brackets))
-    legs = [federal]
-    if state.modelled:
-        legs.append(_Leg(1.0, _segments(state_position, state.brackets)))
-    net = _walk(needed, balance, legs)
-    return net, federal.tax, legs[1].tax if len(legs) > 1 else 0.0
+    state_leg = _state_leg(position, state, 1.0)
+    net = _walk(needed, balance, [federal] + ([state_leg] if state_leg else []))
+    if state_leg is None:
+        return net, federal.tax, 0.0, position.credit
+    return net, federal.tax, state_leg.tax, state_leg.credit
 
 
 def _ordinary_tax(
@@ -331,11 +365,15 @@ def source_withdrawals(
     # the gap. The state walks the same income up its own table from
     # its own, smaller shelter.
     federal_ordinary_tax = _ordinary_tax(ordinary_income, std_deduction, ordinary_brackets)
-    state_ordinary_tax = (
+    # The flat credit is taken off the year's first state tax, which
+    # this is — what it leaves carries into the draws, in order.
+    state_owed = (
         _ordinary_tax(ordinary_income, state.std_deduction, state.brackets)
         if state.modelled
         else 0.0
     )
+    credit = state.exemption_credit if state.modelled else 0.0
+    state_ordinary_tax = max(0.0, state_owed - credit)
     ordinary_tax = federal_ordinary_tax + state_ordinary_tax
     gap = max(0.0, target_spend - (income - ordinary_tax))
 
@@ -345,7 +383,9 @@ def source_withdrawals(
     # Where the year's income leaves the state walk: negative while the
     # state deduction is not yet used up. Gains and ordinary draws both
     # move it, since the state taxes them alike.
-    state_position = ordinary_income - state.std_deduction
+    position = _StatePosition(
+        taxable=ordinary_income - state.std_deduction, credit=max(0.0, credit - state_owed)
+    )
     draws: list[BucketDraw] = []
     for bucket in buckets:
         if bucket.access_age is not None and age + bucket.age_offset < bucket.access_age:
@@ -364,19 +404,19 @@ def source_withdrawals(
                 note=f"locked until age {bucket.access_age:g}",
             )
         elif bucket.treatment == "LTCG":
-            draw, remaining_headroom, state_position = _draw_ltcg(
-                bucket, remaining, remaining_headroom, state_position, state
+            draw, remaining_headroom, position = _draw_ltcg(
+                bucket, remaining, remaining_headroom, position, state
             )
         elif bucket.treatment == "TAX_FREE":
             draw = _draw_tax_free(bucket, remaining)
         else:
-            net, federal_tax, state_tax = _gross_up_ordinary(
+            net, federal_tax, state_tax, credit_left = _gross_up_ordinary(
                 remaining,
                 bucket.balance,
                 ordinary_running,
                 std_deduction,
                 ordinary_brackets,
-                state_position,
+                position,
                 state,
             )
             gross = net + federal_tax + state_tax
@@ -390,7 +430,7 @@ def source_withdrawals(
                 net=net,
             )
             ordinary_running += gross
-            state_position += gross
+            position = _StatePosition(position.taxable + gross, credit_left)
         draws.append(draw)
         remaining -= draw.net
 
