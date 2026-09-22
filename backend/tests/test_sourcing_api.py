@@ -189,6 +189,20 @@ class TestStakingIncome:
         assert body["staking_income"] == 0.0
         assert body["gap"] == pytest.approx(45_000.0)
 
+    def test_the_yields_ordinary_tax_comes_off_the_income(self, client):
+        # 10% of the 400,000 stake is 40,000 of ordinary income: 10,000
+        # past the deduction, taxed 1,000 at 10%, so 39,000 of it fills
+        # the target and the gap is 6,000 rather than 5,000.
+        seed_portfolio()
+        insert_spend_plan()
+        insert_tax_param()
+        insert_assumption(staking_yield_pct=10.0)
+        body = client.get("/api/sourcing", params={"age": 38}).json()
+        assert body["staking_income"] == pytest.approx(40_000.0)
+        assert body["income"] == pytest.approx(40_000.0)
+        assert body["ordinary_tax"] == pytest.approx(1_000.0)
+        assert body["gap"] == pytest.approx(6_000.0)
+
 
 class TestWaterfall:
     def test_the_full_waterfall_at_thirty_eight(self, client):
