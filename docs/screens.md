@@ -279,11 +279,16 @@ serves them at <http://localhost:5173>.
   when there is some, so the lines always add up — the gap
   from
   the portfolio, then one step per bucket — ETH sold to exhaustion
-  (tax-free inside the 0% LTCG headroom, then 15% on the gain),
-  brokerage next (inheriting leftover headroom, then 15% on the gain
-  portion), the 401(k) once its gate
+  (free of federal tax inside the 0% LTCG headroom, then 15% on the
+  gain), brokerage next (inheriting leftover headroom, then 15% on the
+  gain portion), the 401(k) once its gate
   opens, and HSAs last and untaxed — down to the net delivered, with a
-  shortfall banner when the gap goes unfilled. The bucket rule cards
+  shortfall banner when the gap goes unfilled. A taxed step's sub-line
+  names both halves whenever the state takes a share — `fed $0.00 ·
+  state $2,100.00 → nets $42,000.00` — since under `CA_ordinary` a
+  sale the federal 0% bracket covers still owes the state, and the
+  `+ Tax on staking income` row carries the same `fed · state` split
+  under its total. The bucket rule cards
   name each tier's lock age from the waterfall itself, and say nothing
   about a lock where the accounts set no gate. Age and what-if spend inputs re-evaluate the
   whole waterfall server-side (the age defaults to the server's
@@ -292,7 +297,8 @@ serves them at <http://localhost:5173>.
   net spendable. When the response carries `warnings`, an amber
   modelling note above the waterfall names each effect the config
   leaves out — no ordinary brackets on the tax year (401(k) draws and
-  staking income modelled untaxed), or no staking yield on the
+  staking income modelled untaxed), no state brackets on a California
+  year (state tax modelled at zero), or no staking yield on the
   assumptions — so an unconfigured plan never reads as a configured
   one. Until tax parameters, a spend target, and balances
   exist, the view points at Settings & data — and when no account has
@@ -406,7 +412,11 @@ serves them at <http://localhost:5173>.
   parameters (LTCG ceilings, NIIT, standard deduction, ordinary
   brackets — or, where the year has none, an amber "no ordinary
   brackets" line saying the engines model 401(k) draws and staking
-  income untaxed until they are entered), and the dark append-only
+  income untaxed until they are entered — then the state treatment
+  in words, and for a California year its standard deduction,
+  exemption credit, and state brackets, with the same amber "no
+  state brackets" line when the schedule is missing; a no-income-tax
+  state shows only the treatment), and the dark append-only
   data-model note pointing at
   `docs/design/schema.sql`. The Envelopes card manages the spending
   categories: each envelope's emoji, name, and current planned amount

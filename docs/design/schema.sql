@@ -194,9 +194,12 @@ CREATE TABLE tax_param (
     ltcg_15_ceiling  NUMERIC,                              -- 15% → 20% threshold
     niit_rate        NUMERIC NOT NULL DEFAULT 0.038,
     niit_threshold   NUMERIC,
-    state_treatment  TEXT    NOT NULL DEFAULT 'CA_ordinary',-- CA taxes cap gains as ordinary
+    state_treatment  TEXT    NOT NULL DEFAULT 'CA_ordinary',-- CA taxes cap gains as ordinary; or NONE
     std_deduction    NUMERIC,
-    ordinary_brackets TEXT                                 -- JSON array of {rate, upto}
+    ordinary_brackets TEXT,                                -- JSON array of {rate, upto}
+    state_brackets   TEXT,                                 -- same shape; NULL = none entered
+    state_std_deduction NUMERIC,
+    state_exemption_credit NUMERIC                         -- flat, non-refundable
 );
 
 -- ============================================================================

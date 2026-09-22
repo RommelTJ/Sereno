@@ -44,10 +44,14 @@ whole thing in plain SQL.
   a live control and stamps the anchor rate from actuals the moment real
   drawdown begins.
 - **Withdrawal sourcing** — a tax-aware sequencing waterfall: fill the spending gap by
-  selling ETH to exhaustion first — tax-free inside the 0% long-term-capital-gains
-  headroom, then at 15% on the gain, measured against the basis the ledger
-  recorded rather than against the whole sale — then taxable brokerage, then
-  the 401(k), then HSAs last and untaxed. Every gate is the account's own `access_age`,
+  selling ETH to exhaustion first — free of federal tax inside the 0%
+  long-term-capital-gains headroom, then at 15% on the gain, measured against
+  the basis the ledger recorded rather than against the whole sale — then
+  taxable brokerage, then the 401(k), then HSAs last and untaxed. State tax
+  rides on the same walk: under the year's `CA_ordinary` treatment the state
+  taxes ordinary income and realized gains alike up its own brackets, so a
+  sale the federal 0% bracket covers still nets less than it grosses, and
+  every step reports its federal and state halves apart. Every gate is the account's own `access_age`,
   read against its owner's age, so two people of different ages unlock on different
   years. Solves for *net spendable*, not a naive 4%-per-bucket draw.
 - **Mortgage** — the loan's terms as effective-dated config, and the payoff date
