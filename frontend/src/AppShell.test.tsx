@@ -25,6 +25,7 @@ beforeEach(() => {
     '/api/budget-month': EMPTY_BUDGET_MONTH,
     '/api/budget-year': EMPTY_BUDGET_YEAR,
     '/api/funds': [],
+    '/api/fund-entries': [],
     '/api/categories': [],
     '/api/quick-links': [],
     '/api/guardrails': null,
@@ -189,6 +190,7 @@ describe('Header net worth', () => {
       '/api/budget-month': EMPTY_BUDGET_MONTH,
       '/api/budget-year': EMPTY_BUDGET_YEAR,
       '/api/funds': [],
+      '/api/fund-entries': [],
       '/api/guardrails': null,
       '/api/forecast': null,
     })
@@ -210,6 +212,7 @@ describe('Header net worth', () => {
       '/api/budget-month': EMPTY_BUDGET_MONTH,
       '/api/budget-year': EMPTY_BUDGET_YEAR,
       '/api/funds': [],
+      '/api/fund-entries': [],
       '/api/guardrails': null,
       '/api/forecast': null,
       '/api/balance-entries': { id: 999 },

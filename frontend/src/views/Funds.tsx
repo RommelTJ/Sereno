@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react'
-import type { Fund, FundUpdate, TopUpSource } from '../api.ts'
+import type {
+  Fund,
+  FundLogEntry,
+  FundUpdate,
+  TopUpSource,
+} from '../api.ts'
 import {
   archiveFund,
   createFund,
   createFundEntry,
+  fetchFundEntries,
   fetchFunds,
   topUpFund,
   updateFund,
 } from '../api.ts'
 import EmojiSelect from '../components/EmojiSelect.tsx'
+import FundLog from '../components/FundLog.tsx'
 import GhostButton from '../components/GhostButton.tsx'
 import NewFundForm from '../components/NewFundForm.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
@@ -271,10 +278,37 @@ function FundRow({
 
 function Funds() {
   const [funds, setFunds] = useState<Fund[] | null>(null)
+  // The log's month opens on the current one; logVersion bumps after every
+  // fund change so the log refetches the entries that change wrote.
+  const [logMonth, setLogMonth] = useState(() => todayIso().slice(0, 7))
+  const [logVersion, setLogVersion] = useState(0)
+  const [entries, setEntries] = useState<FundLogEntry[] | null>(null)
+  const [paging, setPaging] = useState(false)
 
   useEffect(() => {
     void fetchFunds().then(setFunds)
   }, [])
+
+  useEffect(() => {
+    // A slow response for a month already paged past must not land.
+    let current = true
+    setPaging(true)
+    void fetchFundEntries(logMonth)
+      .then((next) => {
+        if (current) setEntries(next)
+      })
+      .finally(() => {
+        if (current) setPaging(false)
+      })
+    return () => {
+      current = false
+    }
+  }, [logMonth, logVersion])
+
+  const refresh = async () => {
+    setFunds(await fetchFunds())
+    setLogVersion((version) => version + 1)
+  }
 
   const addFund = async ({ fund, saved }: NewFund) => {
     const created = await createFund(fund)
@@ -285,24 +319,24 @@ function Funds() {
         balance: saved,
       })
     }
-    setFunds(await fetchFunds())
+    await refresh()
   }
 
   const archive = async (fundId: number) => {
     await archiveFund(fundId)
-    setFunds(await fetchFunds())
+    await refresh()
   }
 
   const savePlan = async (fundId: number, edit: FundUpdate) => {
     await updateFund(fundId, edit)
-    setFunds(await fetchFunds())
+    await refresh()
   }
 
   const correct = async (fundId: number, balance: number) => {
     // A hand-entered entry is the headline-neutral restatement: NULL
     // source, so the tracker moves and safe-to-spend never hears of it.
     await createFundEntry({ fund_id: fundId, as_of_date: todayIso(), balance })
-    setFunds(await fetchFunds())
+    await refresh()
   }
 
   const topUp = async (
@@ -318,39 +352,52 @@ function Funds() {
       ...(source === 'rollover' ? { source } : {}),
       ...(asOf && asOf !== todayIso() ? { as_of_date: asOf } : {}),
     })
-    setFunds(await fetchFunds())
+    await refresh()
   }
 
+  // Funds take two thirds and the log the last third from lg up; below
+  // it the log stacks under the funds list.
   return (
-    <div data-testid="view-funds" className="max-w-[760px]">
-      {funds && (
-        <div className="rounded-card border border-card-border bg-card p-[22px]">
-          <div className="flex items-center justify-between">
-            <p className="text-[13px] text-muted-2">
-              Total parked{' '}
-              <span className="num text-xl font-extrabold text-ink">
-                {formatUsd(totalParked(funds))}
-              </span>
-            </p>
-            <p className="text-[12.5px] text-muted-2">
-              notes auto-calculate from target, saved &amp; date
-            </p>
+    <div
+      data-testid="view-funds"
+      className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3"
+    >
+      <div data-testid="funds-column" className="lg:col-span-2">
+        {funds && (
+          <div className="rounded-card border border-card-border bg-card p-[22px]">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] text-muted-2">
+                Total parked{' '}
+                <span className="num text-xl font-extrabold text-ink">
+                  {formatUsd(totalParked(funds))}
+                </span>
+              </p>
+              <p className="text-[12.5px] text-muted-2">
+                notes auto-calculate from target, saved &amp; date
+              </p>
+            </div>
+            <NewFundForm onAdd={addFund} />
+            <div className="mt-[18px] flex flex-col gap-5">
+              {funds.map((fund) => (
+                <FundRow
+                  key={fund.id}
+                  fund={fund}
+                  onArchive={archive}
+                  onCorrect={correct}
+                  onSavePlan={savePlan}
+                  onTopUp={topUp}
+                />
+              ))}
+            </div>
           </div>
-          <NewFundForm onAdd={addFund} />
-          <div className="mt-[18px] flex flex-col gap-5">
-            {funds.map((fund) => (
-              <FundRow
-                key={fund.id}
-                fund={fund}
-                onArchive={archive}
-                onCorrect={correct}
-                onSavePlan={savePlan}
-                onTopUp={topUp}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
+      <FundLog
+        month={logMonth}
+        entries={entries}
+        paging={paging}
+        onPage={setLogMonth}
+      />
     </div>
   )
 }

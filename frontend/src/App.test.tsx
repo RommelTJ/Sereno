@@ -17,6 +17,7 @@ beforeEach(() => {
       activity: [],
     },
     '/api/funds': [],
+    '/api/fund-entries': [],
     '/api/guardrails': null,
     '/api/forecast': null,
     '/api/budget-year': { year: 2026, data_start: null, months: [] },
