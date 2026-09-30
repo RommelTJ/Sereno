@@ -943,3 +943,126 @@ describe('fund log', () => {
     expect(screen.getByTestId('funds-column')).toHaveClass('lg:col-span-2')
   })
 })
+
+describe('filtering the fund log to a fund', () => {
+  const FILTERED = `/api/fund-entries?month=${MONTH}&fund_id=1`
+
+  const nameButton = (name: string) => screen.getByRole('button', { name })
+
+  it('selects a fund when its card is clicked', async () => {
+    const fetchMock = stubApi({ ...ROUTES, [FILTERED]: [LOG[1]] })
+    renderFunds()
+    const rows = await screen.findAllByTestId('fund-row')
+
+    fireEvent.click(within(rows[0]).getByText('$500 / mo · ~3.3 yrs to target'))
+
+    expect(nameButton('🚨 Emergency fund')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(FILTERED))
+    const log = screen.getByTestId('fund-log')
+    expect(
+      within(log).getByTestId('fund-log-filter-chip'),
+    ).toHaveTextContent('Filtering: 🚨 Emergency fund ✕')
+  })
+
+  it('leaves the fund off each row while filtered', async () => {
+    stubApi({ ...ROUTES, [FILTERED]: [LOG[1]] })
+    renderFunds('/funds?fund=1')
+
+    const log = await screen.findByTestId('fund-log')
+    const [row] = await within(log).findAllByTestId('fund-log-row')
+    expect(within(row).getByText('Top-up')).toBeInTheDocument()
+    expect(within(row).queryByText('🚨 Emergency fund')).not.toBeInTheDocument()
+  })
+
+  it('clears the selection when the card is clicked again', async () => {
+    renderFunds()
+    await screen.findAllByTestId('fund-row')
+
+    fireEvent.click(nameButton('🚨 Emergency fund'))
+    fireEvent.click(nameButton('🚨 Emergency fund'))
+
+    expect(nameButton('🚨 Emergency fund')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(screen.queryByTestId('fund-log-filter-chip')).not.toBeInTheDocument()
+  })
+
+  it('clears the selection from the chip', async () => {
+    renderFunds('/funds?fund=1')
+
+    fireEvent.click(await screen.findByTestId('fund-log-filter-chip'))
+
+    expect(nameButton('🚨 Emergency fund')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
+  it("never toggles on the card's own buttons or forms", async () => {
+    stubApi({ ...ROUTES, 'POST /api/funds/1/archive': FUNDS[0] })
+    renderFunds()
+    const rows = await screen.findAllByTestId('fund-row')
+
+    for (const label of ['Top up', 'Correct balance', 'Edit']) {
+      fireEvent.click(within(rows[0]).getByRole('button', { name: label }))
+    }
+    fireEvent.click(within(rows[0]).getByLabelText('Name'))
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Archive' }))
+
+    expect(nameButton('🚨 Emergency fund')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
+  it('arrives with the fund from ?fund= selected', async () => {
+    const fetchMock = stubApi({ ...ROUTES, [FILTERED]: [LOG[1]] })
+    renderFunds('/funds?fund=1')
+
+    expect(
+      await screen.findByTestId('fund-log-filter-chip'),
+    ).toHaveTextContent('Filtering: 🚨 Emergency fund ✕')
+    expect(nameButton('🚨 Emergency fund')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(fetchMock).toHaveBeenCalledWith(FILTERED)
+  })
+
+  it('ignores a ?fund= that names no active fund', async () => {
+    const fetchMock = stubApi({ ...ROUTES })
+    renderFunds('/funds?fund=99')
+    await screen.findAllByTestId('fund-row')
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/fund-entries?month=${MONTH}`,
+      ),
+    )
+    expect(screen.queryByTestId('fund-log-filter-chip')).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      `/api/fund-entries?month=${MONTH}&fund_id=99`,
+    )
+  })
+
+  it('keeps the filter while paging months', async () => {
+    const earlier = previousMonth(MONTH)
+    const fetchMock = stubApi({ ...ROUTES })
+    renderFunds('/funds?fund=1')
+    const log = await screen.findByTestId('fund-log')
+    await within(log).findByTestId('fund-log-filter-chip')
+
+    fireEvent.click(within(log).getByRole('button', { name: 'Previous month' }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/fund-entries?month=${earlier}&fund_id=1`,
+      ),
+    )
+    expect(within(log).getByTestId('fund-log-filter-chip')).toBeInTheDocument()
+  })
+})
