@@ -1,8 +1,19 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { todayIso } from '../ledger.ts'
 import { BUDGET_MONTH, FUNDS, MAY_BUDGET_MONTH } from '../test/fixtures.ts'
-import { stubApi, stubMatchMedia } from '../test/stubs.ts'
+import {
+  stubApi,
+  stubMatchMedia,
+  stubVisualViewport,
+} from '../test/stubs.ts'
 import SafeToSpend from './SafeToSpend.tsx'
 
 const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
@@ -1771,5 +1782,21 @@ describe('Closing the floating panel', () => {
 
     expect(expenseBody(fetchMock)).toBeUndefined()
     expect(screen.getByRole('dialog', { name: 'Add spending' })).toBe(panel)
+  })
+})
+
+describe('Bottom sheet over the on-screen keyboard', () => {
+  it('rides above the keyboard on phones', async () => {
+    stubMatchMedia(false)
+    const viewport = stubVisualViewport()
+    render(<SafeToSpend />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add spending' }))
+    const sheet = screen.getByRole('dialog', { name: 'Add spending' })
+
+    act(() => viewport.set({ height: 368 }))
+
+    expect(sheet.style.bottom).toBe('400px')
+    expect(sheet.style.maxHeight).toBe('368px')
   })
 })
