@@ -196,6 +196,24 @@ export interface Fund {
   note: string
 }
 
+// One line of the fund log (GET /api/fund-entries): delta is the signed
+// move from the fund's previous snapshot, and link names the expense or
+// income row behind a 'spend' entry — null when nothing claims it.
+export interface FundLogEntry {
+  id: number
+  fund: { id: number; name: string; emoji: string | null; archived: boolean }
+  as_of_date: string
+  source: string | null
+  delta: number
+  balance: number
+  link: {
+    type: 'expense' | 'income'
+    id: number
+    label: string
+    kind: 'draw' | 'edit' | 'reversal'
+  } | null
+}
+
 // The planning config: effective-dated, append-only rows. Each GET
 // resolves the effective row (latest effective_date on or before today),
 // so a null means no row exists yet. Percents (return_pct) are stored in
@@ -790,6 +808,12 @@ export const fetchBudgetYear = (year?: number) =>
   )
 export const fetchCategories = () => getJson<Category[]>('/api/categories')
 export const fetchFunds = () => getJson<Fund[]>('/api/funds')
+export const fetchFundEntries = (month: string, fundId?: number | null) =>
+  getJson<FundLogEntry[]>(
+    fundId != null
+      ? `/api/fund-entries?month=${month}&fund_id=${fundId}`
+      : `/api/fund-entries?month=${month}`,
+  )
 export const fetchAssumptions = () =>
   getJson<Assumption | null>('/api/assumptions')
 export const fetchSpendPlan = () => getJson<SpendPlan | null>('/api/spend-plan')
