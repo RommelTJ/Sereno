@@ -16,6 +16,7 @@ from pydantic import (
     PositiveFloat,
     StringConstraints,
     field_validator,
+    model_validator,
 )
 
 from sereno.db.connection import get_db
@@ -163,6 +164,19 @@ class FundLogEntry(BaseModel):
     delta: float
     balance: float
     link: FundLogLink | None
+
+
+class FundEntryLink(BaseModel):
+    """Exactly one of the two: the row a 'spend' entry is linked to."""
+
+    expense_id: int | None = None
+    income_id: int | None = None
+
+    @model_validator(mode="after")
+    def exactly_one(self) -> "FundEntryLink":
+        if (self.expense_id is None) == (self.income_id is None):
+            raise ValueError("give exactly one of expense_id or income_id")
+        return self
 
 
 # Every entry with its delta and its place among its row's entries on the
@@ -483,3 +497,38 @@ def list_fund_entries(
         params,
     )
     return [_fund_log_entry(row) for row in rows]
+
+
+@router.put("/fund-entries/{entry_id}/link")
+def link_fund_entry(entry_id: int, link: FundEntryLink, db: Db) -> FundLogEntry:
+    """The post-deploy backfill: points an existing 'spend' entry at the
+    expense or income row behind it. The row must draw from the entry's
+    fund. Relinking replaces the old link — a matching mistake can be
+    undone — and no balance is ever touched."""
+    entry = db.execute(
+        "SELECT fund_id, source FROM fund_entry WHERE id = ?", (entry_id,)
+    ).fetchone()
+    if entry is None:
+        raise HTTPException(status_code=404, detail="fund entry not found")
+    if entry["source"] != "spend":
+        raise HTTPException(status_code=422, detail="only spend entries can be linked")
+    if link.expense_id is not None:
+        row = db.execute(
+            "SELECT 1 FROM expense_line WHERE id = ? AND funded_from = 'fund' AND fund_id = ?",
+            (link.expense_id, entry["fund_id"]),
+        ).fetchone()
+        detail = "expense is not funded by this fund"
+    else:
+        row = db.execute(
+            "SELECT 1 FROM income_event WHERE id = ? AND drawn_from_fund_id = ?",
+            (link.income_id, entry["fund_id"]),
+        ).fetchone()
+        detail = "income is not drawn from this fund"
+    if row is None:
+        raise HTTPException(status_code=422, detail=detail)
+    db.execute(
+        "UPDATE fund_entry SET expense_id = ?, income_id = ? WHERE id = ?",
+        (link.expense_id, link.income_id, entry_id),
+    )
+    db.commit()
+    return _fund_log_entry(db.execute(_FUND_LOG_QUERY + " WHERE c.id = ?", (entry_id,)).fetchone())
