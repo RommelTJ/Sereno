@@ -1657,3 +1657,119 @@ describe('Floating add below three columns', () => {
     expect(within(panel).getByText('Posts to May 2026')).toBeInTheDocument()
   })
 })
+
+describe('Closing the floating panel', () => {
+  beforeEach(() => {
+    stubMatchMedia(false)
+  })
+
+  const openPanel = async (choice: 'Add spending' | 'Add income') => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Add' }))
+    fireEvent.click(screen.getByRole('button', { name: choice }))
+    return screen.getByRole('dialog', { name: choice })
+  }
+
+  it('closes on the ✕ button', async () => {
+    render(<SafeToSpend />)
+    const panel = await openPanel('Add spending')
+
+    const close = within(panel).getByRole('button', { name: 'Close' })
+    expect(close).toHaveClass('min-h-[44px]', 'min-w-[44px]')
+    fireEvent.click(close)
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument()
+  })
+
+  it('closes on Esc', async () => {
+    render(<SafeToSpend />)
+    await openPanel('Add income')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('discards a half-filled form, so reopening starts blank', async () => {
+    render(<SafeToSpend />)
+    const panel = await openPanel('Add spending')
+    fireEvent.change(within(panel).getByLabelText('Amount'), {
+      target: { value: '45' },
+    })
+    fireEvent.change(within(panel).getByLabelText('Note'), {
+      target: { value: 'half-typed' },
+    })
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Close' }))
+    const reopened = await openPanel('Add spending')
+
+    expect(within(reopened).getByLabelText('Amount')).toHaveValue('')
+    expect(within(reopened).getByLabelText('Note')).toHaveValue('')
+  })
+
+  it('closes after a successful spending add', async () => {
+    const routes: Record<string, unknown> = {
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/expenses': { id: 99 },
+    }
+    const fetchMock = stubApi(routes)
+    render(<SafeToSpend />)
+    const panel = await openPanel('Add spending')
+
+    fireEvent.change(within(panel).getByLabelText('Amount'), {
+      target: { value: '45' },
+    })
+    routes['/api/budget-month'] = {
+      ...BUDGET_MONTH,
+      total_spent: 1_575,
+      safe_to_spend: 3_625,
+    }
+    fireEvent.click(
+      within(panel).getByRole('button', { name: '+ Add spending row' }),
+    )
+
+    expect(await screen.findByText('$3,625.00')).toBeInTheDocument()
+    expect(expenseBody(fetchMock)).toMatchObject({ amount: 45 })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('closes after a successful income add', async () => {
+    const routes: Record<string, unknown> = {
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      '/api/income': { id: 5 },
+    }
+    const fetchMock = stubApi(routes)
+    render(<SafeToSpend />)
+    const panel = await openPanel('Add income')
+
+    fireEvent.change(within(panel).getByLabelText('Amount'), {
+      target: { value: '2,400' },
+    })
+    fireEvent.click(
+      within(panel).getByRole('button', { name: '+ Add income row' }),
+    )
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+    expect(postBody(fetchMock, '/api/income')).toMatchObject({ amount: 2400 })
+  })
+
+  it('stays open when the add posts nothing', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    const panel = await openPanel('Add spending')
+
+    fireEvent.click(
+      within(panel).getByRole('button', { name: '+ Add spending row' }),
+    )
+
+    expect(expenseBody(fetchMock)).toBeUndefined()
+    expect(screen.getByRole('dialog', { name: 'Add spending' })).toBe(panel)
+  })
+})
