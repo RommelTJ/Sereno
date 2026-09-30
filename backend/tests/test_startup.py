@@ -39,6 +39,7 @@ def test_startup_applies_migrations(monkeypatch, tmp_path):
         "0018_income_drawn_from_fund.sql",
         "0019_category_is_mandatory.sql",
         "0020_state_tax.sql",
+        "0021_fund_entry_links.sql",
     ]
 
 

@@ -436,3 +436,61 @@ def test_state_tax_columns_join_the_tax_param(conn):
         (2026, "CA_ordinary", '[{"rate": 0.01, "upto": 21512}]', 11080, 298),
         (2027, "CA_ordinary", None, None, None),
     ]
+
+
+def test_fund_entries_link_to_the_row_behind_them(conn):
+    # 0021 points each fund entry back at the expense or income row that
+    # caused it, so the fund log can label a draw. The link is nullable:
+    # existing entries stay unlinked until the post-deploy backfill.
+    migrate(conn)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("INSERT INTO fund (id, name, kind) VALUES (1, 'Car', 'sinking')")
+    conn.execute(
+        "INSERT INTO expense_line (id, txn_date, budget_month, amount, funded_from, fund_id)"
+        " VALUES (7, '2026-09-03', '2026-09', 3220, 'fund', 1)"
+    )
+    conn.execute(
+        "INSERT INTO income_event (id, txn_date, budget_month, source, amount,"
+        " drawn_from_fund_id) VALUES (8, '2026-09-01', '2026-09', 'transfer_in', 50000, 1)"
+    )
+    conn.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, source, expense_id)"
+        " VALUES (1, '2026-09-03', 100, 'spend', 7)"
+    )
+    conn.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, source, income_id)"
+        " VALUES (1, '2026-09-01', 200, 'spend', 8)"
+    )
+    conn.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance) VALUES (1, '2026-08-01', 0)"
+    )
+    rows = conn.execute("SELECT expense_id, income_id FROM fund_entry ORDER BY id").fetchall()
+    assert [tuple(row) for row in rows] == [(7, None), (None, 8), (None, None)]
+
+
+def test_deleting_a_linked_row_keeps_the_entry_and_clears_the_link(conn):
+    # A hard delete of an expense or income row must not fail on the
+    # entries that point at it — the history stays, the link goes NULL.
+    migrate(conn)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("INSERT INTO fund (id, name, kind) VALUES (1, 'Car', 'sinking')")
+    conn.execute(
+        "INSERT INTO expense_line (id, txn_date, budget_month, amount, funded_from, fund_id)"
+        " VALUES (7, '2026-09-03', '2026-09', 3220, 'fund', 1)"
+    )
+    conn.execute(
+        "INSERT INTO income_event (id, txn_date, budget_month, source, amount,"
+        " drawn_from_fund_id) VALUES (8, '2026-09-01', '2026-09', 'transfer_in', 50000, 1)"
+    )
+    conn.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, source, expense_id)"
+        " VALUES (1, '2026-09-03', 100, 'spend', 7)"
+    )
+    conn.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, source, income_id)"
+        " VALUES (1, '2026-09-01', 200, 'spend', 8)"
+    )
+    conn.execute("DELETE FROM expense_line WHERE id = 7")
+    conn.execute("DELETE FROM income_event WHERE id = 8")
+    rows = conn.execute("SELECT balance, expense_id, income_id FROM fund_entry ORDER BY id")
+    assert [tuple(row) for row in rows] == [(100, None, None), (200, None, None)]
