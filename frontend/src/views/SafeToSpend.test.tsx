@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it } from 'vitest'
 import { todayIso } from '../ledger.ts'
 import { BUDGET_MONTH, FUNDS, MAY_BUDGET_MONTH } from '../test/fixtures.ts'
-import { stubApi } from '../test/stubs.ts'
+import { stubApi, stubMatchMedia } from '../test/stubs.ts'
 import SafeToSpend from './SafeToSpend.tsx'
 
 const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
@@ -1538,5 +1538,122 @@ describe('Envelope activity filter', () => {
     expect(within(feed).getByTestId('activity-filter-chip')).toHaveTextContent(
       'Filtering: 🤪 Entertainment ✕',
     )
+  })
+})
+
+describe('Inline add-forms at three columns', () => {
+  it('keeps both forms in the third column with no floating button', async () => {
+    stubMatchMedia(true)
+    render(<SafeToSpend />)
+
+    expect(await screen.findByTestId('spending-form')).toBeInTheDocument()
+    expect(screen.getByTestId('income-form')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Add' }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('Floating add below three columns', () => {
+  beforeEach(() => {
+    stubMatchMedia(false)
+  })
+
+  const openPanel = async (choice: 'Add spending' | 'Add income') => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Add' }))
+    fireEvent.click(screen.getByRole('button', { name: choice }))
+    return screen.getByRole('dialog', { name: choice })
+  }
+
+  it('takes both forms out of the grid behind a floating button', async () => {
+    render(<SafeToSpend />)
+
+    const add = await screen.findByRole('button', { name: 'Add' })
+    expect(add).toHaveClass('fixed', 'min-h-[44px]', 'min-w-[44px]')
+    expect(screen.queryByTestId('spending-form')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('income-form')).not.toBeInTheDocument()
+  })
+
+  it('opens a menu offering spending and income', async () => {
+    render(<SafeToSpend />)
+
+    const add = await screen.findByRole('button', { name: 'Add' })
+    expect(add).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(add)
+
+    expect(add).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Add spending' })).toHaveClass(
+      'min-h-[44px]',
+    )
+    expect(screen.getByRole('button', { name: 'Add income' })).toHaveClass(
+      'min-h-[44px]',
+    )
+  })
+
+  it('opens the spending form in a panel', async () => {
+    render(<SafeToSpend />)
+
+    const panel = await openPanel('Add spending')
+
+    expect(within(panel).getByTestId('spending-form')).toBeInTheDocument()
+    expect(screen.queryByTestId('income-form')).not.toBeInTheDocument()
+    // The menu gives way to the panel.
+    expect(
+      screen.queryByRole('button', { name: 'Add income' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('opens the income form in a panel', async () => {
+    render(<SafeToSpend />)
+
+    const panel = await openPanel('Add income')
+
+    expect(within(panel).getByTestId('income-form')).toBeInTheDocument()
+    expect(screen.queryByTestId('spending-form')).not.toBeInTheDocument()
+  })
+
+  it('docks as a bottom sheet on phones and a right-hand panel from md up', async () => {
+    render(<SafeToSpend />)
+
+    const panel = await openPanel('Add spending')
+
+    expect(panel).toHaveClass(
+      'fixed',
+      'inset-x-0',
+      'bottom-0',
+      'md:inset-x-auto',
+      'md:right-4',
+      'md:bottom-4',
+      'md:w-[420px]',
+    )
+  })
+
+  it('leaves the page usable behind the open panel', async () => {
+    render(<SafeToSpend />)
+    const panel = await openPanel('Add spending')
+
+    // Non-modal: no backdrop swallows the tap, so an Activity row still
+    // opens its edit form while the panel stays put.
+    const feed = screen.getByTestId('sts-activity')
+    fireEvent.click(within(feed).getAllByTestId('activity-row')[0])
+
+    expect(await screen.findByTestId('expense-edit-form')).toBeInTheDocument()
+    expect(panel).toBeInTheDocument()
+  })
+
+  it('carries the past-month hint into the panel', async () => {
+    stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    render(<SafeToSpend />)
+    await screen.findByText('June envelopes')
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    await screen.findByText('May envelopes')
+
+    const panel = await openPanel('Add spending')
+
+    expect(within(panel).getByText('Posts to May 2026')).toBeInTheDocument()
   })
 })
