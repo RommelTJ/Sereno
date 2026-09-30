@@ -108,8 +108,21 @@ serves them at <http://localhost:5173>.
   feed, the two add-forms — but only past 1560px, where each column
   clears 400px: the 248px sidebar and the shell's padding take 320px,
   and three 400px columns with their gaps need 1240px of what is left.
-  Under that it falls to two columns at 768px and one below, where
-  every card stacks full width in reading order. First the monthly
+  Under that it falls to two columns at 768px — envelopes and funds
+  beside the activity feed — and one below, where every card stacks
+  full width in reading order; the add-forms leave the grid entirely,
+  so logging an entry never means scrolling past the envelopes and the
+  whole feed. In their place a floating + button sits in the
+  bottom-right corner and opens a two-item menu, Add spending and Add
+  income; the pick opens that form in a panel docked bottom-right from
+  768px up and as a full-width bottom sheet below it. The panel is
+  non-modal — no dimmed backdrop, so the page behind it stays usable
+  and a new entry can be watched landing in Activity — and a
+  successful submit, Esc, or its ✕ closes it; closing discards a
+  half-filled form, so reopening starts blank. On a phone the sheet
+  follows the visual viewport, lifting above the on-screen keyboard
+  and capping its height to what is still visible, since iOS Safari
+  otherwise leaves a fixed sheet behind the keyboard. First the monthly
   envelopes card: one progress bar per category, "spent · left" while under
   budget, "$spent of $budgeted · $X over" in red once over — overspending
   is allowed and simply trims the headline. Every envelope row is a tap
