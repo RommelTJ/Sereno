@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
 export type AddKind = 'spending' | 'income'
@@ -12,10 +12,26 @@ const CHOICES: { kind: AddKind; label: string }[] = [
 // a floating button opens a two-item menu, and the chosen form opens in a
 // panel — a bottom sheet on phones, a card docked bottom-right from md up.
 // The panel is non-modal: no backdrop, so the page behind it stays usable
-// and a new entry can be watched landing in Activity.
-function FloatingAdd({ renderForm }: { renderForm: (kind: AddKind) => ReactNode }) {
+// and a new entry can be watched landing in Activity. Closing unmounts
+// the form, so a half-filled one is discarded and reopening starts blank.
+// renderForm gets the close callback to call once an add succeeds.
+function FloatingAdd({
+  renderForm,
+}: {
+  renderForm: (kind: AddKind, close: () => void) => ReactNode
+}) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [open, setOpen] = useState<AddKind | null>(null)
+  const close = () => setOpen(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(null)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [open])
 
   if (open) {
     const label = CHOICES.find((choice) => choice.kind === open)?.label
@@ -25,7 +41,15 @@ function FloatingAdd({ renderForm }: { renderForm: (kind: AddKind) => ReactNode 
         aria-label={label}
         className="fixed inset-x-0 bottom-0 z-10 max-h-[85dvh] overflow-y-auto md:inset-x-auto md:right-4 md:bottom-4 md:max-h-[calc(100dvh-2rem)] md:w-[420px]"
       >
-        {renderForm(open)}
+        {renderForm(open, close)}
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={close}
+          className="absolute top-1.5 right-1.5 flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-input text-muted"
+        >
+          ✕
+        </button>
       </div>
     )
   }

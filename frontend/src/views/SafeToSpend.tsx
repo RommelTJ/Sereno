@@ -119,24 +119,35 @@ function SafeToSpend() {
     setFunds(nextFunds)
   }
 
-  const spendingForm = budget && funds && (
-    <SpendingForm
-      key={`spend-${budget.month}`}
-      categories={budget.categories}
-      funds={funds}
-      month={budget.month}
-      paged={homeMonth != null && budget.month !== homeMonth}
-      onAdd={addExpense}
-    />
-  )
-  const incomeForm = budget && funds && (
-    <IncomeForm
-      key={`income-${budget.month}`}
-      funds={funds}
-      month={budget.month}
-      onAdd={addIncome}
-    />
-  )
+  // onAdded runs once a post lands — the floating panel closes on it.
+  const spendingForm = (onAdded?: () => void) =>
+    budget &&
+    funds && (
+      <SpendingForm
+        key={`spend-${budget.month}`}
+        categories={budget.categories}
+        funds={funds}
+        month={budget.month}
+        paged={homeMonth != null && budget.month !== homeMonth}
+        onAdd={async (input) => {
+          await addExpense(input)
+          onAdded?.()
+        }}
+      />
+    )
+  const incomeForm = (onAdded?: () => void) =>
+    budget &&
+    funds && (
+      <IncomeForm
+        key={`income-${budget.month}`}
+        funds={funds}
+        month={budget.month}
+        onAdd={async (input) => {
+          await addIncome(input)
+          onAdded?.()
+        }}
+      />
+    )
 
   // Three columns only where each one clears 400px — the 3col breakpoint
   // in the theme carries that arithmetic. Below it the add-forms leave the
@@ -214,13 +225,13 @@ function SafeToSpend() {
           </section>
           {threeColumns ? (
             <div className="flex flex-col gap-5">
-              {spendingForm}
-              {incomeForm}
+              {spendingForm()}
+              {incomeForm()}
             </div>
           ) : (
             <FloatingAdd
-              renderForm={(kind) =>
-                kind === 'spending' ? spendingForm : incomeForm
+              renderForm={(kind, close) =>
+                kind === 'spending' ? spendingForm(close) : incomeForm(close)
               }
             />
           )}
