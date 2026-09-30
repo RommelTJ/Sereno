@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import type {
   Fund,
   FundLogEntry,
@@ -35,14 +36,22 @@ import { formatUsd, todayIso } from '../ledger.ts'
 // the others — and keeps a single Save/Cancel pair on screen.
 type RowForm = 'plan' | 'topup' | 'correct' | null
 
+// Clicks landing on the card's own controls — its buttons and the inline
+// forms' fields — never toggle the card's selection.
+const CARD_CONTROLS = 'button, input, select, textarea, label'
+
 function FundRow({
   fund,
+  selected,
+  onSelect,
   onArchive,
   onCorrect,
   onSavePlan,
   onTopUp,
 }: {
   fund: Fund
+  selected: boolean
+  onSelect: (fundId: number) => void
   onArchive: (fundId: number) => Promise<void>
   onCorrect: (fundId: number, balance: number) => Promise<void>
   onSavePlan: (fundId: number, edit: FundUpdate) => Promise<void>
@@ -122,10 +131,25 @@ function FundRow({
   }
 
   return (
-    <div data-testid="fund-row">
+    <div
+      data-testid="fund-row"
+      onClick={(event) => {
+        if (!(event.target as Element).closest(CARD_CONTROLS)) {
+          onSelect(fund.id)
+        }
+      }}
+      className={`-m-2 cursor-pointer rounded-[10px] p-2 ${selected ? 'bg-tile' : ''}`}
+    >
       <div className="flex items-baseline justify-between">
         <p className="text-[14.5px] font-bold">
-          {view.name}{' '}
+          <button
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onSelect(fund.id)}
+            className="cursor-pointer text-left"
+          >
+            {view.name}
+          </button>{' '}
           <span className="text-[11.5px] font-medium text-muted-2">
             · {view.meta}
           </span>
@@ -278,6 +302,14 @@ function FundRow({
 
 function Funds() {
   const [funds, setFunds] = useState<Fund[] | null>(null)
+  // The fund the log is filtered to lives in ?fund=, so a refresh, Back,
+  // and a Safe-to-spend fund-row link all land on it. An id naming no
+  // active fund is ignored; undefined means the funds haven't loaded, so
+  // the log waits rather than fetching unfiltered first.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requested = Number(searchParams.get('fund'))
+  const selectedFund = funds?.find((fund) => fund.id === requested) ?? null
+  const selectedId = funds ? (selectedFund?.id ?? null) : undefined
   // The log's month opens on the current one; logVersion bumps after every
   // fund change so the log refetches the entries that change wrote.
   const [logMonth, setLogMonth] = useState(() => todayIso().slice(0, 7))
@@ -290,10 +322,11 @@ function Funds() {
   }, [])
 
   useEffect(() => {
-    // A slow response for a month already paged past must not land.
+    if (selectedId === undefined) return
+    // A slow response for a month or filter already left must not land.
     let current = true
     setPaging(true)
-    void fetchFundEntries(logMonth)
+    void fetchFundEntries(logMonth, selectedId)
       .then((next) => {
         if (current) setEntries(next)
       })
@@ -303,7 +336,14 @@ function Funds() {
     return () => {
       current = false
     }
-  }, [logMonth, logVersion])
+  }, [logMonth, logVersion, selectedId])
+
+  // Selecting the selected fund clears it. The URL is replaced, not
+  // pushed, so toggling never piles up history for Back to walk through.
+  const select = (fundId: number) =>
+    setSearchParams(selectedId === fundId ? {} : { fund: String(fundId) }, {
+      replace: true,
+    })
 
   const refresh = async () => {
     setFunds(await fetchFunds())
@@ -382,6 +422,8 @@ function Funds() {
                 <FundRow
                   key={fund.id}
                   fund={fund}
+                  selected={fund.id === selectedId}
+                  onSelect={select}
                   onArchive={archive}
                   onCorrect={correct}
                   onSavePlan={savePlan}
@@ -397,6 +439,8 @@ function Funds() {
         entries={entries}
         paging={paging}
         onPage={setLogMonth}
+        filter={selectedFund ? fundView(selectedFund).name : null}
+        onClearFilter={() => setSearchParams({}, { replace: true })}
       />
     </div>
   )
