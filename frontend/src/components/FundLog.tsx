@@ -1,3 +1,4 @@
+import type { Ref } from 'react'
 import type { FundLogEntry } from '../api.ts'
 import { monthYearLabel, nextMonth, previousMonth } from '../budget.ts'
 import { fundLogRow } from '../funds.ts'
@@ -18,6 +19,7 @@ function FundLog({
   onPage,
   filter,
   onClearFilter,
+  ref,
 }: {
   month: string
   entries: FundLogEntry[] | null
@@ -25,9 +27,11 @@ function FundLog({
   onPage: (month: string) => void
   filter: string | null
   onClearFilter: () => void
+  ref?: Ref<HTMLElement>
 }) {
   return (
     <section
+      ref={ref}
       data-testid="fund-log"
       className="rounded-card border border-card-border bg-card p-[22px]"
     >

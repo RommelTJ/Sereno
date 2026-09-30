@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import type {
   Fund,
@@ -30,6 +30,10 @@ import {
   totalParked,
 } from '../funds.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
+import { useMediaQuery } from '../useMediaQuery.ts'
+
+// Tailwind's lg: from here up the log sits beside the funds.
+const SIDE_BY_SIDE = '(min-width: 64rem)'
 
 // One inline form open per row at a time: the plan edit, the top-up, and
 // the balance correction share the row's footer, so opening one closes
@@ -316,6 +320,8 @@ function Funds() {
   const [logVersion, setLogVersion] = useState(0)
   const [entries, setEntries] = useState<FundLogEntry[] | null>(null)
   const [paging, setPaging] = useState(false)
+  const sideBySide = useMediaQuery(SIDE_BY_SIDE)
+  const logRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     void fetchFunds().then(setFunds)
@@ -340,10 +346,17 @@ function Funds() {
 
   // Selecting the selected fund clears it. The URL is replaced, not
   // pushed, so toggling never piles up history for Back to walk through.
-  const select = (fundId: number) =>
-    setSearchParams(selectedId === fundId ? {} : { fund: String(fundId) }, {
+  // Stacked below the funds list, the log is out of sight, so a new
+  // selection scrolls it into view.
+  const select = (fundId: number) => {
+    const clearing = selectedId === fundId
+    setSearchParams(clearing ? {} : { fund: String(fundId) }, {
       replace: true,
     })
+    if (!clearing && !sideBySide) {
+      logRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
 
   const refresh = async () => {
     setFunds(await fetchFunds())
@@ -435,6 +448,7 @@ function Funds() {
         )}
       </div>
       <FundLog
+        ref={logRef}
         month={logMonth}
         entries={entries}
         paging={paging}
