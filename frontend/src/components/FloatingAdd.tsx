@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useMediaQuery } from '../useMediaQuery.ts'
+import { useVisualViewportInset } from '../useVisualViewportInset.ts'
 
 export type AddKind = 'spending' | 'income'
 
@@ -23,6 +25,10 @@ function FloatingAdd({
   const [menuOpen, setMenuOpen] = useState(false)
   const [open, setOpen] = useState<AddKind | null>(null)
   const close = () => setOpen(null)
+  // Below md the sheet rides the visual viewport so the on-screen keyboard
+  // never covers the focused field; from md up the panel docks by class.
+  const phone = !useMediaQuery('(min-width: 48rem)')
+  const inset = useVisualViewportInset()
 
   useEffect(() => {
     if (!open) return
@@ -39,7 +45,10 @@ function FloatingAdd({
       <div
         role="dialog"
         aria-label={label}
-        className="fixed inset-x-0 bottom-0 z-10 max-h-[85dvh] overflow-y-auto md:inset-x-auto md:right-4 md:bottom-4 md:max-h-[calc(100dvh-2rem)] md:w-[420px]"
+        style={
+          phone ? { bottom: inset.bottom, maxHeight: inset.height } : undefined
+        }
+        className="fixed inset-x-0 bottom-0 z-10 overflow-y-auto md:inset-x-auto md:right-4 md:bottom-4 md:max-h-[calc(100dvh-2rem)] md:w-[420px]"
       >
         {renderForm(open, close)}
         <button
