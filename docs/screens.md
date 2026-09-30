@@ -140,7 +140,9 @@ serves them at <http://localhost:5173>.
   happen: the total parked in its header and one row per active fund with
   its emoji-led name, available balance, and "$X / mo" plan — blank for a
   fund saving at no set pace — straight from the same `GET /api/funds`
-  list the forms already load. Beside them, "Add a spending item" (amount,
+  list the forms already load. Each row (a ≥44px target) links to
+  `/funds?fund=<id>`, opening Funds & goals with that fund's log
+  selected — the quickest answer to "did I already draw this month?" Beside them, "Add a spending item" (amount,
   a single "Paid from" select — the month's budget envelopes and the
   active funds from `GET /api/funds` as two optgroups, every option
   labeled `emoji + name`: an envelope pick posts discretionary spending
@@ -260,6 +262,28 @@ serves them at <http://localhost:5173>.
   show just their balance, with no bar. Submitting the form posts the
   dimension row to `POST /api/funds`, appends any initial saved amount via
   `POST /api/fund-entries`, and refetches the list.
+  Beside the card, from `lg` up, sits the **Fund log** — the funds take
+  two thirds, the log the last third; below `lg` it stacks under the
+  funds. It reads `GET /api/fund-entries` for one calendar month, opening
+  on the current one, with ← / → month paging (44px buttons, like
+  Safe-to-spend's pager). Each row shows the date, the fund (when
+  unfiltered, "· archived" for an archived fund), a description, the
+  signed amount, and the balance after. The description is the linked
+  row's label ("The Home Depot"), with "· edited" or "· reversed" for a
+  later correction of that draw; an unlinked spend reads "Withdrawn", or
+  "Returned" when it raised the fund (a deleted row's reversal); and
+  the other sources read "Monthly contribution", "Top-up", "Rollover",
+  and "Correction" — except an archive's zeroing entry, "Archived". An
+  empty month says "No fund activity in September 2026." Clicking a
+  fund card — or its name, a pressed-state button — selects it and
+  filters the log (`&fund_id=`, which brings the monthly contributions
+  in); clicking again clears it, and the card's own buttons and inline
+  forms never toggle it. The selection lives in `?fund=`, replaced
+  rather than pushed, so a refresh and Back keep it and the
+  Safe-to-spend links pre-select it; an id naming no active fund is
+  ignored. The log header then shows a "Filtering: 🛟 1st Year Fund ✕"
+  chip that clears it, paging keeps it, and below `lg` a new selection
+  scrolls the log into view. Every fund change refetches the log.
 - **Guardrails** (<http://localhost:5173/guardrails>) — the "how much
   can we spend?" view, every figure from `GET /api/guardrails`: KPIs
   (investable portfolio, the tested spend, and the withdrawal rate —

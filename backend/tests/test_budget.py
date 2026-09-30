@@ -96,6 +96,24 @@ def fetch_fund_entries(fund_id):
     ]
 
 
+def fetch_fund_links(fund_id):
+    # The expense/income link each entry carries, oldest first — kept apart
+    # from fetch_fund_entries so the balance-chain assertions stay as they
+    # are.
+    return [
+        (
+            to_dollars(row["contribution"]),
+            row["expense_id"],
+            row["income_id"],
+        )
+        for row in query(
+            "SELECT contribution, expense_id, income_id FROM fund_entry"
+            " WHERE fund_id = ? ORDER BY id",
+            fund_id,
+        )
+    ]
+
+
 def query(sql, *params):
     conn = connect()
     try:
@@ -1042,6 +1060,81 @@ class TestDeleteExpense:
 
     def test_unknown_expense_returns_404(self, client):
         assert client.delete("/api/expenses/99").status_code == 404
+
+
+class TestExpenseFundLinks:
+    """Every 'spend' entry an expense write appends points back at the
+    expense, so the fund log can label it (issue #169)."""
+
+    def insert_expense(self, client, **overrides):
+        payload = {"txn_date": "2026-06-10", "amount": 96} | overrides
+        response = client.post("/api/expenses", json=payload)
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    def test_the_draw_links_to_the_new_expense(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        assert fetch_fund_links(bike_id) == [(0, None, None), (-1200, expense_id, None)]
+
+    def test_a_same_fund_amount_edit_links_its_delta(self, client):
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        payload = {"txn_date": "2026-06-10", "amount": 1500, "funded_from": "fund"}
+        response = client.put(f"/api/expenses/{expense_id}", json=payload | {"fund_id": bike_id})
+        assert response.status_code == 200
+        assert fetch_fund_links(bike_id)[1:] == [
+            (-1200, expense_id, None),
+            (-300, expense_id, None),
+        ]
+
+    def test_a_changed_fund_links_the_reversal_and_the_fresh_draw(self, client):
+        bike_id = insert_fund("Bike fund")
+        car_id = insert_fund("Car fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        insert_fund_entry(car_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        payload = {"txn_date": "2026-06-10", "amount": 1200, "funded_from": "fund"}
+        response = client.put(f"/api/expenses/{expense_id}", json=payload | {"fund_id": car_id})
+        assert response.status_code == 200
+        assert fetch_fund_links(bike_id)[1:] == [
+            (-1200, expense_id, None),
+            (1200, expense_id, None),
+        ]
+        assert fetch_fund_links(car_id)[1:] == [(-1200, expense_id, None)]
+
+    def test_a_delete_keeps_the_entries_and_clears_their_links(self, client):
+        # The reversal is written linked, then the row's removal nulls every
+        # link to it — the history stays and reads as unlinked.
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 5000)
+        expense_id = self.insert_expense(client, amount=1200, funded_from="fund", fund_id=bike_id)
+        assert client.delete(f"/api/expenses/{expense_id}").status_code == 204
+        assert fetch_fund_links(bike_id) == [
+            (0, None, None),
+            (-1200, None, None),
+            (1200, None, None),
+        ]
+
+    def test_an_overdraw_writes_neither_the_row_nor_an_entry(self, client):
+        # The row is inserted before the draw so the entry can carry its
+        # id; the 422 must still leave nothing behind.
+        bike_id = insert_fund("Bike fund")
+        insert_fund_entry(bike_id, "2026-06-01", 1000)
+        response = client.post(
+            "/api/expenses",
+            json={
+                "txn_date": "2026-06-05",
+                "amount": 1200,
+                "funded_from": "fund",
+                "fund_id": bike_id,
+            },
+        )
+        assert response.status_code == 422
+        assert query("SELECT id FROM expense_line") == []
+        assert fetch_fund_links(bike_id) == [(0, None, None)]
 
 
 class TestPostIncome:
@@ -2111,3 +2204,72 @@ class TestGetBudgetMonth:
     def test_rejects_a_malformed_month(self, client):
         response = client.get("/api/budget-month", params={"month": "2026-6"})
         assert response.status_code == 422
+
+
+class TestIncomeFundLinks:
+    """Every 'spend' entry an income write appends points back at the
+    income row, so the fund log can label it (issue #169)."""
+
+    def insert_income(self, client, **overrides):
+        payload = {"txn_date": "2026-06-01", "source": "transfer_in", "amount": 1200} | overrides
+        response = client.post("/api/income", json=payload)
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    def test_the_draw_links_to_the_new_income(self, client):
+        cash_id = insert_fund("Year-2 cash")
+        insert_fund_entry(cash_id, "2026-05-01", 5000)
+        income_id = self.insert_income(client, drawn_from_fund_id=cash_id)
+        assert fetch_fund_links(cash_id) == [(0, None, None), (-1200, None, income_id)]
+
+    def test_a_same_fund_amount_edit_links_its_delta(self, client):
+        cash_id = insert_fund("Year-2 cash")
+        insert_fund_entry(cash_id, "2026-05-01", 5000)
+        income_id = self.insert_income(client, drawn_from_fund_id=cash_id)
+        payload = {"txn_date": "2026-06-01", "source": "transfer_in", "amount": 1500}
+        response = client.put(
+            f"/api/income/{income_id}", json=payload | {"drawn_from_fund_id": cash_id}
+        )
+        assert response.status_code == 200
+        assert fetch_fund_links(cash_id)[1:] == [(-1200, None, income_id), (-300, None, income_id)]
+
+    def test_a_changed_fund_links_the_reversal_and_the_fresh_draw(self, client):
+        cash_id = insert_fund("Year-2 cash")
+        bridge_id = insert_fund("Bridge")
+        insert_fund_entry(cash_id, "2026-05-01", 5000)
+        insert_fund_entry(bridge_id, "2026-05-01", 5000)
+        income_id = self.insert_income(client, drawn_from_fund_id=cash_id)
+        payload = {"txn_date": "2026-06-01", "source": "transfer_in", "amount": 1200}
+        response = client.put(
+            f"/api/income/{income_id}", json=payload | {"drawn_from_fund_id": bridge_id}
+        )
+        assert response.status_code == 200
+        assert fetch_fund_links(cash_id)[1:] == [(-1200, None, income_id), (1200, None, income_id)]
+        assert fetch_fund_links(bridge_id)[1:] == [(-1200, None, income_id)]
+
+    def test_a_delete_keeps_the_entries_and_clears_their_links(self, client):
+        cash_id = insert_fund("Year-2 cash")
+        insert_fund_entry(cash_id, "2026-05-01", 5000)
+        income_id = self.insert_income(client, drawn_from_fund_id=cash_id)
+        assert client.delete(f"/api/income/{income_id}").status_code == 204
+        assert fetch_fund_links(cash_id) == [
+            (0, None, None),
+            (-1200, None, None),
+            (1200, None, None),
+        ]
+
+    def test_an_overdraw_writes_neither_the_row_nor_an_entry(self, client):
+        cash_id = insert_fund("Year-2 cash")
+        insert_fund_entry(cash_id, "2026-05-01", 1000)
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-06-01",
+                "source": "transfer_in",
+                "amount": 1200,
+                "drawn_from_fund_id": cash_id,
+            },
+        )
+        assert response.status_code == 422
+        assert query("SELECT id FROM income_event") == []
+        assert fetch_fund_links(cash_id) == [(0, None, None)]

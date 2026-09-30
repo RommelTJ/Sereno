@@ -2,7 +2,8 @@
 // the header total. Notes come verbatim from GET /api/funds — the server
 // derives them; only date display formatting happens here.
 
-import type { Fund, FundInput, FundUpdate } from './api.ts'
+import type { Fund, FundInput, FundLogEntry, FundUpdate } from './api.ts'
+import { shortDate } from './dashboard.ts'
 import { formatUsd, parseAmount } from './ledger.ts'
 
 export interface FundView {
@@ -138,4 +139,58 @@ export function topUpAmount(raw: string): number {
 export function correctedBalance(raw: string): number | null {
   if (!raw.trim()) return null
   return parseAmount(raw)
+}
+
+export interface FundLogRow {
+  id: number
+  date: string
+  fund: string
+  description: string
+  amount: string
+  balance: string
+}
+
+const SOURCE_DESCRIPTIONS: Record<string, string> = {
+  monthly_plan: 'Monthly contribution',
+  top_up: 'Top-up',
+  rollover: 'Rollover',
+}
+
+// What a fund entry reads as in the log. A linked 'spend' entry takes its
+// row's label, marked when it corrects an earlier draw; an unlinked one —
+// never backfilled, or its row since deleted — reads by direction. A
+// hand-entered (NULL-source) entry is a correction, except the zeroing
+// entry an archive writes.
+function fundLogDescription(entry: FundLogEntry): string {
+  if (entry.link) {
+    const { label, kind } = entry.link
+    if (kind === 'edit') return `${label} · edited`
+    if (kind === 'reversal') return `${label} · reversed`
+    return label
+  }
+  if (entry.source === 'spend') {
+    return entry.delta < 0 ? 'Withdrawn' : 'Returned'
+  }
+  if (entry.source === null) {
+    return entry.fund.archived && entry.balance === 0
+      ? 'Archived'
+      : 'Correction'
+  }
+  return SOURCE_DESCRIPTIONS[entry.source] ?? entry.source
+}
+
+export function fundLogRow(entry: FundLogEntry): FundLogRow {
+  const { name, emoji, archived } = entry.fund
+  const fund = emoji ? `${emoji} ${name}` : name
+  return {
+    id: entry.id,
+    date: shortDate(entry.as_of_date),
+    fund: archived ? `${fund} · archived` : fund,
+    description: fundLogDescription(entry),
+    amount:
+      entry.delta < 0
+        ? `−${formatUsd(-entry.delta)}`
+        : `+${formatUsd(entry.delta)}`,
+    balance: formatUsd(entry.balance),
+  }
 }

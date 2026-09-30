@@ -55,7 +55,7 @@ export function fundsMini(funds: Fund[]): FundMini[] {
 }
 
 // "2026-06-10" → "Jun 10"
-function shortDate(isoDate: string): string {
+export function shortDate(isoDate: string): string {
   const [year, month, day] = isoDate.split('-').map(Number)
   return new Date(year, month - 1, day).toLocaleDateString('en-US', {
     month: 'short',

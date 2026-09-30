@@ -364,23 +364,38 @@ def _fund_balance(db: sqlite3.Connection, fund_id: int | None) -> int:
 
 
 def _draw_down_fund(
-    db: sqlite3.Connection, fund_id: int, amount: float, txn_date: date, detail: str
+    db: sqlite3.Connection,
+    fund_id: int,
+    amount: float,
+    txn_date: date,
+    detail: str,
+    *,
+    expense_id: int | None = None,
+    income_id: int | None = None,
 ) -> None:
     """The other half of a fund-funded transaction: append a 'spend'
     fund_entry so the earmark releases as the row lands — appends, never
-    updates. detail names the caller in the overdraw 422."""
+    updates. detail names the caller in the overdraw 422; the link ids
+    point the entry back at the row that drew it, for the fund log."""
     balance = _fund_balance(db, fund_id)
     cents = to_cents(amount)
     if cents > balance:
         raise HTTPException(status_code=422, detail=detail)
     db.execute(
-        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
-        " VALUES (?, ?, ?, ?, 'spend')",
-        (fund_id, txn_date.isoformat(), balance - cents, -cents),
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source,"
+        " expense_id, income_id) VALUES (?, ?, ?, ?, 'spend', ?, ?)",
+        (fund_id, txn_date.isoformat(), balance - cents, -cents, expense_id, income_id),
     )
 
 
-def _reverse_draw_down(db: sqlite3.Connection, fund_id: int, amount: int) -> None:
+def _reverse_draw_down(
+    db: sqlite3.Connection,
+    fund_id: int,
+    amount: int,
+    *,
+    expense_id: int | None = None,
+    income_id: int | None = None,
+) -> None:
     """The compensating half of an expense delete or edit, amount in cents.
     The paired 'spend' entry stays — each entry snapshots the balance, so
     pulling a mid-chain row would not restore it — and the correction
@@ -390,9 +405,16 @@ def _reverse_draw_down(db: sqlite3.Connection, fund_id: int, amount: int) -> Non
     budget-year actual, so a correction never moves safe-to-spend — and
     in the report's funds_out it nets against the draw it corrects."""
     db.execute(
-        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source)"
-        " VALUES (?, ?, ?, ?, 'spend')",
-        (fund_id, date.today().isoformat(), _fund_balance(db, fund_id) + amount, amount),
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source,"
+        " expense_id, income_id) VALUES (?, ?, ?, ?, 'spend', ?, ?)",
+        (
+            fund_id,
+            date.today().isoformat(),
+            _fund_balance(db, fund_id) + amount,
+            amount,
+            expense_id,
+            income_id,
+        ),
     )
 
 
@@ -401,10 +423,9 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
     _require(db, "category", expense.category_id, "category")
     _require(db, "fund", expense.fund_id, "fund")
     _require(db, "account", expense.account_id, "account")
-    if expense.funded_from == "fund" and expense.fund_id is not None:
-        _draw_down_fund(
-            db, expense.fund_id, expense.amount, expense.txn_date, "expense exceeds fund balance"
-        )
+    # The row goes in first so the draw can carry its id. An overdraw 422
+    # raises before the commit, and the request's connection closes
+    # uncommitted, so the insert never lands.
     cursor = db.execute(
         "INSERT INTO expense_line (txn_date, budget_month, category_id, amount,"
         " is_fixed, funded_from, fund_id, account_id, note, pending)"
@@ -422,6 +443,15 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
             expense.pending,
         ),
     )
+    if expense.funded_from == "fund" and expense.fund_id is not None:
+        _draw_down_fund(
+            db,
+            expense.fund_id,
+            expense.amount,
+            expense.txn_date,
+            "expense exceeds fund balance",
+            expense_id=cursor.lastrowid,
+        )
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, category_id, amount, is_fixed,"
@@ -458,14 +488,14 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
         if delta > _fund_balance(db, old_fund):
             raise HTTPException(status_code=422, detail="expense exceeds fund balance")
         if delta != 0:
-            _reverse_draw_down(db, old_fund, -delta)
+            _reverse_draw_down(db, old_fund, -delta, expense_id=expense_id)
     else:
         if new_fund is not None and amount > _fund_balance(db, new_fund):
             raise HTTPException(status_code=422, detail="expense exceeds fund balance")
         if old_fund is not None:
-            _reverse_draw_down(db, old_fund, old["amount"])
+            _reverse_draw_down(db, old_fund, old["amount"], expense_id=expense_id)
         if new_fund is not None:
-            _reverse_draw_down(db, new_fund, -amount)
+            _reverse_draw_down(db, new_fund, -amount, expense_id=expense_id)
     db.execute(
         "UPDATE expense_line SET txn_date = ?, budget_month = ?, category_id = ?, amount = ?,"
         " is_fixed = ?, funded_from = ?, fund_id = ?, account_id = ?, note = ?, pending = ?"
@@ -505,7 +535,7 @@ def delete_expense(expense_id: int, db: Db) -> None:
     if row is None:
         raise HTTPException(status_code=404, detail="expense not found")
     if row["funded_from"] == "fund" and row["fund_id"] is not None:
-        _reverse_draw_down(db, row["fund_id"], row["amount"])
+        _reverse_draw_down(db, row["fund_id"], row["amount"], expense_id=expense_id)
     db.execute("DELETE FROM expense_line WHERE id = ?", (expense_id,))
     db.commit()
 
@@ -514,14 +544,7 @@ def delete_expense(expense_id: int, db: Db) -> None:
 def create_income(income: IncomeCreate, db: Db) -> Income:
     _require(db, "account", income.account_id, "account")
     _require(db, "fund", income.drawn_from_fund_id, "fund")
-    if income.drawn_from_fund_id is not None:
-        _draw_down_fund(
-            db,
-            income.drawn_from_fund_id,
-            income.amount,
-            income.txn_date,
-            "income draw exceeds fund balance",
-        )
+    # Row first, then the draw carrying its id — see create_expense.
     cursor = db.execute(
         "INSERT INTO income_event (txn_date, budget_month, source, amount,"
         " tax_treatment, account_id, source_label, note, pending, drawn_from_fund_id)"
@@ -539,6 +562,15 @@ def create_income(income: IncomeCreate, db: Db) -> Income:
             income.drawn_from_fund_id,
         ),
     )
+    if income.drawn_from_fund_id is not None:
+        _draw_down_fund(
+            db,
+            income.drawn_from_fund_id,
+            income.amount,
+            income.txn_date,
+            "income draw exceeds fund balance",
+            income_id=cursor.lastrowid,
+        )
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, source, amount, tax_treatment, account_id,"
@@ -576,14 +608,14 @@ def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
         if delta > _fund_balance(db, old_fund):
             raise HTTPException(status_code=422, detail="income draw exceeds fund balance")
         if delta != 0:
-            _reverse_draw_down(db, old_fund, -delta)
+            _reverse_draw_down(db, old_fund, -delta, income_id=income_id)
     else:
         if new_fund is not None and amount > _fund_balance(db, new_fund):
             raise HTTPException(status_code=422, detail="income draw exceeds fund balance")
         if old_fund is not None:
-            _reverse_draw_down(db, old_fund, old["amount"])
+            _reverse_draw_down(db, old_fund, old["amount"], income_id=income_id)
         if new_fund is not None:
-            _reverse_draw_down(db, new_fund, -amount)
+            _reverse_draw_down(db, new_fund, -amount, income_id=income_id)
     db.execute(
         "UPDATE income_event SET txn_date = ?, budget_month = ?, source = ?, amount = ?,"
         " tax_treatment = ?, account_id = ?, source_label = ?, note = ?, pending = ?,"
@@ -624,7 +656,7 @@ def delete_income(income_id: int, db: Db) -> None:
     if row is None:
         raise HTTPException(status_code=404, detail="income not found")
     if row["drawn_from_fund_id"] is not None:
-        _reverse_draw_down(db, row["drawn_from_fund_id"], row["amount"])
+        _reverse_draw_down(db, row["drawn_from_fund_id"], row["amount"], income_id=income_id)
     db.execute("DELETE FROM income_event WHERE id = ?", (income_id,))
     db.commit()
 

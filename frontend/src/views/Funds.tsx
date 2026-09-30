@@ -1,14 +1,22 @@
-import { useEffect, useState } from 'react'
-import type { Fund, FundUpdate, TopUpSource } from '../api.ts'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
+import type {
+  Fund,
+  FundLogEntry,
+  FundUpdate,
+  TopUpSource,
+} from '../api.ts'
 import {
   archiveFund,
   createFund,
   createFundEntry,
+  fetchFundEntries,
   fetchFunds,
   topUpFund,
   updateFund,
 } from '../api.ts'
 import EmojiSelect from '../components/EmojiSelect.tsx'
+import FundLog from '../components/FundLog.tsx'
 import GhostButton from '../components/GhostButton.tsx'
 import NewFundForm from '../components/NewFundForm.tsx'
 import { FieldLabel } from '../components/SpendingForm.tsx'
@@ -22,20 +30,32 @@ import {
   totalParked,
 } from '../funds.ts'
 import { formatUsd, todayIso } from '../ledger.ts'
+import { useMediaQuery } from '../useMediaQuery.ts'
+
+// Tailwind's lg: from here up the log sits beside the funds.
+const SIDE_BY_SIDE = '(min-width: 64rem)'
 
 // One inline form open per row at a time: the plan edit, the top-up, and
 // the balance correction share the row's footer, so opening one closes
 // the others — and keeps a single Save/Cancel pair on screen.
 type RowForm = 'plan' | 'topup' | 'correct' | null
 
+// Clicks landing on the card's own controls — its buttons and the inline
+// forms' fields — never toggle the card's selection.
+const CARD_CONTROLS = 'button, input, select, textarea, label'
+
 function FundRow({
   fund,
+  selected,
+  onSelect,
   onArchive,
   onCorrect,
   onSavePlan,
   onTopUp,
 }: {
   fund: Fund
+  selected: boolean
+  onSelect: (fundId: number) => void
   onArchive: (fundId: number) => Promise<void>
   onCorrect: (fundId: number, balance: number) => Promise<void>
   onSavePlan: (fundId: number, edit: FundUpdate) => Promise<void>
@@ -115,10 +135,25 @@ function FundRow({
   }
 
   return (
-    <div data-testid="fund-row">
+    <div
+      data-testid="fund-row"
+      onClick={(event) => {
+        if (!(event.target as Element).closest(CARD_CONTROLS)) {
+          onSelect(fund.id)
+        }
+      }}
+      className={`-m-2 cursor-pointer rounded-[10px] p-2 ${selected ? 'bg-tile' : ''}`}
+    >
       <div className="flex items-baseline justify-between">
         <p className="text-[14.5px] font-bold">
-          {view.name}{' '}
+          <button
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onSelect(fund.id)}
+            className="cursor-pointer text-left"
+          >
+            {view.name}
+          </button>{' '}
           <span className="text-[11.5px] font-medium text-muted-2">
             · {view.meta}
           </span>
@@ -271,10 +306,62 @@ function FundRow({
 
 function Funds() {
   const [funds, setFunds] = useState<Fund[] | null>(null)
+  // The fund the log is filtered to lives in ?fund=, so a refresh, Back,
+  // and a Safe-to-spend fund-row link all land on it. An id naming no
+  // active fund is ignored; undefined means the funds haven't loaded, so
+  // the log waits rather than fetching unfiltered first.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requested = Number(searchParams.get('fund'))
+  const selectedFund = funds?.find((fund) => fund.id === requested) ?? null
+  const selectedId = funds ? (selectedFund?.id ?? null) : undefined
+  // The log's month opens on the current one; logVersion bumps after every
+  // fund change so the log refetches the entries that change wrote.
+  const [logMonth, setLogMonth] = useState(() => todayIso().slice(0, 7))
+  const [logVersion, setLogVersion] = useState(0)
+  const [entries, setEntries] = useState<FundLogEntry[] | null>(null)
+  const [paging, setPaging] = useState(false)
+  const sideBySide = useMediaQuery(SIDE_BY_SIDE)
+  const logRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     void fetchFunds().then(setFunds)
   }, [])
+
+  useEffect(() => {
+    if (selectedId === undefined) return
+    // A slow response for a month or filter already left must not land.
+    let current = true
+    setPaging(true)
+    void fetchFundEntries(logMonth, selectedId)
+      .then((next) => {
+        if (current) setEntries(next)
+      })
+      .finally(() => {
+        if (current) setPaging(false)
+      })
+    return () => {
+      current = false
+    }
+  }, [logMonth, logVersion, selectedId])
+
+  // Selecting the selected fund clears it. The URL is replaced, not
+  // pushed, so toggling never piles up history for Back to walk through.
+  // Stacked below the funds list, the log is out of sight, so a new
+  // selection scrolls it into view.
+  const select = (fundId: number) => {
+    const clearing = selectedId === fundId
+    setSearchParams(clearing ? {} : { fund: String(fundId) }, {
+      replace: true,
+    })
+    if (!clearing && !sideBySide) {
+      logRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const refresh = async () => {
+    setFunds(await fetchFunds())
+    setLogVersion((version) => version + 1)
+  }
 
   const addFund = async ({ fund, saved }: NewFund) => {
     const created = await createFund(fund)
@@ -285,24 +372,24 @@ function Funds() {
         balance: saved,
       })
     }
-    setFunds(await fetchFunds())
+    await refresh()
   }
 
   const archive = async (fundId: number) => {
     await archiveFund(fundId)
-    setFunds(await fetchFunds())
+    await refresh()
   }
 
   const savePlan = async (fundId: number, edit: FundUpdate) => {
     await updateFund(fundId, edit)
-    setFunds(await fetchFunds())
+    await refresh()
   }
 
   const correct = async (fundId: number, balance: number) => {
     // A hand-entered entry is the headline-neutral restatement: NULL
     // source, so the tracker moves and safe-to-spend never hears of it.
     await createFundEntry({ fund_id: fundId, as_of_date: todayIso(), balance })
-    setFunds(await fetchFunds())
+    await refresh()
   }
 
   const topUp = async (
@@ -318,39 +405,57 @@ function Funds() {
       ...(source === 'rollover' ? { source } : {}),
       ...(asOf && asOf !== todayIso() ? { as_of_date: asOf } : {}),
     })
-    setFunds(await fetchFunds())
+    await refresh()
   }
 
+  // Funds take two thirds and the log the last third from lg up; below
+  // it the log stacks under the funds list.
   return (
-    <div data-testid="view-funds" className="max-w-[760px]">
-      {funds && (
-        <div className="rounded-card border border-card-border bg-card p-[22px]">
-          <div className="flex items-center justify-between">
-            <p className="text-[13px] text-muted-2">
-              Total parked{' '}
-              <span className="num text-xl font-extrabold text-ink">
-                {formatUsd(totalParked(funds))}
-              </span>
-            </p>
-            <p className="text-[12.5px] text-muted-2">
-              notes auto-calculate from target, saved &amp; date
-            </p>
+    <div
+      data-testid="view-funds"
+      className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3"
+    >
+      <div data-testid="funds-column" className="lg:col-span-2">
+        {funds && (
+          <div className="rounded-card border border-card-border bg-card p-[22px]">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] text-muted-2">
+                Total parked{' '}
+                <span className="num text-xl font-extrabold text-ink">
+                  {formatUsd(totalParked(funds))}
+                </span>
+              </p>
+              <p className="text-[12.5px] text-muted-2">
+                notes auto-calculate from target, saved &amp; date
+              </p>
+            </div>
+            <NewFundForm onAdd={addFund} />
+            <div className="mt-[18px] flex flex-col gap-5">
+              {funds.map((fund) => (
+                <FundRow
+                  key={fund.id}
+                  fund={fund}
+                  selected={fund.id === selectedId}
+                  onSelect={select}
+                  onArchive={archive}
+                  onCorrect={correct}
+                  onSavePlan={savePlan}
+                  onTopUp={topUp}
+                />
+              ))}
+            </div>
           </div>
-          <NewFundForm onAdd={addFund} />
-          <div className="mt-[18px] flex flex-col gap-5">
-            {funds.map((fund) => (
-              <FundRow
-                key={fund.id}
-                fund={fund}
-                onArchive={archive}
-                onCorrect={correct}
-                onSavePlan={savePlan}
-                onTopUp={topUp}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
+      <FundLog
+        ref={logRef}
+        month={logMonth}
+        entries={entries}
+        paging={paging}
+        onPage={setLogMonth}
+        filter={selectedFund ? fundView(selectedFund).name : null}
+        onClearFilter={() => setSearchParams({}, { replace: true })}
+      />
     </div>
   )
 }

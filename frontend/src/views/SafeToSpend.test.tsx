@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { todayIso } from '../ledger.ts'
 import { BUDGET_MONTH, FUNDS, MAY_BUDGET_MONTH } from '../test/fixtures.ts'
@@ -21,6 +22,23 @@ const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
   return call ? JSON.parse(call[1]?.body as string) : undefined
 }
 
+// The fund rows link to Funds & Goals, so the view renders under a router;
+// the /funds stand-in shows where a click landed.
+function FundsStandIn() {
+  const location = useLocation()
+  return <p data-testid="funds-location">{location.search}</p>
+}
+
+const renderSafeToSpend = () =>
+  render(
+    <MemoryRouter initialEntries={['/safe-to-spend']}>
+      <Routes>
+        <Route path="/safe-to-spend" element={<SafeToSpend />} />
+        <Route path="/funds" element={<FundsStandIn />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
 const expenseBody = (fetchMock: ReturnType<typeof stubApi>) =>
   postBody(fetchMock, '/api/expenses')
 
@@ -30,13 +48,13 @@ beforeEach(() => {
 
 describe('Safe-to-spend hero', () => {
   it('shows the headline from the API', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     expect(await screen.findByText('$3,670.00')).toBeInTheDocument()
   })
 
   it('shows the formula pill', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     expect(
       await screen.findByText('total cash − bills due − money in funds'),
@@ -46,7 +64,7 @@ describe('Safe-to-spend hero', () => {
 
 describe('Envelopes card', () => {
   it('titles the card with the budget month and the overspend hint', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     expect(await screen.findByText('June envelopes')).toBeInTheDocument()
     expect(
@@ -55,7 +73,7 @@ describe('Envelopes card', () => {
   })
 
   it('renders spent and left for an under-budget category', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const rows = await screen.findAllByTestId('envelope-row')
     expect(rows).toHaveLength(4)
@@ -67,7 +85,7 @@ describe('Envelopes card', () => {
   })
 
   it('shows the overage in red when a category is over budget', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const rows = await screen.findAllByTestId('envelope-row')
     const overage = within(rows[2]).getByText('$546.00 of $500.00 · $46.00 over')
@@ -78,7 +96,7 @@ describe('Envelopes card', () => {
   })
 
   it('renders an empty bar when a category has no plan yet', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const rows = await screen.findAllByTestId('envelope-row')
     expect(within(rows[3]).getByText('$0.00 · $0.00 left')).toBeInTheDocument()
@@ -88,14 +106,14 @@ describe('Envelopes card', () => {
 
 describe('Funds card', () => {
   it('shows the total parked in the header', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     expect(await screen.findByText('Money in funds')).toBeInTheDocument()
     expect(screen.getByText('$24,200.00')).toBeInTheDocument()
   })
 
   it('renders one row per active fund with its available balance', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const rows = await screen.findAllByTestId('sts-fund-row')
     expect(rows).toHaveLength(3)
@@ -107,7 +125,7 @@ describe('Funds card', () => {
   })
 
   it('shows the monthly plan, blank when a fund has none', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const rows = await screen.findAllByTestId('sts-fund-row')
     expect(within(rows[0]).getByText('$500.00 / mo')).toBeInTheDocument()
@@ -115,11 +133,21 @@ describe('Funds card', () => {
     // The Bike fund has no monthly plan — no "/ mo" label at all.
     expect(within(rows[1]).queryByText(/\/ mo/)).not.toBeInTheDocument()
   })
+
+  it("opens a fund's log on Funds & Goals", async () => {
+    renderSafeToSpend()
+
+    fireEvent.click(await screen.findByRole('link', { name: /Travel fund/ }))
+
+    expect(await screen.findByTestId('funds-location')).toHaveTextContent(
+      '?fund=3',
+    )
+  })
 })
 
 describe('Add a spending item', () => {
   it('offers the envelopes and funds as grouped paid-from sources', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const form = await screen.findByTestId('spending-form')
     const select = within(form).getByLabelText('Paid from')
@@ -153,7 +181,7 @@ describe('Add a spending item', () => {
       '/api/expenses': { id: 99 },
     }
     const fetchMock = stubApi(routes)
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('spending-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -188,7 +216,7 @@ describe('Add a spending item', () => {
       '/api/funds': FUNDS,
       '/api/expenses': { id: 100 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('spending-form')
 
     expect(
@@ -231,7 +259,7 @@ describe('Add a spending item', () => {
       '/api/expenses': { id: 101 },
     }
     stubApi(routes)
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('spending-form')
 
     fireEvent.change(within(form).getByLabelText('Paid from'), {
@@ -257,7 +285,7 @@ describe('Add a spending item', () => {
       '/api/budget-month': BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('spending-form')
 
     fireEvent.click(
@@ -273,7 +301,7 @@ describe('Add a spending item', () => {
       '/api/funds': FUNDS,
       '/api/expenses': { id: 102 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('spending-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -304,7 +332,7 @@ describe('Add a spending item', () => {
       '/api/funds': FUNDS,
       '/api/expenses': { id: 103 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('spending-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -333,7 +361,7 @@ describe('Add a spending item', () => {
       '/api/funds': FUNDS,
       '/api/expenses': { id: 104 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('spending-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -355,7 +383,7 @@ describe('Add a spending item', () => {
       '/api/funds': FUNDS,
       '/api/expenses': { id: 105 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('spending-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -372,14 +400,14 @@ describe('Add a spending item', () => {
 
 describe('Add an income item', () => {
   it('titles the form as income, freeing funding for fund entries', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const form = await screen.findByTestId('income-form')
     expect(within(form).getByText('Add an income item')).toBeInTheDocument()
   })
 
   it('offers the viewed month and the next two as the funds month', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const form = await screen.findByTestId('income-form')
     const select = within(form).getByLabelText('Funds month')
@@ -403,7 +431,7 @@ describe('Add an income item', () => {
       '/api/income': { id: 5 },
     }
     const fetchMock = stubApi(routes)
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('income-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -436,7 +464,7 @@ describe('Add an income item', () => {
   })
 
   it('prefills the source title from the selected option', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const form = await screen.findByTestId('income-form')
     expect(within(form).getByLabelText('Source title')).toHaveValue(
@@ -458,7 +486,7 @@ describe('Add an income item', () => {
       '/api/funds': FUNDS,
       '/api/income': { id: 6 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('income-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -494,7 +522,7 @@ describe('Add an income item', () => {
       '/api/funds': FUNDS,
       '/api/income': { id: 7 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('income-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -527,7 +555,7 @@ describe('Add an income item', () => {
       '/api/funds': FUNDS,
       '/api/income': { id: 6 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('income-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -549,7 +577,7 @@ describe('Add an income item', () => {
       '/api/funds': FUNDS,
       '/api/income': { id: 7 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('income-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -564,7 +592,7 @@ describe('Add an income item', () => {
   })
 
   it('reveals the Draw-from funds only for a transfer-in source', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     // Paychecks, dividends, staking and interest never come out of a
     // fund, so the default form keeps its shape.
@@ -596,7 +624,7 @@ describe('Add an income item', () => {
       '/api/funds': FUNDS,
       '/api/income': { id: 8 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('income-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -630,7 +658,7 @@ describe('Add an income item', () => {
       '/api/funds': FUNDS,
       '/api/income': { id: 9 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('income-form')
 
     fireEvent.change(within(form).getByLabelText('Source'), {
@@ -664,7 +692,7 @@ describe('Add an income item', () => {
       '/api/income': { id: 10 },
     }
     stubApi(routes)
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('income-form')
 
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -689,7 +717,7 @@ describe('Add an income item', () => {
   })
 
   it('maps every source option onto the API source values', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const form = await screen.findByTestId('income-form')
     const select = within(form).getByLabelText('Source')
@@ -710,7 +738,7 @@ describe('Add an income item', () => {
     // The note must describe the real model — leftover is assigned to
     // funds, or explicitly rolled into funding via an income row — not
     // the automatic roll-forward the system doesn't have.
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const form = await screen.findByTestId('income-form')
     expect(within(form).getByText('Rollover')).toBeInTheDocument()
@@ -727,7 +755,7 @@ describe('Add an income item', () => {
       '/api/budget-month': BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const form = await screen.findByTestId('income-form')
 
     fireEvent.click(
@@ -745,7 +773,7 @@ describe('Month pager', () => {
       '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     await screen.findByText('June envelopes')
 
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
@@ -774,7 +802,7 @@ describe('Month pager', () => {
       },
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     await screen.findByText('June envelopes')
 
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }))
@@ -794,7 +822,7 @@ describe('Month pager', () => {
       '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const rows = await screen.findAllByTestId('envelope-row')
     fireEvent.click(rows[0])
     expect(
@@ -819,7 +847,7 @@ describe('Single-month Activity card', () => {
       '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const feed = await screen.findByTestId('sts-activity')
 
     // One navigation model for the month concept: no feed buttons.
@@ -843,7 +871,7 @@ describe('Spending posts to the viewed month', () => {
       '/api/funds': FUNDS,
       '/api/expenses': { id: 99 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     await screen.findByText('June envelopes')
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
     await screen.findByText('May envelopes')
@@ -866,7 +894,7 @@ describe('Spending posts to the viewed month', () => {
       '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     await screen.findByText('June envelopes')
     // On the month the view opened to, the form needs no reminder.
     expect(screen.queryByText('Posts to June 2026')).not.toBeInTheDocument()
@@ -885,7 +913,7 @@ describe('Income months derived from the viewed month', () => {
       '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     await screen.findByText('June envelopes')
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
     await screen.findByText('May envelopes')
@@ -908,7 +936,7 @@ describe('Income months derived from the viewed month', () => {
       '/api/funds': FUNDS,
       '/api/income': { id: 7 },
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     await screen.findByText('June envelopes')
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
     await screen.findByText('May envelopes')
@@ -935,7 +963,7 @@ describe('Leftover line retirement', () => {
       '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     await screen.findByText('$3,670.00')
     // Month paging supersedes the line: last month's closing number is one
@@ -953,7 +981,7 @@ describe('Leftover line retirement', () => {
 
 describe('Activity feed', () => {
   it('renders every item of the month in its own column', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const view = await screen.findByTestId('view-safe-to-spend')
     const feed = screen.getByTestId('sts-activity')
@@ -971,7 +999,7 @@ describe('Activity feed', () => {
 
 describe('Responsive layout', () => {
   it('stacks into one column, widening to two and then three', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     await screen.findByText('$3,670.00')
 
     expect(screen.getByTestId('view-safe-to-spend')).toHaveClass(
@@ -986,7 +1014,7 @@ describe('Responsive layout', () => {
   })
 
   it('gives the hero its own full-width row under the month pager', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const view = await screen.findByTestId('view-safe-to-spend')
 
     const hero = screen.getByTestId('sts-hero')
@@ -998,7 +1026,7 @@ describe('Responsive layout', () => {
   })
 
   it('stacks the form field grids into one column on narrow screens', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const spending = await screen.findByTestId('spending-form')
     expect(
@@ -1011,7 +1039,7 @@ describe('Responsive layout', () => {
   })
 
   it('scales the hero figure down on narrow screens', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     expect(await screen.findByText('$3,670.00')).toHaveClass(
       'text-4xl',
@@ -1028,7 +1056,7 @@ describe('Activity item editing', () => {
   }
 
   it('tapping an expense row opens a form pre-filled from the row', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[0])
 
     const form = await screen.findByTestId('expense-edit-form')
@@ -1047,7 +1075,7 @@ describe('Activity item editing', () => {
       '/api/funds': FUNDS,
       'PUT /api/expenses/5': {},
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[0])
     const form = await screen.findByTestId('expense-edit-form')
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -1105,7 +1133,7 @@ describe('Activity item editing', () => {
       '/api/funds': FUNDS,
       'PUT /api/expenses/5': {},
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[0])
     const form = await screen.findByTestId('expense-edit-form')
     expect(within(form).getByLabelText('Pending')).toBeChecked()
@@ -1129,7 +1157,7 @@ describe('Activity item editing', () => {
       '/api/funds': FUNDS,
       'PUT /api/expenses/5': {},
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[0])
     const form = await screen.findByTestId('expense-edit-form')
     expect(within(form).getByLabelText('Pending')).not.toBeChecked()
@@ -1152,7 +1180,7 @@ describe('Activity item editing', () => {
       '/api/budget-month': BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[0])
     const form = await screen.findByTestId('expense-edit-form')
     fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }))
@@ -1164,7 +1192,7 @@ describe('Activity item editing', () => {
   })
 
   it('fund rows offer no edit affordance', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[2])
 
     expect(screen.queryByTestId('expense-edit-form')).not.toBeInTheDocument()
@@ -1179,7 +1207,7 @@ describe('Income item editing', () => {
   }
 
   it('tapping an income row opens a form pre-filled from the row', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[3])
 
     const form = await screen.findByTestId('income-edit-form')
@@ -1194,7 +1222,7 @@ describe('Income item editing', () => {
   })
 
   it('switching the source re-prefills the title like the create form', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[3])
 
     const form = await screen.findByTestId('income-edit-form')
@@ -1212,7 +1240,7 @@ describe('Income item editing', () => {
       '/api/funds': FUNDS,
       'PUT /api/income/2': {},
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[3])
     const form = await screen.findByTestId('income-edit-form')
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -1261,7 +1289,7 @@ describe('Income item editing', () => {
       '/api/funds': FUNDS,
       'PUT /api/income/2': {},
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[3])
     const form = await screen.findByTestId('income-edit-form')
     expect(within(form).getByLabelText('Pending')).toBeChecked()
@@ -1285,7 +1313,7 @@ describe('Income item editing', () => {
       '/api/funds': FUNDS,
       'PUT /api/income/2': {},
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[3])
     const form = await screen.findByTestId('income-edit-form')
     expect(within(form).getByLabelText('Pending')).not.toBeChecked()
@@ -1321,7 +1349,7 @@ describe('Income item editing', () => {
 
   it('prefills the Draw-from select from the drawn row', async () => {
     stubApi({ '/api/budget-month': drawnFeed, '/api/funds': FUNDS })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[3])
 
     const form = await screen.findByTestId('income-edit-form')
@@ -1336,7 +1364,7 @@ describe('Income item editing', () => {
       '/api/funds': FUNDS,
       'PUT /api/income/2': {},
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[3])
     const form = await screen.findByTestId('income-edit-form')
     fireEvent.change(within(form).getByLabelText('Amount'), {
@@ -1364,7 +1392,7 @@ describe('Income item editing', () => {
       '/api/funds': FUNDS,
       'PUT /api/income/2': {},
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[3])
     const form = await screen.findByTestId('income-edit-form')
     fireEvent.change(within(form).getByLabelText('Draw from'), {
@@ -1400,7 +1428,7 @@ describe('Item delete', () => {
       '/api/funds': FUNDS,
       'DELETE /api/expenses/5': {},
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[0])
     const form = await screen.findByTestId('expense-edit-form')
     fireEvent.click(within(form).getByRole('button', { name: 'Delete' }))
@@ -1432,7 +1460,7 @@ describe('Item delete', () => {
       '/api/funds': FUNDS,
       'DELETE /api/income/2': {},
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[3])
     const form = await screen.findByTestId('income-edit-form')
     fireEvent.click(within(form).getByRole('button', { name: 'Delete' }))
@@ -1449,7 +1477,7 @@ describe('Item delete', () => {
       '/api/budget-month': BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click((await feedRows())[0])
     const form = await screen.findByTestId('expense-edit-form')
     fireEvent.click(within(form).getByRole('button', { name: 'Delete' }))
@@ -1467,7 +1495,7 @@ describe('Item delete', () => {
 
 describe('Envelope activity filter', () => {
   it('filters the feed to the tapped envelope', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const feed = await screen.findByTestId('sts-activity')
     const groceries = screen.getAllByTestId('envelope-row')[0]
@@ -1483,7 +1511,7 @@ describe('Envelope activity filter', () => {
   })
 
   it('shows a filter-aware empty state for an envelope with no activity', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const feed = await screen.findByTestId('sts-activity')
     // Travel has a row in the envelopes card but no expenses in the feed.
@@ -1496,7 +1524,7 @@ describe('Envelope activity filter', () => {
   })
 
   it('shows a chip in the Activity header that clears the filter', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const feed = await screen.findByTestId('sts-activity')
     const groceries = screen.getAllByTestId('envelope-row')[0]
@@ -1516,7 +1544,7 @@ describe('Envelope activity filter', () => {
   })
 
   it('toggles the filter off when the selected envelope is tapped again', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const feed = await screen.findByTestId('sts-activity')
     const groceries = screen.getAllByTestId('envelope-row')[0]
@@ -1531,7 +1559,7 @@ describe('Envelope activity filter', () => {
   })
 
   it('replaces the filter when a different envelope is tapped', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const feed = await screen.findByTestId('sts-activity')
     const rows = screen.getAllByTestId('envelope-row')
@@ -1555,7 +1583,7 @@ describe('Envelope activity filter', () => {
 describe('Inline add-forms at three columns', () => {
   it('keeps both forms in the third column with no floating button', async () => {
     stubMatchMedia(true)
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     expect(await screen.findByTestId('spending-form')).toBeInTheDocument()
     expect(screen.getByTestId('income-form')).toBeInTheDocument()
@@ -1577,7 +1605,7 @@ describe('Floating add below three columns', () => {
   }
 
   it('takes both forms out of the grid behind a floating button', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const add = await screen.findByRole('button', { name: 'Add' })
     expect(add).toHaveClass('fixed', 'min-h-[44px]', 'min-w-[44px]')
@@ -1586,7 +1614,7 @@ describe('Floating add below three columns', () => {
   })
 
   it('opens a menu offering spending and income', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const add = await screen.findByRole('button', { name: 'Add' })
     expect(add).toHaveAttribute('aria-expanded', 'false')
@@ -1602,7 +1630,7 @@ describe('Floating add below three columns', () => {
   })
 
   it('opens the spending form in a panel', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const panel = await openPanel('Add spending')
 
@@ -1615,7 +1643,7 @@ describe('Floating add below three columns', () => {
   })
 
   it('opens the income form in a panel', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const panel = await openPanel('Add income')
 
@@ -1624,7 +1652,7 @@ describe('Floating add below three columns', () => {
   })
 
   it('docks as a bottom sheet on phones and a right-hand panel from md up', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
 
     const panel = await openPanel('Add spending')
 
@@ -1640,7 +1668,7 @@ describe('Floating add below three columns', () => {
   })
 
   it('leaves the page usable behind the open panel', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const panel = await openPanel('Add spending')
 
     // Non-modal: no backdrop swallows the tap, so an Activity row still
@@ -1658,7 +1686,7 @@ describe('Floating add below three columns', () => {
       '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     await screen.findByText('June envelopes')
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
     await screen.findByText('May envelopes')
@@ -1681,7 +1709,7 @@ describe('Closing the floating panel', () => {
   }
 
   it('closes on the ✕ button', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const panel = await openPanel('Add spending')
 
     const close = within(panel).getByRole('button', { name: 'Close' })
@@ -1693,7 +1721,7 @@ describe('Closing the floating panel', () => {
   })
 
   it('closes on Esc', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     await openPanel('Add income')
 
     fireEvent.keyDown(document, { key: 'Escape' })
@@ -1702,7 +1730,7 @@ describe('Closing the floating panel', () => {
   })
 
   it('discards a half-filled form, so reopening starts blank', async () => {
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const panel = await openPanel('Add spending')
     fireEvent.change(within(panel).getByLabelText('Amount'), {
       target: { value: '45' },
@@ -1725,7 +1753,7 @@ describe('Closing the floating panel', () => {
       '/api/expenses': { id: 99 },
     }
     const fetchMock = stubApi(routes)
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const panel = await openPanel('Add spending')
 
     fireEvent.change(within(panel).getByLabelText('Amount'), {
@@ -1752,7 +1780,7 @@ describe('Closing the floating panel', () => {
       '/api/income': { id: 5 },
     }
     const fetchMock = stubApi(routes)
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const panel = await openPanel('Add income')
 
     fireEvent.change(within(panel).getByLabelText('Amount'), {
@@ -1773,7 +1801,7 @@ describe('Closing the floating panel', () => {
       '/api/budget-month': BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     const panel = await openPanel('Add spending')
 
     fireEvent.click(
@@ -1789,7 +1817,7 @@ describe('Bottom sheet over the on-screen keyboard', () => {
   it('rides above the keyboard on phones', async () => {
     stubMatchMedia(false)
     const viewport = stubVisualViewport()
-    render(<SafeToSpend />)
+    renderSafeToSpend()
     fireEvent.click(await screen.findByRole('button', { name: 'Add' }))
     fireEvent.click(screen.getByRole('button', { name: 'Add spending' }))
     const sheet = screen.getByRole('dialog', { name: 'Add spending' })

@@ -1,9 +1,54 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { MemoryRouter, Route, Routes } from 'react-router'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { FundLogEntry } from '../api.ts'
+import { monthYearLabel, previousMonth } from '../budget.ts'
 import { todayIso } from '../ledger.ts'
 import { FUNDS } from '../test/fixtures.ts'
-import { stubApi } from '../test/stubs.ts'
+import { stubApi, stubMatchMedia } from '../test/stubs.ts'
 import Funds from './Funds.tsx'
+
+// Funds & Goals reads the selected fund from ?fund=, so it renders under a
+// router; path is where the visit starts.
+const renderFunds = (path = '/funds') =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/funds" element={<Funds />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+const MONTH = todayIso().slice(0, 7)
+
+// This month's fund log, newest first, as GET /api/fund-entries returns it.
+const LOG: FundLogEntry[] = [
+  {
+    id: 11,
+    fund: { id: 3, name: 'Travel fund', emoji: null, archived: false },
+    as_of_date: `${MONTH}-03`,
+    source: 'spend',
+    delta: -32.2,
+    balance: 4_167.8,
+    link: { type: 'expense', id: 7, label: 'The Home Depot', kind: 'draw' },
+  },
+  {
+    id: 10,
+    fund: { id: 1, name: 'Emergency fund', emoji: '🚨', archived: false },
+    as_of_date: `${MONTH}-01`,
+    source: 'top_up',
+    delta: 500,
+    balance: 10_000,
+    link: null,
+  },
+]
+
+// Every test starts from the funds list and an empty fund log; a test
+// that reads the log stubs its month explicitly.
+const ROUTES: Record<string, unknown> = {
+  '/api/funds': FUNDS,
+  '/api/fund-entries': [],
+}
 
 const postBody = (fetchMock: ReturnType<typeof stubApi>, path: string) => {
   const call = fetchMock.mock.calls.find(
@@ -35,7 +80,7 @@ const CREATED = {
 }
 
 beforeEach(() => {
-  stubApi({ '/api/funds': FUNDS })
+  stubApi({ ...ROUTES })
 })
 
 const fillForm = async (
@@ -52,7 +97,7 @@ const fillForm = async (
 
 describe('Funds & goals card', () => {
   it('shows the total parked and the auto-calculate hint', async () => {
-    render(<Funds />)
+    renderFunds()
 
     expect(await screen.findByText('Total parked')).toBeInTheDocument()
     expect(screen.getByText('$24,200.00')).toBeInTheDocument()
@@ -62,7 +107,7 @@ describe('Funds & goals card', () => {
   })
 
   it('renders each fund with its meta, amount, bar and derived note', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     expect(rows).toHaveLength(3)
@@ -77,21 +122,21 @@ describe('Funds & goals card', () => {
   })
 
   it('leaves the name plain when a fund has no emoji', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     expect(within(rows[2]).getByText('Travel fund')).toBeInTheDocument()
   })
 
   it('formats a goal meta line from its ISO target date', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     expect(within(rows[1]).getByText('· goal · Jul 2026')).toBeInTheDocument()
   })
 
   it('renders a completed fund in accent green', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     expect(within(rows[1]).getByTestId('fund-bar')).toHaveClass('bg-accent')
@@ -101,7 +146,7 @@ describe('Funds & goals card', () => {
   })
 
   it('renders an open-ended fund without a target or a bar', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     expect(within(rows[2]).getByText('$4,200.00')).toBeInTheDocument()
@@ -114,7 +159,7 @@ describe('Funds & goals card', () => {
 
 describe('+ New fund or goal form', () => {
   it('explains that a blank date makes a sinking fund', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const form = await screen.findByTestId('new-fund-form')
     expect(within(form).getByText('+ New fund or goal')).toBeInTheDocument()
@@ -123,12 +168,12 @@ describe('+ New fund or goal form', () => {
 
   it('creates the fund, posts the saved amount and refetches the list', async () => {
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/funds': CREATED,
       'POST /api/fund-entries': { id: 7 },
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const form = await fillForm({
       Name: 'Vacation',
       'Target $': '5,000',
@@ -158,10 +203,10 @@ describe('+ New fund or goal form', () => {
 
   it('posts the chosen emoji with the new fund', async () => {
     const fetchMock = stubApi({
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/funds': { ...CREATED, kind: 'sinking', emoji: '✈️' },
     })
-    render(<Funds />)
+    renderFunds()
     const form = await fillForm({ Name: 'Vacation', Emoji: '✈️' })
 
     fireEvent.click(within(form).getByRole('button', { name: '+ Add' }))
@@ -177,10 +222,10 @@ describe('+ New fund or goal form', () => {
 
   it('omits a blank target and date so the fund is open-ended', async () => {
     const fetchMock = stubApi({
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/funds': { ...CREATED, kind: 'sinking' },
     })
-    render(<Funds />)
+    renderFunds()
     const form = await fillForm({ Name: 'Travel', '$ / month': '300' })
 
     fireEvent.click(within(form).getByRole('button', { name: '+ Add' }))
@@ -195,10 +240,10 @@ describe('+ New fund or goal form', () => {
 
   it('skips the fund entry when nothing is saved yet', async () => {
     const fetchMock = stubApi({
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/funds': { ...CREATED, kind: 'sinking' },
     })
-    render(<Funds />)
+    renderFunds()
     const form = await fillForm({ Name: 'Travel' })
 
     fireEvent.click(within(form).getByRole('button', { name: '+ Add' }))
@@ -210,8 +255,8 @@ describe('+ New fund or goal form', () => {
   })
 
   it('does not post without a name', async () => {
-    const fetchMock = stubApi({ '/api/funds': FUNDS })
-    render(<Funds />)
+    const fetchMock = stubApi({ ...ROUTES })
+    renderFunds()
     const form = await fillForm({ 'Target $': '5,000' })
 
     fireEvent.click(within(form).getByRole('button', { name: '+ Add' }))
@@ -222,7 +267,7 @@ describe('+ New fund or goal form', () => {
 
 describe('archiving a fund', () => {
   it('shows an Archive button on each fund card', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     for (const row of rows) {
@@ -234,11 +279,11 @@ describe('archiving a fund', () => {
 
   it('posts the archive and refetches the list', async () => {
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/funds/1/archive': { ...FUNDS[0], balance: 0 },
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     routes['/api/funds'] = FUNDS.slice(1)
 
@@ -255,7 +300,7 @@ describe('archiving a fund', () => {
 
 describe('editing a fund plan', () => {
   it('shows an Edit button on each fund card', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     for (const row of rows) {
@@ -266,7 +311,7 @@ describe('editing a fund plan', () => {
   })
 
   it('reveals the $ / month input prefilled with the current plan', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
@@ -275,7 +320,7 @@ describe('editing a fund plan', () => {
   })
 
   it('prefills a blank input for a fund with no plan', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[1]).getByRole('button', { name: 'Edit' }))
@@ -290,11 +335,11 @@ describe('editing a fund plan', () => {
       note: '$1,000 / mo · ~1.7 yrs to target',
     }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'PUT /api/funds/1': revised,
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
     fireEvent.change(within(rows[0]).getByLabelText('$ / month'), {
@@ -324,11 +369,11 @@ describe('editing a fund plan', () => {
       note: 'open-ended · add a monthly plan',
     }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'PUT /api/funds/3': paused,
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[2]).getByRole('button', { name: 'Edit' }))
     fireEvent.change(within(rows[2]).getByLabelText('$ / month'), {
@@ -349,8 +394,8 @@ describe('editing a fund plan', () => {
   })
 
   it('cancels without saving', async () => {
-    const fetchMock = stubApi({ '/api/funds': FUNDS })
-    render(<Funds />)
+    const fetchMock = stubApi({ ...ROUTES })
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
     fireEvent.change(within(rows[0]).getByLabelText('$ / month'), {
@@ -370,7 +415,7 @@ describe('editing a fund plan', () => {
 
 describe('editing a fund name and emoji', () => {
   it('reveals the name and emoji inputs prefilled with the current values', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
@@ -380,7 +425,7 @@ describe('editing a fund name and emoji', () => {
   })
 
   it('prefills a blank emoji for a fund with none', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[2]).getByRole('button', { name: 'Edit' }))
@@ -392,11 +437,11 @@ describe('editing a fund name and emoji', () => {
   it('saves the renamed fund and refetches the list', async () => {
     const renamed = { ...FUNDS[2], name: 'Japan fund', emoji: '✈️' }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'PUT /api/funds/3': renamed,
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[2]).getByRole('button', { name: 'Edit' }))
     fireEvent.change(within(rows[2]).getByLabelText('Name'), {
@@ -420,11 +465,11 @@ describe('editing a fund name and emoji', () => {
   it('clears the emoji when the blank option is picked', async () => {
     const cleared = { ...FUNDS[0], emoji: null }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'PUT /api/funds/1': cleared,
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
     fireEvent.change(within(rows[0]).getByLabelText('Emoji'), {
@@ -446,7 +491,7 @@ describe('editing a fund name and emoji', () => {
 
 describe('topping up a fund', () => {
   it('shows a Top up button on each fund card', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     for (const row of rows) {
@@ -457,7 +502,7 @@ describe('topping up a fund', () => {
   })
 
   it('reveals a blank $ amount input with the release hint', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
@@ -468,7 +513,7 @@ describe('topping up a fund', () => {
   })
 
   it('closes an open plan editor when the top-up form opens', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit' }))
@@ -483,11 +528,11 @@ describe('topping up a fund', () => {
   it('posts the amount and refetches the list', async () => {
     const toppedUp = { ...FUNDS[0], balance: 10_250 }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/funds/1/top-up': toppedUp,
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
     fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
@@ -507,11 +552,11 @@ describe('topping up a fund', () => {
   it('posts a negative amount as a release', async () => {
     const released = { ...FUNDS[0], balance: 9_500 }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/funds/1/top-up': released,
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
     fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
@@ -526,7 +571,7 @@ describe('topping up a fund', () => {
   })
 
   it('offers a source choice defaulting to the regular top-up', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
@@ -546,7 +591,7 @@ describe('topping up a fund', () => {
   })
 
   it('offers an As-of date defaulting to today', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
@@ -560,11 +605,11 @@ describe('topping up a fund', () => {
     // today.
     const toppedUp = { ...FUNDS[0], balance: 10_250 }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/funds/1/top-up': toppedUp,
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
     fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
@@ -587,11 +632,11 @@ describe('topping up a fund', () => {
   it('posts the rollover source when the leftover option is picked', async () => {
     const toppedUp = { ...FUNDS[0], balance: 10_400 }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/funds/1/top-up': toppedUp,
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
     fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
@@ -614,11 +659,11 @@ describe('topping up a fund', () => {
   it('posts a negative rollover to un-assign leftover', async () => {
     const released = { ...FUNDS[0], balance: 9_800 }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/funds/1/top-up': released,
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
     fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
@@ -639,8 +684,8 @@ describe('topping up a fund', () => {
   })
 
   it('does not post a blank amount', async () => {
-    const fetchMock = stubApi({ '/api/funds': FUNDS })
-    render(<Funds />)
+    const fetchMock = stubApi({ ...ROUTES })
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
 
@@ -650,8 +695,8 @@ describe('topping up a fund', () => {
   })
 
   it('cancels without posting', async () => {
-    const fetchMock = stubApi({ '/api/funds': FUNDS })
-    render(<Funds />)
+    const fetchMock = stubApi({ ...ROUTES })
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
     fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
@@ -675,7 +720,7 @@ describe('correcting a fund balance', () => {
   // hears about it — reconciling against the real account, and the
   // neutral half of income-row + drawdown month-funding.
   it('opens prefilled with the current balance', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(
@@ -688,11 +733,11 @@ describe('correcting a fund balance', () => {
   it('posts a restatement dated today and refetches', async () => {
     const corrected = { ...FUNDS[0], balance: 9_500 }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/fund-entries': { id: 99 },
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(
       within(rows[0]).getByRole('button', { name: 'Correct balance' }),
@@ -718,11 +763,11 @@ describe('correcting a fund balance', () => {
   it('posts a zero balance — blank and 0 are different corrections', async () => {
     const corrected = { ...FUNDS[0], balance: 0 }
     const routes: Record<string, unknown> = {
-      '/api/funds': FUNDS,
+      ...ROUTES,
       'POST /api/fund-entries': { id: 99 },
     }
     const fetchMock = stubApi(routes)
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(
       within(rows[0]).getByRole('button', { name: 'Correct balance' }),
@@ -743,8 +788,8 @@ describe('correcting a fund balance', () => {
   })
 
   it('does not post an unchanged balance', async () => {
-    const fetchMock = stubApi({ '/api/funds': FUNDS })
-    render(<Funds />)
+    const fetchMock = stubApi({ ...ROUTES })
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(
       within(rows[0]).getByRole('button', { name: 'Correct balance' }),
@@ -756,8 +801,8 @@ describe('correcting a fund balance', () => {
   })
 
   it('does not post a blank balance', async () => {
-    const fetchMock = stubApi({ '/api/funds': FUNDS })
-    render(<Funds />)
+    const fetchMock = stubApi({ ...ROUTES })
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(
       within(rows[0]).getByRole('button', { name: 'Correct balance' }),
@@ -772,7 +817,7 @@ describe('correcting a fund balance', () => {
   })
 
   it('closes an open top-up form when it opens', async () => {
-    render(<Funds />)
+    renderFunds()
     const rows = await screen.findAllByTestId('fund-row')
     fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
 
@@ -789,7 +834,7 @@ describe('correcting a fund balance', () => {
 
 describe('responsive layout', () => {
   it('stacks the new-fund form grids into one column on narrow screens', async () => {
-    render(<Funds />)
+    renderFunds()
 
     const form = await screen.findByTestId('new-fund-form')
     expect(within(form).getByLabelText('Name').closest('.grid')).toHaveClass(
@@ -799,5 +844,288 @@ describe('responsive layout', () => {
     expect(
       within(form).getByLabelText('$ / month').closest('.grid'),
     ).toHaveClass('grid-cols-1', 'sm:grid-cols-[1.4fr_1fr_auto]')
+  })
+})
+
+describe('fund log', () => {
+  const logRows = async () => {
+    const log = await screen.findByTestId('fund-log')
+    await within(log).findAllByTestId('fund-log-row')
+    return within(log).getAllByTestId('fund-log-row')
+  }
+
+  it("shows this month's entries beside the funds", async () => {
+    stubApi({ ...ROUTES, [`/api/fund-entries?month=${MONTH}`]: LOG })
+    renderFunds()
+
+    const log = await screen.findByTestId('fund-log')
+    expect(within(log).getByText('Fund log')).toBeInTheDocument()
+    expect(within(log).getByTestId('fund-log-month')).toHaveTextContent(
+      monthYearLabel(MONTH),
+    )
+    const rows = await logRows()
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByText('The Home Depot')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Travel fund')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('−$32.20')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('$4,167.80')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Top-up')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('+$500.00')).toBeInTheDocument()
+  })
+
+  it('pages back and forward a month at a time', async () => {
+    const earlier = previousMonth(MONTH)
+    const fetchMock = stubApi({
+      ...ROUTES,
+      [`/api/fund-entries?month=${MONTH}`]: LOG,
+      [`/api/fund-entries?month=${earlier}`]: [
+        { ...LOG[1], id: 9, as_of_date: `${earlier}-15`, source: 'rollover' },
+      ],
+    })
+    renderFunds()
+    const log = await screen.findByTestId('fund-log')
+    await logRows()
+
+    fireEvent.click(within(log).getByRole('button', { name: 'Previous month' }))
+
+    await waitFor(() =>
+      expect(within(log).getByTestId('fund-log-month')).toHaveTextContent(
+        monthYearLabel(earlier),
+      ),
+    )
+    expect(await within(log).findByText('Rollover')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/fund-entries?month=${earlier}`,
+    )
+
+    fireEvent.click(within(log).getByRole('button', { name: 'Next month' }))
+
+    expect(await within(log).findByText('The Home Depot')).toBeInTheDocument()
+  })
+
+  it('says so when a month has no fund activity', async () => {
+    renderFunds()
+
+    const log = await screen.findByTestId('fund-log')
+    expect(
+      await within(log).findByText(
+        `No fund activity in ${monthYearLabel(MONTH)}.`,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('refetches the log after a fund changes', async () => {
+    const routes: Record<string, unknown> = {
+      ...ROUTES,
+      [`/api/fund-entries?month=${MONTH}`]: [],
+      'POST /api/funds/1/top-up': FUNDS[0],
+    }
+    stubApi(routes)
+    renderFunds()
+    const rows = await screen.findAllByTestId('fund-row')
+    await screen.findByText(`No fund activity in ${monthYearLabel(MONTH)}.`)
+    routes[`/api/fund-entries?month=${MONTH}`] = [LOG[1]]
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Top up' }))
+    fireEvent.change(within(rows[0]).getByLabelText('$ amount'), {
+      target: { value: '500' },
+    })
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Save' }))
+
+    expect(await logRows()).toHaveLength(1)
+  })
+
+  it('sits in a third column beside the funds from lg up', async () => {
+    renderFunds()
+
+    const view = await screen.findByTestId('view-funds')
+    expect(view).toHaveClass('grid-cols-1', 'lg:grid-cols-3')
+    expect(screen.getByTestId('funds-column')).toHaveClass('lg:col-span-2')
+  })
+})
+
+describe('filtering the fund log to a fund', () => {
+  const FILTERED = `/api/fund-entries?month=${MONTH}&fund_id=1`
+
+  const nameButton = (name: string) => screen.getByRole('button', { name })
+
+  it('selects a fund when its card is clicked', async () => {
+    const fetchMock = stubApi({ ...ROUTES, [FILTERED]: [LOG[1]] })
+    renderFunds()
+    const rows = await screen.findAllByTestId('fund-row')
+
+    fireEvent.click(within(rows[0]).getByText('$500 / mo · ~3.3 yrs to target'))
+
+    expect(nameButton('🚨 Emergency fund')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(FILTERED))
+    const log = screen.getByTestId('fund-log')
+    expect(
+      within(log).getByTestId('fund-log-filter-chip'),
+    ).toHaveTextContent('Filtering: 🚨 Emergency fund ✕')
+  })
+
+  it('leaves the fund off each row while filtered', async () => {
+    stubApi({ ...ROUTES, [FILTERED]: [LOG[1]] })
+    renderFunds('/funds?fund=1')
+
+    const log = await screen.findByTestId('fund-log')
+    const [row] = await within(log).findAllByTestId('fund-log-row')
+    expect(within(row).getByText('Top-up')).toBeInTheDocument()
+    expect(within(row).queryByText('🚨 Emergency fund')).not.toBeInTheDocument()
+  })
+
+  it('clears the selection when the card is clicked again', async () => {
+    renderFunds()
+    await screen.findAllByTestId('fund-row')
+
+    fireEvent.click(nameButton('🚨 Emergency fund'))
+    fireEvent.click(nameButton('🚨 Emergency fund'))
+
+    expect(nameButton('🚨 Emergency fund')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(screen.queryByTestId('fund-log-filter-chip')).not.toBeInTheDocument()
+  })
+
+  it('clears the selection from the chip', async () => {
+    renderFunds('/funds?fund=1')
+
+    fireEvent.click(await screen.findByTestId('fund-log-filter-chip'))
+
+    expect(nameButton('🚨 Emergency fund')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
+  it("never toggles on the card's own buttons or forms", async () => {
+    stubApi({ ...ROUTES, 'POST /api/funds/1/archive': FUNDS[0] })
+    renderFunds()
+    const rows = await screen.findAllByTestId('fund-row')
+
+    for (const label of ['Top up', 'Correct balance', 'Edit']) {
+      fireEvent.click(within(rows[0]).getByRole('button', { name: label }))
+    }
+    fireEvent.click(within(rows[0]).getByLabelText('Name'))
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Archive' }))
+
+    expect(nameButton('🚨 Emergency fund')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+  })
+
+  it('arrives with the fund from ?fund= selected', async () => {
+    const fetchMock = stubApi({ ...ROUTES, [FILTERED]: [LOG[1]] })
+    renderFunds('/funds?fund=1')
+
+    expect(
+      await screen.findByTestId('fund-log-filter-chip'),
+    ).toHaveTextContent('Filtering: 🚨 Emergency fund ✕')
+    expect(nameButton('🚨 Emergency fund')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(fetchMock).toHaveBeenCalledWith(FILTERED)
+  })
+
+  it('ignores a ?fund= that names no active fund', async () => {
+    const fetchMock = stubApi({ ...ROUTES })
+    renderFunds('/funds?fund=99')
+    await screen.findAllByTestId('fund-row')
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/fund-entries?month=${MONTH}`,
+      ),
+    )
+    expect(screen.queryByTestId('fund-log-filter-chip')).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      `/api/fund-entries?month=${MONTH}&fund_id=99`,
+    )
+  })
+
+  it('keeps the filter while paging months', async () => {
+    const earlier = previousMonth(MONTH)
+    const fetchMock = stubApi({ ...ROUTES })
+    renderFunds('/funds?fund=1')
+    const log = await screen.findByTestId('fund-log')
+    await within(log).findByTestId('fund-log-filter-chip')
+
+    fireEvent.click(within(log).getByRole('button', { name: 'Previous month' }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/fund-entries?month=${earlier}&fund_id=1`,
+      ),
+    )
+    expect(within(log).getByTestId('fund-log-filter-chip')).toBeInTheDocument()
+  })
+})
+
+describe('selecting a fund on a narrow screen', () => {
+  // Below lg the log stacks under the funds list, out of sight — a
+  // selection brings it into view. Side by side, it's already there.
+  // jsdom implements no scrollIntoView; each test installs a spy and
+  // removes it after.
+  const spyScroll = () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    return scroll
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+  })
+
+  it('scrolls the log into view below lg', async () => {
+    stubMatchMedia(false)
+    const scroll = spyScroll()
+    renderFunds()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '🚨 Emergency fund' }),
+    )
+
+    await waitFor(() => expect(scroll).toHaveBeenCalled())
+    expect(scroll.mock.contexts[0]).toBe(screen.getByTestId('fund-log'))
+  })
+
+  it('leaves the page where it is from lg up', async () => {
+    stubMatchMedia(true)
+    const scroll = spyScroll()
+    renderFunds()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '🚨 Emergency fund' }),
+    )
+
+    await screen.findByTestId('fund-log-filter-chip')
+    expect(scroll).not.toHaveBeenCalled()
+  })
+
+  it('does not scroll when arriving with a fund selected', async () => {
+    stubMatchMedia(false)
+    const scroll = spyScroll()
+    renderFunds('/funds?fund=1')
+
+    await screen.findByTestId('fund-log-filter-chip')
+    expect(scroll).not.toHaveBeenCalled()
+  })
+
+  it('does not scroll when a selection is cleared', async () => {
+    stubMatchMedia(false)
+    renderFunds('/funds?fund=1')
+    const scroll = spyScroll()
+
+    fireEvent.click(await screen.findByTestId('fund-log-filter-chip'))
+    fireEvent.click(screen.getByRole('button', { name: '🚨 Emergency fund' }))
+    fireEvent.click(screen.getByRole('button', { name: '🚨 Emergency fund' }))
+
+    expect(scroll).toHaveBeenCalledTimes(1)
   })
 })
