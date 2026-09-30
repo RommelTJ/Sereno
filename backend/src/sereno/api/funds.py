@@ -8,7 +8,7 @@ import sqlite3
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import (
     BaseModel,
     Field,
@@ -130,6 +130,97 @@ class FundEntry(BaseModel):
     balance: float
     contribution: float
     source: str | None
+
+
+class FundLogFund(BaseModel):
+    id: int
+    name: str
+    emoji: str | None
+    archived: bool
+
+
+class FundLogLink(BaseModel):
+    """The expense or income row behind a 'spend' entry. kind reads the
+    entry against the row's other entries on the same fund: its first is
+    the draw; a later one is an edit while the row still draws from this
+    fund, or a reversal once it has moved off it."""
+
+    type: Literal["expense", "income"]
+    id: int
+    label: str
+    kind: Literal["draw", "edit", "reversal"]
+
+
+class FundLogEntry(BaseModel):
+    """One line of the fund log: delta is the move from the fund's previous
+    snapshot, so every source — spend, contribution, top-up, rollover, or a
+    hand correction — reads as a signed amount."""
+
+    id: int
+    fund: FundLogFund
+    as_of_date: date
+    source: str | None
+    delta: float
+    balance: float
+    link: FundLogLink | None
+
+
+# Every entry with its delta and its place among its row's entries on the
+# fund, computed over the whole table before any filter so the previous
+# snapshot can sit in an earlier month. The order is _fund_balance's.
+_FUND_LOG_QUERY = """
+WITH chain AS (
+    SELECT e.*,
+           e.balance - COALESCE(LAG(e.balance) OVER (
+               PARTITION BY e.fund_id ORDER BY e.as_of_date, e.id), 0) AS delta,
+           ROW_NUMBER() OVER (PARTITION BY e.fund_id, e.expense_id ORDER BY e.id) AS expense_seq,
+           ROW_NUMBER() OVER (PARTITION BY e.fund_id, e.income_id ORDER BY e.id) AS income_seq
+    FROM fund_entry e
+)
+SELECT c.id, c.fund_id, f.name, f.emoji, f.active, c.as_of_date, c.source, c.delta,
+       c.balance, c.expense_id, c.income_id, c.expense_seq, c.income_seq,
+       COALESCE(x.note, cat.name, 'Expense') AS expense_label,
+       CASE WHEN x.funded_from = 'fund' THEN x.fund_id END AS expense_fund_id,
+       COALESCE(i.source_label, i.note, i.source) AS income_label,
+       i.drawn_from_fund_id AS income_fund_id
+FROM chain c
+JOIN fund f ON f.id = c.fund_id
+LEFT JOIN expense_line x ON x.id = c.expense_id
+LEFT JOIN category cat ON cat.id = x.category_id
+LEFT JOIN income_event i ON i.id = c.income_id
+"""
+
+
+def _fund_log_link(row: sqlite3.Row) -> FundLogLink | None:
+    if row["expense_id"] is not None:
+        link_type, link_id, label = "expense", row["expense_id"], row["expense_label"]
+        seq, current_fund = row["expense_seq"], row["expense_fund_id"]
+    elif row["income_id"] is not None:
+        link_type, link_id, label = "income", row["income_id"], row["income_label"]
+        seq, current_fund = row["income_seq"], row["income_fund_id"]
+    else:
+        return None
+    if seq == 1:
+        kind = "draw"
+    elif current_fund == row["fund_id"]:
+        kind = "edit"
+    else:
+        kind = "reversal"
+    return FundLogLink(type=link_type, id=link_id, label=label, kind=kind)
+
+
+def _fund_log_entry(row: sqlite3.Row) -> FundLogEntry:
+    return FundLogEntry(
+        id=row["id"],
+        fund=FundLogFund(
+            id=row["fund_id"], name=row["name"], emoji=row["emoji"], archived=not row["active"]
+        ),
+        as_of_date=row["as_of_date"],
+        source=row["source"],
+        delta=to_dollars(row["delta"]),
+        balance=to_dollars(row["balance"]),
+        link=_fund_log_link(row),
+    )
 
 
 _FUND_QUERY = (
@@ -358,3 +449,37 @@ def create_fund_entry(entry: FundEntryCreate, db: Db) -> FundEntry:
             }
         )
     )
+
+
+@router.get("/fund-entries")
+def list_fund_entries(
+    db: Db,
+    month: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")] = None,
+    fund_id: int | None = None,
+    unlinked: bool = False,
+) -> list[FundLogEntry]:
+    """The fund log: a calendar month of entries (by as_of_date), newest
+    first, archived funds included. Entries that move nothing — a new
+    fund's opening $0, a restatement to the same balance — are skipped.
+    Unfiltered, the monthly contributions stay out, since every fund
+    gets one each month; filtered to a fund, they're part of its story.
+    unlinked narrows to the 'spend' entries no row claims, for the
+    backfill."""
+    target = month or date.today().strftime("%Y-%m")
+    where = ["substr(c.as_of_date, 1, 7) = ?", "c.delta != 0"]
+    params: list[object] = [target]
+    if fund_id is None:
+        where.append("COALESCE(c.source, '') != 'monthly_plan'")
+    else:
+        where.append("c.fund_id = ?")
+        params.append(fund_id)
+    if unlinked:
+        where.append("c.source = 'spend' AND c.expense_id IS NULL AND c.income_id IS NULL")
+    rows = db.execute(
+        _FUND_LOG_QUERY
+        + " WHERE "
+        + " AND ".join(where)
+        + " ORDER BY c.as_of_date DESC, c.id DESC",
+        params,
+    )
+    return [_fund_log_entry(row) for row in rows]
