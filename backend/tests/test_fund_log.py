@@ -252,3 +252,121 @@ class TestFundLogLinks:
         entries = fund_log(client, month="2026-06")
         kinds = [(entry["fund"]["name"], entry["link"]["kind"]) for entry in entries[:3]]
         assert kinds == [("Bike", "draw"), ("Car", "reversal"), ("Car", "draw")]
+
+
+def balances():
+    conn = connect()
+    try:
+        return [
+            tuple(row) for row in conn.execute("SELECT id, balance FROM fund_entry ORDER BY id")
+        ]
+    finally:
+        conn.close()
+
+
+class TestLinkFundEntry:
+    """The backfill: point an existing 'spend' entry at the row behind it,
+    never touching a balance."""
+
+    def spend_entry(self, fund_id):
+        insert_entry(fund_id, "2026-06-01", 1000, "top_up")
+        return insert_entry(fund_id, "2026-06-10", 967.8, "spend")
+
+    def test_links_an_entry_to_its_expense(self, client):
+        car_id = insert_fund("Car")
+        expense_id = insert_expense(car_id, 32.2, note="The Home Depot")
+        entry_id = self.spend_entry(car_id)
+        before = balances()
+        response = client.put(f"/api/fund-entries/{entry_id}/link", json={"expense_id": expense_id})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["id"] == entry_id
+        assert body["delta"] == -32.2
+        assert body["link"] == {
+            "type": "expense",
+            "id": expense_id,
+            "label": "The Home Depot",
+            "kind": "draw",
+        }
+        assert balances() == before
+
+    def test_links_an_entry_to_its_income(self, client):
+        cash_id = insert_fund("1st Year Fund")
+        income_id = insert_income(cash_id, 32.2, source_label="September draw")
+        entry_id = self.spend_entry(cash_id)
+        response = client.put(f"/api/fund-entries/{entry_id}/link", json={"income_id": income_id})
+        assert response.status_code == 200
+        assert response.json()["link"]["label"] == "September draw"
+
+    def test_relinking_replaces_the_old_link(self, client):
+        # A backfill mistake can be fixed: the new link wins and the other
+        # column clears.
+        car_id = insert_fund("Car")
+        expense_id = insert_expense(car_id, 32.2, note="The Home Depot")
+        income_id = insert_income(car_id, 32.2, source_label="Transfer")
+        entry_id = self.spend_entry(car_id)
+        client.put(f"/api/fund-entries/{entry_id}/link", json={"expense_id": expense_id})
+        response = client.put(f"/api/fund-entries/{entry_id}/link", json={"income_id": income_id})
+        assert response.status_code == 200
+        conn = connect()
+        try:
+            row = conn.execute(
+                "SELECT expense_id, income_id FROM fund_entry WHERE id = ?", (entry_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        assert tuple(row) == (None, income_id)
+
+    def test_an_unknown_entry_is_404(self, client):
+        car_id = insert_fund("Car")
+        expense_id = insert_expense(car_id, 32.2)
+        response = client.put("/api/fund-entries/99/link", json={"expense_id": expense_id})
+        assert response.status_code == 404
+
+    def test_only_spend_entries_can_be_linked(self, client):
+        car_id = insert_fund("Car")
+        expense_id = insert_expense(car_id, 32.2)
+        entry_id = insert_entry(car_id, "2026-06-01", 1000, "top_up")
+        response = client.put(f"/api/fund-entries/{entry_id}/link", json={"expense_id": expense_id})
+        assert response.status_code == 422
+
+    @pytest.mark.parametrize("body", [{}, {"expense_id": 1, "income_id": 1}])
+    def test_exactly_one_link_is_required(self, client, body):
+        car_id = insert_fund("Car")
+        insert_expense(car_id, 32.2)
+        insert_income(car_id, 32.2)
+        entry_id = self.spend_entry(car_id)
+        assert client.put(f"/api/fund-entries/{entry_id}/link", json=body).status_code == 422
+
+    @pytest.mark.parametrize("field", ["expense_id", "income_id"])
+    def test_a_missing_row_is_rejected(self, client, field):
+        entry_id = self.spend_entry(insert_fund("Car"))
+        response = client.put(f"/api/fund-entries/{entry_id}/link", json={field: 99})
+        assert response.status_code == 422
+
+    def test_an_expense_funded_by_another_fund_is_rejected(self, client):
+        car_id = insert_fund("Car")
+        bike_id = insert_fund("Bike")
+        expense_id = insert_expense(bike_id, 32.2)
+        entry_id = self.spend_entry(car_id)
+        response = client.put(f"/api/fund-entries/{entry_id}/link", json={"expense_id": expense_id})
+        assert response.status_code == 422
+
+    def test_a_discretionary_expense_is_rejected(self, client):
+        car_id = insert_fund("Car")
+        expense_id = execute(
+            "INSERT INTO expense_line (txn_date, budget_month, amount, fund_id)"
+            " VALUES ('2026-06-10', '2026-06', 3220, ?)",
+            car_id,
+        )
+        entry_id = self.spend_entry(car_id)
+        response = client.put(f"/api/fund-entries/{entry_id}/link", json={"expense_id": expense_id})
+        assert response.status_code == 422
+
+    def test_an_income_drawn_from_another_fund_is_rejected(self, client):
+        car_id = insert_fund("Car")
+        bike_id = insert_fund("Bike")
+        income_id = insert_income(bike_id, 32.2)
+        entry_id = self.spend_entry(car_id)
+        response = client.put(f"/api/fund-entries/{entry_id}/link", json={"income_id": income_id})
+        assert response.status_code == 422
