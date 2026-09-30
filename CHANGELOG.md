@@ -4,6 +4,32 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.22.0 — Funds & Goals has a fund log. A fund drawn on a schedule —
+🛟 1st Year Fund pays out a set amount each month — gave no way to
+answer "did I already draw this month?" short of backtracking through
+the Safe-to-spend feed, which can't filter to fund draws. The history
+existed as `fund_entry` snapshots, but nothing read them back, and a
+`spend` entry never said which row drew it. Migration 0021 adds
+`expense_id` and `income_id` to `fund_entry` (`ON DELETE SET NULL`),
+and every `spend` entry the server writes now carries its link: the
+draw, an edit's delta, a moved row's reversal and fresh draw, and a
+delete's reversal, whose link clears with the row.
+`GET /api/fund-entries` reads a calendar month of the log, newest
+first, each entry with its signed delta from the fund's previous
+snapshot, its balance after, and the linked row's current label and
+kind (draw, edit, reversal); entries that move nothing are skipped,
+and monthly contributions appear only when filtered to one fund.
+`PUT /api/fund-entries/{id}/link` backfills an older entry's link
+without touching a balance. On screen, the log takes the third column
+beside the funds (stacking below them under `lg`), pages a month at a
+time, and reads each line as the row behind it — "The Home Depot",
+"· edited", "· reversed" — or as Withdrawn, Returned, Monthly
+contribution, Top-up, Rollover, Correction, or Archived. Clicking a
+fund card filters the log through `?fund=`, with a "Filtering" chip to
+clear it, and each fund row on Safe-to-spend links straight there.
+Entries written before this release read "Withdrawn" until the
+post-deploy backfill links them (issue #169).
+
 v3.21.0 — Safe-to-spend's add-forms float below three columns. The
 view earns its third column only past 1560px, so at every common laptop
 width the two add-forms fell into the second row under the tall
