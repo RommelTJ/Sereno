@@ -71,3 +71,68 @@ export function stubIntersectionObserver() {
     },
   }
 }
+
+/**
+ * Replace setup's always-matching matchMedia with one whose answer the
+ * test controls: `const media = stubMatchMedia(false)` renders the
+ * narrow layout, and `act(() => media.set(true))` crosses the
+ * breakpoint, notifying every listener the way a resize would.
+ */
+export function stubMatchMedia(initial: boolean) {
+  let matches = initial
+  const listeners = new Set<(event: MediaQueryListEvent) => void>()
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() {
+      return matches
+    },
+    media: query,
+    onchange: null,
+    addEventListener: (
+      _type: string,
+      listener: (event: MediaQueryListEvent) => void,
+    ) => listeners.add(listener),
+    removeEventListener: (
+      _type: string,
+      listener: (event: MediaQueryListEvent) => void,
+    ) => listeners.delete(listener),
+    addListener() {},
+    removeListener() {},
+    dispatchEvent: () => false,
+  }))
+  return {
+    set(next: boolean) {
+      matches = next
+      for (const listener of listeners) {
+        listener({ matches: next } as MediaQueryListEvent)
+      }
+    },
+    listenerCount: () => listeners.size,
+  }
+}
+
+/**
+ * Give jsdom a visualViewport the test can move, standing in for iOS
+ * Safari's on-screen keyboard: `const viewport = stubVisualViewport()`
+ * starts it filling the window, and
+ * `act(() => viewport.set({ height: 368 }))` shrinks it the way the
+ * keyboard does, firing resize (height) or scroll (offsetTop).
+ */
+export function stubVisualViewport() {
+  const viewport = Object.assign(new EventTarget(), {
+    height: window.innerHeight,
+    offsetTop: 0,
+  })
+  vi.stubGlobal('visualViewport', viewport)
+  return {
+    set(next: { height?: number; offsetTop?: number }) {
+      if (next.height !== undefined) {
+        viewport.height = next.height
+        viewport.dispatchEvent(new Event('resize'))
+      }
+      if (next.offsetTop !== undefined) {
+        viewport.offsetTop = next.offsetTop
+        viewport.dispatchEvent(new Event('scroll'))
+      }
+    },
+  }
+}

@@ -4,6 +4,23 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.21.0 — Safe-to-spend's add-forms float below three columns. The
+view earns its third column only past 1560px, so at every common laptop
+width the two add-forms fell into the second row under the tall
+envelopes-and-funds stack, and on a phone they came last, under the
+whole activity feed — logging an expense meant scrolling to the bottom
+first. Below the `3col` breakpoint the forms now leave the grid: a
+floating + button in the bottom-right corner opens a menu of Add
+spending and Add income, and the pick opens that form in a panel docked
+bottom-right from 768px up, or a full-width bottom sheet below it. The
+panel is non-modal — no backdrop, so the new entry can be watched
+landing in Activity — and a successful add, Esc, or ✕ closes it,
+discarding a half-filled form so reopening starts blank. The past-month
+"Posts to" hint rides inside the form as before. On a phone the sheet
+follows `visualViewport`, lifting above the on-screen keyboard, since
+iOS Safari otherwise leaves a fixed sheet behind it. At 1560px and up
+nothing changes (issue #168).
+
 v3.20.0 — State income tax is modelled. `tax_param.state_treatment`
 has said `CA_ordinary` since the first schema and nothing read it:
 the engines were federal-only, so a California plan reported zero

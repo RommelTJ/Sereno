@@ -14,10 +14,16 @@ import {
 } from '../budget.ts'
 import ActivityFeed from '../components/ActivityFeed.tsx'
 import EnvelopesCard from '../components/EnvelopesCard.tsx'
+import FloatingAdd from '../components/FloatingAdd.tsx'
 import IncomeForm from '../components/IncomeForm.tsx'
 import FundsCard from '../components/FundsCard.tsx'
 import SpendingForm from '../components/SpendingForm.tsx'
 import { formatUsd } from '../ledger.ts'
+import { useMediaQuery } from '../useMediaQuery.ts'
+
+// The theme's --breakpoint-3col (index.css), where the view earns its
+// third column and the add-forms get it.
+const THREE_COLUMNS = '(min-width: 97.5rem)'
 
 function Hero({ safeToSpend }: { safeToSpend: number }) {
   return (
@@ -53,6 +59,7 @@ function SafeToSpend() {
   // Only the id is stored — the envelope itself derives from the viewed
   // month's categories, so a refetch never leaves stale figures behind.
   const [filterId, setFilterId] = useState<number | null>(null)
+  const threeColumns = useMediaQuery(THREE_COLUMNS)
   const filterEnvelope =
     budget?.categories.find((category) => category.id === filterId) ?? null
 
@@ -112,8 +119,40 @@ function SafeToSpend() {
     setFunds(nextFunds)
   }
 
+  // onAdded runs once a post lands — the floating panel closes on it.
+  const spendingForm = (onAdded?: () => void) =>
+    budget &&
+    funds && (
+      <SpendingForm
+        key={`spend-${budget.month}`}
+        categories={budget.categories}
+        funds={funds}
+        month={budget.month}
+        paged={homeMonth != null && budget.month !== homeMonth}
+        onAdd={async (input) => {
+          await addExpense(input)
+          onAdded?.()
+        }}
+      />
+    )
+  const incomeForm = (onAdded?: () => void) =>
+    budget &&
+    funds && (
+      <IncomeForm
+        key={`income-${budget.month}`}
+        funds={funds}
+        month={budget.month}
+        onAdd={async (input) => {
+          await addIncome(input)
+          onAdded?.()
+        }}
+      />
+    )
+
   // Three columns only where each one clears 400px — the 3col breakpoint
-  // in the theme carries that arithmetic.
+  // in the theme carries that arithmetic. Below it the add-forms leave the
+  // grid for a floating panel, so logging an entry never means scrolling
+  // past the envelopes and the whole activity feed.
   return (
     <div
       data-testid="view-safe-to-spend"
@@ -184,22 +223,18 @@ function SafeToSpend() {
               pager={false}
             />
           </section>
-          <div className="flex flex-col gap-5">
-            <SpendingForm
-              key={`spend-${budget.month}`}
-              categories={budget.categories}
-              funds={funds}
-              month={budget.month}
-              paged={homeMonth != null && budget.month !== homeMonth}
-              onAdd={addExpense}
+          {threeColumns ? (
+            <div className="flex flex-col gap-5">
+              {spendingForm()}
+              {incomeForm()}
+            </div>
+          ) : (
+            <FloatingAdd
+              renderForm={(kind, close) =>
+                kind === 'spending' ? spendingForm(close) : incomeForm(close)
+              }
             />
-            <IncomeForm
-              key={`income-${budget.month}`}
-              funds={funds}
-              month={budget.month}
-              onAdd={addIncome}
-            />
-          </div>
+          )}
         </>
       )}
     </div>
