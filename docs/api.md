@@ -292,7 +292,39 @@ The funds slice:
   null for the hand-entered rows this endpoint appends — invisible to
   the safe-to-spend formula by design, which is why the Funds & goals
   Correct balance action posts them: the tracker restates without the
-  headline moving.
+  headline moving. Every `'spend'` entry the server writes — the draw on
+  an expense or income create, the delta on a same-fund amount edit, the
+  reversal and fresh draw on a changed funding source, the reversal on a
+  delete — also carries `expense_id` or `income_id`, pointing back at the
+  row behind it (migration 0021). Both are `ON DELETE SET NULL`: deleting
+  the row keeps its entries as history and clears their link.
+- `GET /api/fund-entries?month=YYYY-MM[&fund_id=][&unlinked=true]` — the
+  fund log: that calendar month's entries (by `as_of_date`; `month`
+  defaults to the current one), newest first, archived funds included.
+  Each carries `id`, `fund` (`id`, `name`, `emoji`, `archived`),
+  `as_of_date`, `source`, `delta` — the signed move from the fund's
+  previous snapshot, which may sit in an earlier month; a fund's first
+  entry moves it by its whole balance — `balance` after, and `link`:
+  null, or the row behind a `'spend'` entry as `type` (`expense` /
+  `income`), `id`, its current `label` (an expense's note, else its
+  category, else "Expense"; an income's source title, else its note,
+  else its source), and `kind`. The kind reads the entry against the
+  row's other entries on the same fund: the first is the `draw`; a later
+  one is an `edit` while the row still draws from this fund, a
+  `reversal` once it has moved off it. Entries that move nothing — a new
+  fund's opening $0, a restatement to the same balance — are skipped.
+  Without `fund_id` the `monthly_plan` contributions are left out, since
+  every fund gets one each month; with it they're included.
+  `unlinked=true` narrows to the `'spend'` entries no row claims, for the
+  backfill. A malformed `month` is a 422.
+- `PUT /api/fund-entries/{id}/link` — backfills an existing entry's link:
+  the body carries exactly one of `expense_id` or `income_id` (neither or
+  both is a 422). The entry must be `source = 'spend'` (else 422, unknown
+  entry 404), and the row must exist and draw from the entry's fund — an
+  expense `funded_from = 'fund'` with that `fund_id`, an income with that
+  `drawn_from_fund_id` (else 422). Relinking replaces the old link and
+  clears the other column, so a matching mistake can be undone. No
+  balance is ever touched. Returns the entry as the fund log reads it.
 - `PUT /api/funds/{id}` — revises the fund's `name`, `emoji` and
   `monthly_plan` in place — the fund row is a dimension, like a category
   rename, so its identity fields are mutable and the append-only entry

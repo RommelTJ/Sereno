@@ -138,7 +138,10 @@ CREATE TABLE fund_entry (
     source       TEXT,                                    -- 'spend' (fund-funded expense drawdown)
                                                           -- | 'monthly_plan' (auto contribution)
                                                           -- | NULL (hand-entered)
-    created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    -- the row behind a 'spend' entry; a delete of that row clears the link
+    expense_id   INTEGER REFERENCES expense_line(id) ON DELETE SET NULL,
+    income_id    INTEGER REFERENCES income_event(id) ON DELETE SET NULL
 );
 CREATE INDEX ix_fund_entry ON fund_entry(fund_id, as_of_date);
 

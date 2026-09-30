@@ -32,7 +32,9 @@ whole thing in plain SQL.
   with progress bars; overspending is allowed and simply reduces the headline number.
 - **Funds & goals** — sinking funds and dated goals as one concept. Notes are
   auto-derived, never hand-typed: "needs $X/mo to finish by June", "~2 yrs to target",
-  "fully funded".
+  "fully funded". A fund log beside them pages through each month's draws,
+  contributions, and corrections, labelled by the expense or income behind each draw
+  and filterable to one fund — tap a fund on Safe-to-spend to open its log.
 
 ### Plan
 
