@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FundLogEntry } from '../api.ts'
 import { monthYearLabel, previousMonth } from '../budget.ts'
 import { todayIso } from '../ledger.ts'
 import { FUNDS } from '../test/fixtures.ts'
-import { stubApi } from '../test/stubs.ts'
+import { stubApi, stubMatchMedia } from '../test/stubs.ts'
 import Funds from './Funds.tsx'
 
 // Funds & Goals reads the selected fund from ?fund=, so it renders under a
@@ -1064,5 +1064,68 @@ describe('filtering the fund log to a fund', () => {
       ),
     )
     expect(within(log).getByTestId('fund-log-filter-chip')).toBeInTheDocument()
+  })
+})
+
+describe('selecting a fund on a narrow screen', () => {
+  // Below lg the log stacks under the funds list, out of sight — a
+  // selection brings it into view. Side by side, it's already there.
+  // jsdom implements no scrollIntoView; each test installs a spy and
+  // removes it after.
+  const spyScroll = () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    return scroll
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+  })
+
+  it('scrolls the log into view below lg', async () => {
+    stubMatchMedia(false)
+    const scroll = spyScroll()
+    renderFunds()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '🚨 Emergency fund' }),
+    )
+
+    await waitFor(() => expect(scroll).toHaveBeenCalled())
+    expect(scroll.mock.contexts[0]).toBe(screen.getByTestId('fund-log'))
+  })
+
+  it('leaves the page where it is from lg up', async () => {
+    stubMatchMedia(true)
+    const scroll = spyScroll()
+    renderFunds()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '🚨 Emergency fund' }),
+    )
+
+    await screen.findByTestId('fund-log-filter-chip')
+    expect(scroll).not.toHaveBeenCalled()
+  })
+
+  it('does not scroll when arriving with a fund selected', async () => {
+    stubMatchMedia(false)
+    const scroll = spyScroll()
+    renderFunds('/funds?fund=1')
+
+    await screen.findByTestId('fund-log-filter-chip')
+    expect(scroll).not.toHaveBeenCalled()
+  })
+
+  it('does not scroll when a selection is cleared', async () => {
+    stubMatchMedia(false)
+    renderFunds('/funds?fund=1')
+    const scroll = spyScroll()
+
+    fireEvent.click(await screen.findByTestId('fund-log-filter-chip'))
+    fireEvent.click(screen.getByRole('button', { name: '🚨 Emergency fund' }))
+    fireEvent.click(screen.getByRole('button', { name: '🚨 Emergency fund' }))
+
+    expect(scroll).toHaveBeenCalledTimes(1)
   })
 })
