@@ -1137,6 +1137,101 @@ class TestExpenseFundLinks:
         assert fetch_fund_links(bike_id) == [(0, None, None)]
 
 
+class TestBackdatedFundDraws:
+    """A draw dated behind the fund's latest entry lands on its own date
+    and shifts every later snapshot by its amount — otherwise the later
+    snapshot, resolved newest-first, hides the draw (issue #172)."""
+
+    def fund_with_a_later_top_up(self, start=1000):
+        # No monthly plan, so the catch-up behind GET /funds adds nothing.
+        fund_id = insert_fund("Travel fund")
+        insert_fund_entry(fund_id, "2026-06-01", start)
+        insert_fund_entry(fund_id, "2026-07-01", start + 100, contribution=100, source="top_up")
+        return fund_id
+
+    def draw(self, client, fund_id, amount=300, txn_date="2026-06-20"):
+        return client.post(
+            "/api/expenses",
+            json={
+                "txn_date": txn_date,
+                "amount": amount,
+                "funded_from": "fund",
+                "fund_id": fund_id,
+            },
+        )
+
+    def fund_balance(self, client, fund_id):
+        funds = client.get("/api/funds").json()
+        return next(fund["balance"] for fund in funds if fund["id"] == fund_id)
+
+    def test_a_backdated_expense_lowers_the_current_balance(self, client):
+        fund_id = self.fund_with_a_later_top_up()
+        assert self.draw(client, fund_id).status_code == 201
+        assert self.fund_balance(client, fund_id) == 800
+
+    def test_the_draw_lands_on_its_own_date_with_that_dates_balance(self, client):
+        fund_id = self.fund_with_a_later_top_up()
+        assert self.draw(client, fund_id).status_code == 201
+        entries = query(
+            "SELECT as_of_date, balance FROM fund_entry WHERE fund_id = ? ORDER BY as_of_date, id",
+            fund_id,
+        )
+        assert [(e["as_of_date"], to_dollars(e["balance"])) for e in entries] == [
+            ("2026-06-01", 1000),
+            ("2026-06-20", 700),
+            ("2026-07-01", 800),
+        ]
+
+    def test_the_fund_log_shows_each_entrys_own_delta(self, client):
+        fund_id = self.fund_with_a_later_top_up()
+        assert self.draw(client, fund_id).status_code == 201
+        june = client.get("/api/fund-entries", params={"month": "2026-06", "fund_id": fund_id})
+        july = client.get("/api/fund-entries", params={"month": "2026-07", "fund_id": fund_id})
+        assert [entry["delta"] for entry in june.json()] == [-300, 1000]
+        assert [entry["delta"] for entry in july.json()] == [100]
+
+    def test_a_backdated_draw_that_would_overdraw_that_date_is_rejected(self, client):
+        # $100 on the draw's date can't cover $300, even though the later
+        # top-up lifts the latest balance to $1,100.
+        fund_id = insert_fund("Travel fund")
+        insert_fund_entry(fund_id, "2026-06-01", 100)
+        insert_fund_entry(fund_id, "2026-07-01", 1100, contribution=1000, source="top_up")
+        assert self.draw(client, fund_id).status_code == 422
+        assert query("SELECT id FROM expense_line") == []
+        assert len(fetch_fund_entries(fund_id)) == 2
+
+    def test_a_backdated_income_draw_lowers_the_current_balance(self, client):
+        fund_id = self.fund_with_a_later_top_up()
+        response = client.post(
+            "/api/income",
+            json={
+                "txn_date": "2026-06-20",
+                "source": "transfer_in",
+                "amount": 300,
+                "drawn_from_fund_id": fund_id,
+            },
+        )
+        assert response.status_code == 201
+        assert self.fund_balance(client, fund_id) == 800
+
+    def test_a_reversal_before_a_future_dated_top_up_still_restores_the_balance(self, client):
+        # A top-up may be dated ahead of today; the delete's reversal,
+        # dated today, must still shift it rather than hide behind it.
+        fund_id = insert_fund("Travel fund")
+        insert_fund_entry(fund_id, "2026-06-01", 5000)
+        insert_fund_entry(fund_id, "2099-01-01", 5100, contribution=100, source="top_up")
+        response = self.draw(client, fund_id, amount=1200, txn_date="2026-06-10")
+        assert response.status_code == 201
+        assert client.delete(f"/api/expenses/{response.json()['id']}").status_code == 204
+        assert [entry["balance"] for entry in fetch_fund_entries(fund_id)] == [
+            5000,
+            5100,
+            3800,
+            5000,
+        ]
+        assert self.fund_balance(client, fund_id) == 5100
+
+
 class TestPostIncome:
     def test_appends_an_income_event(self, client):
         account_id = insert_account("Chase checking")
