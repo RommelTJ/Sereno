@@ -135,7 +135,13 @@ The budget slice:
   `source = 'spend'`, the balance minus the amount, and a negative
   contribution is appended, dated the transaction — and an expense that
   exceeds the fund's balance is a 422, since a fund is an earmark over
-  real cash.
+  real cash. A backdated draw — a receipt logged after the fund's next
+  entry, such as the 1st's monthly contribution — takes the balance as
+  of its own date, and every later entry shifts down by the amount in
+  the same transaction, so the draw lowers the current balance and each
+  entry keeps its own delta in the fund log (issue #172). The overdraw
+  guard checks the lowest balance from the draw's date onward: money a
+  later top-up adds can't cover an earlier draw.
 - `POST /api/income` — appends an income/funding event (paycheck, transfer,
   staking, …). `budget_month` is the month the inflow funds — the seed's
   Jun 27 paycheck funds July. An optional `source_label` ("Spouse paycheck")
@@ -148,8 +154,8 @@ The budget slice:
   making month funding from a fund one action instead of an income row
   plus a hand-entered balance correction: the paired `'spend'` fund entry
   appends in the same transaction — fund spending in reverse, dated the
-  transaction, balance minus the amount — a draw exceeding the fund's
-  balance is a 422 (`income draw exceeds fund balance`) that writes
+  transaction, balance minus the amount, backdating the same way — a
+  draw exceeding the fund's balance is a 422 (`income draw exceeds fund balance`) that writes
   nothing, and an unknown fund a 404. Because `'spend'` entries stay out
   of the headline, the feed, and the budget-year transfers line, the
   income row remains the only mover of safe-to-spend: the gross inflow
@@ -165,9 +171,9 @@ The budget slice:
   reassigned to the right month (the prepay pattern). A fund-funded row
   never touches its paired `'spend'` entry — each fund entry snapshots a
   balance, so removing a mid-chain row would not restore it; instead a
-  compensating `'spend'`-source entry is appended, dated today (snapshots
-  resolve newest-first, so a backdated correction would corrupt the
-  chain): a full reversal on delete or a funding-source change, a single
+  compensating `'spend'`-source entry is appended, dated today — the day
+  the correction happened — and shifting any later-dated entry, such as
+  a future-dated top-up, the way a backdated draw does: a full reversal on delete or a funding-source change, a single
   delta on a same-fund amount edit, with the overdraw guard re-applied
   either way — a 422 writes nothing. `'spend'` entries stay out of the
   headline, the feed, and the budget-year transfers line, so a
