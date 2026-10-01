@@ -4,6 +4,23 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.22.1 — A backdated fund draw lowers the balance. A fund keeps its
+history as balance snapshots and shows the newest one, but a draw
+took the latest balance and saved it on the row's own date. Once a
+later entry existed — a receipt logged on the 3rd, after the 1st's
+monthly contribution — the draw sat behind it and never showed: a
+$300 expense left a $1,100 fund at $1,100, and the fund log read the
+draw as −$200 and the $100 contribution as +$300. A fund draw now
+takes the balance as of its own date, and every later entry shifts by
+the amount in the same transaction, so the draw lowers the current
+balance and each entry keeps its own delta. Edit and delete
+corrections go through the same path, so a future-dated top-up no
+longer hides them. The overdraw guard checks the lowest balance from
+the draw's date onward. The backend container also runs on Pacific
+time now (`TZ` in `compose.yaml`): on UTC, "today" turned over at
+5 PM, which added next month's contributions on the evening of the
+month's last day and set up this exact bug (issue #172).
+
 v3.22.0 — Funds & Goals has a fund log. A fund drawn on a schedule —
 🛟 1st Year Fund pays out a set amount each month — gave no way to
 answer "did I already draw this month?" short of backtracking through

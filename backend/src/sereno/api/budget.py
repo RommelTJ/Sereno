@@ -351,16 +351,65 @@ def create_category_plan(category_id: int, plan: CategoryPlanCreate, db: Db) -> 
     return CategoryPlan(**(dict(row) | {"planned": to_dollars(row["planned"])}))
 
 
-def _fund_balance(db: sqlite3.Connection, fund_id: int | None) -> int:
-    """The fund's latest stored balance, in cents like everything below:
-    the draw-down guards compare and recompute in integers, so spending a
-    fund down to exactly its displayed balance can never miss by a float
-    fraction."""
+def _balance_as_of(db: sqlite3.Connection, fund_id: int, as_of: date) -> int:
+    """The fund's stored balance as of a date, in cents like everything
+    below: the draw-down guards compare and recompute in integers, so
+    spending a fund down to exactly its displayed balance can never miss
+    by a float fraction."""
     return db.execute(
-        "SELECT COALESCE((SELECT e.balance FROM fund_entry e WHERE e.fund_id = ?"
+        "SELECT COALESCE((SELECT e.balance FROM fund_entry e"
+        "                 WHERE e.fund_id = ? AND e.as_of_date <= ?"
         "                 ORDER BY e.as_of_date DESC, e.id DESC LIMIT 1), 0)",
-        (fund_id,),
+        (fund_id, as_of.isoformat()),
     ).fetchone()[0]
+
+
+def _spendable(db: sqlite3.Connection, fund_id: int, as_of: date) -> int:
+    """What a draw dated as_of can take without any snapshot going
+    negative: the lowest balance from that date onward, since a draw
+    shifts every later snapshot too (see _append_spend_entry)."""
+    (lowest,) = db.execute(
+        "SELECT MIN(balance) FROM fund_entry WHERE fund_id = ? AND as_of_date > ?",
+        (fund_id, as_of.isoformat()),
+    ).fetchone()
+    balance = _balance_as_of(db, fund_id, as_of)
+    return balance if lowest is None else min(balance, lowest)
+
+
+def _append_spend_entry(
+    db: sqlite3.Connection,
+    fund_id: int,
+    as_of: date,
+    cents: int,
+    *,
+    expense_id: int | None = None,
+    income_id: int | None = None,
+) -> None:
+    """Writes a 'spend' entry moving the fund by cents on as_of. Entries
+    snapshot absolute balances resolved newest-first, so an entry dated
+    behind a later one — a backdated receipt, or a correction dated today
+    behind a future-dated top-up — would sit mid-chain and drop out of the
+    displayed balance (issue #172). It snapshots the balance as of its
+    own date instead, and every later snapshot shifts by the same amount
+    in the same transaction, so each keeps its own delta in the fund log.
+    Same-day entries resolve by insertion order, so this one is already
+    last on its date."""
+    db.execute(
+        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source,"
+        " expense_id, income_id) VALUES (?, ?, ?, ?, 'spend', ?, ?)",
+        (
+            fund_id,
+            as_of.isoformat(),
+            _balance_as_of(db, fund_id, as_of) + cents,
+            cents,
+            expense_id,
+            income_id,
+        ),
+    )
+    db.execute(
+        "UPDATE fund_entry SET balance = balance + ? WHERE fund_id = ? AND as_of_date > ?",
+        (cents, fund_id, as_of.isoformat()),
+    )
 
 
 def _draw_down_fund(
@@ -373,19 +422,14 @@ def _draw_down_fund(
     expense_id: int | None = None,
     income_id: int | None = None,
 ) -> None:
-    """The other half of a fund-funded transaction: append a 'spend'
-    fund_entry so the earmark releases as the row lands — appends, never
-    updates. detail names the caller in the overdraw 422; the link ids
-    point the entry back at the row that drew it, for the fund log."""
-    balance = _fund_balance(db, fund_id)
+    """The other half of a fund-funded transaction: a 'spend' fund_entry
+    dated the row's txn_date releases the earmark as the row lands.
+    detail names the caller in the overdraw 422; the link ids point the
+    entry back at the row that drew it, for the fund log."""
     cents = to_cents(amount)
-    if cents > balance:
+    if cents > _spendable(db, fund_id, txn_date):
         raise HTTPException(status_code=422, detail=detail)
-    db.execute(
-        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source,"
-        " expense_id, income_id) VALUES (?, ?, ?, ?, 'spend', ?, ?)",
-        (fund_id, txn_date.isoformat(), balance - cents, -cents, expense_id, income_id),
-    )
+    _append_spend_entry(db, fund_id, txn_date, -cents, expense_id=expense_id, income_id=income_id)
 
 
 def _reverse_draw_down(
@@ -397,24 +441,13 @@ def _reverse_draw_down(
     income_id: int | None = None,
 ) -> None:
     """The compensating half of an expense delete or edit, amount in cents.
-    The paired 'spend' entry stays — each entry snapshots the balance, so
-    pulling a mid-chain row would not restore it — and the correction
-    appends, dated today: snapshots resolve newest-first, so a backdated
-    entry carrying the current balance would corrupt the chain.
+    The paired 'spend' entry stays and the correction appends, dated
+    today — the day the correction happened, not the row's date.
     'spend'-source entries stay out of the headline, the feed, and the
     budget-year actual, so a correction never moves safe-to-spend — and
     in the report's funds_out it nets against the draw it corrects."""
-    db.execute(
-        "INSERT INTO fund_entry (fund_id, as_of_date, balance, contribution, source,"
-        " expense_id, income_id) VALUES (?, ?, ?, ?, 'spend', ?, ?)",
-        (
-            fund_id,
-            date.today().isoformat(),
-            _fund_balance(db, fund_id) + amount,
-            amount,
-            expense_id,
-            income_id,
-        ),
+    _append_spend_entry(
+        db, fund_id, date.today(), amount, expense_id=expense_id, income_id=income_id
     )
 
 
@@ -485,12 +518,12 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
     amount = to_cents(expense.amount)
     if old_fund is not None and old_fund == new_fund:
         delta = amount - old["amount"]
-        if delta > _fund_balance(db, old_fund):
+        if delta > _spendable(db, old_fund, date.today()):
             raise HTTPException(status_code=422, detail="expense exceeds fund balance")
         if delta != 0:
             _reverse_draw_down(db, old_fund, -delta, expense_id=expense_id)
     else:
-        if new_fund is not None and amount > _fund_balance(db, new_fund):
+        if new_fund is not None and amount > _spendable(db, new_fund, date.today()):
             raise HTTPException(status_code=422, detail="expense exceeds fund balance")
         if old_fund is not None:
             _reverse_draw_down(db, old_fund, old["amount"], expense_id=expense_id)
@@ -605,12 +638,12 @@ def update_income(income_id: int, income: IncomeCreate, db: Db) -> Income:
     amount = to_cents(income.amount)
     if old_fund is not None and old_fund == new_fund:
         delta = amount - old["amount"]
-        if delta > _fund_balance(db, old_fund):
+        if delta > _spendable(db, old_fund, date.today()):
             raise HTTPException(status_code=422, detail="income draw exceeds fund balance")
         if delta != 0:
             _reverse_draw_down(db, old_fund, -delta, income_id=income_id)
     else:
-        if new_fund is not None and amount > _fund_balance(db, new_fund):
+        if new_fund is not None and amount > _spendable(db, new_fund, date.today()):
             raise HTTPException(status_code=422, detail="income draw exceeds fund balance")
         if old_fund is not None:
             _reverse_draw_down(db, old_fund, old["amount"], income_id=income_id)
