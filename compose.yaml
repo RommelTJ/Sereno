@@ -3,6 +3,10 @@ services:
     build: ./backend
     restart: unless-stopped
     command: uv run uvicorn sereno.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      # "Today" — monthly contributions, default months, correction dates —
+      # is the household's day, not UTC's, which turns over at 5 PM Pacific.
+      TZ: America/Los_Angeles
     ports:
       - "8000:8000"
     volumes:
