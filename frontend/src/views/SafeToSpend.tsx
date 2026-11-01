@@ -8,6 +8,7 @@ import {
 } from '../api.ts'
 import {
   envelopeView,
+  leftoverLine,
   monthYearLabel,
   nextMonth,
   previousMonth,
@@ -25,7 +26,16 @@ import { useMediaQuery } from '../useMediaQuery.ts'
 // third column and the add-forms get it.
 const THREE_COLUMNS = '(min-width: 97.5rem)'
 
-function Hero({ safeToSpend }: { safeToSpend: number }) {
+// The leftover line rides under the formula pill on the current month's
+// hero only — it answers what to do with last month's remainder, a
+// question a past month's hero never asks.
+function Hero({
+  safeToSpend,
+  leftover,
+}: {
+  safeToSpend: number
+  leftover: string | null
+}) {
   return (
     <div
       data-testid="sts-hero"
@@ -40,12 +50,23 @@ function Hero({ safeToSpend }: { safeToSpend: number }) {
       <p className="mt-2.5 inline-block rounded-pill border border-sidebar-active px-3.5 py-[5px] text-[11.5px] text-sidebar-muted">
         total cash − bills due − money in funds
       </p>
+      {leftover && (
+        <p
+          data-testid="leftover-line"
+          className="mt-3 text-[12.5px] font-medium text-sidebar-muted"
+        >
+          {leftover}
+        </p>
+      )}
     </div>
   )
 }
 
 function SafeToSpend() {
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
+  // Last month's closing figure, read only while the view stands on the
+  // current month — the leftover line's left-hand number.
+  const [previous, setPrevious] = useState<BudgetMonth | null>(null)
   const [funds, setFunds] = useState<Fund[] | null>(null)
   // The viewed month — null is the current month (the initial view), so
   // the default view's requests stay exactly what they were before the
@@ -63,15 +84,31 @@ function SafeToSpend() {
   const filterEnvelope =
     budget?.categories.find((category) => category.id === filterId) ?? null
 
+  // Rollover entries are dated into the new month, so the previous
+  // month's own hero never sees them: the unassigned remainder is last
+  // month's safe-to-spend minus this month's rollover_assigned, and only
+  // the current month reads it. Paged, the line has nothing to say.
   useEffect(() => {
     setPaging(true)
     void fetchBudgetMonth(viewMonth ?? undefined)
       .then((next) => {
         setBudget(next)
         setHomeMonth((home) => home ?? next.month)
+        if (viewMonth !== null) {
+          setPrevious(null)
+          return
+        }
+        return fetchBudgetMonth(previousMonth(next.month)).then(setPrevious)
       })
       .finally(() => setPaging(false))
   }, [viewMonth])
+
+  // The add and edit paths refetch last month on the same rule — a spend
+  // posted or moved into last month changes what it left.
+  const loadPrevious = (current: BudgetMonth) =>
+    viewMonth === null
+      ? fetchBudgetMonth(previousMonth(current.month)).then(setPrevious)
+      : Promise.resolve(setPrevious(null))
 
   useEffect(() => {
     void fetchFunds().then(setFunds)
@@ -87,13 +124,15 @@ function SafeToSpend() {
   const addExpense = async (input: ExpenseInput) => {
     await createExpense(input)
     // A fund-funded spend draws the fund down server-side, so the funds
-    // card refreshes alongside the hero and envelopes.
+    // card refreshes alongside the hero and envelopes; a spend posted to
+    // last month moves its closing figure, so the leftover line follows.
     const [nextBudget, nextFunds] = await Promise.all([
       fetchBudgetMonth(viewMonth ?? undefined),
       fetchFunds(),
     ])
     setBudget(nextBudget)
     setFunds(nextFunds)
+    await loadPrevious(nextBudget)
   }
 
   const addIncome = async (input: IncomeInput) => {
@@ -106,10 +145,12 @@ function SafeToSpend() {
     ])
     setBudget(nextBudget)
     setFunds(nextFunds)
+    await loadPrevious(nextBudget)
   }
 
-  // An item edit or delete can touch anything: the hero and envelopes, and
-  // a fund's balance (fund-funded corrections) — so everything refetches.
+  // An item edit or delete can touch anything: the hero and envelopes, a
+  // fund's balance (fund-funded corrections), and last month's leftover
+  // (a reassigned budget month) — so everything refetches.
   const refresh = async () => {
     const [nextBudget, nextFunds] = await Promise.all([
       fetchBudgetMonth(viewMonth ?? undefined),
@@ -117,6 +158,7 @@ function SafeToSpend() {
     ])
     setBudget(nextBudget)
     setFunds(nextFunds)
+    await loadPrevious(nextBudget)
   }
 
   // onAdded runs once a post lands — the floating panel closes on it.
@@ -186,7 +228,14 @@ function SafeToSpend() {
               →
             </button>
           </div>
-          <Hero safeToSpend={budget.safe_to_spend} />
+          <Hero
+            safeToSpend={budget.safe_to_spend}
+            leftover={
+              homeMonth != null && budget.month === homeMonth && previous
+                ? leftoverLine(previous, budget.rollover_assigned)
+                : null
+            }
+          />
           <div className="flex flex-col gap-5">
             <EnvelopesCard
               month={budget.month}
