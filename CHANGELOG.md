@@ -4,6 +4,21 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.22.2 — The leftover line is back on Safe-to-spend. Funding a goal
+"From last month's leftover" moved the money, but nothing showed the
+leftover shrinking: the rollover entry is dated the day of the top-up,
+so it lands in the new month's `rollover_assigned`, and the paged-back
+hero — which v3.1.0 named as the line's replacement — never sees a
+next-month-dated entry. After that release nothing in the frontend
+read the field at all. The current month's hero now carries the line
+under the formula pill — "October left $500.00 · $110.00 assigned ·
+$390.00 unassigned" — from a second read of the previous month,
+ticking down as the remainder is given a job, saying "over-assigned
+$X" rather than hiding when more was assigned than the month left,
+and absent while paged or when last month left nothing with nothing
+assigned. Frontend-only: no API, schema, or migration changes
+(issue #174).
+
 v3.22.1 — A backdated fund draw lowers the balance. A fund keeps its
 history as balance snapshots and shows the newest one, but a draw
 took the latest balance and saved it on the row's own date. Once a

@@ -97,13 +97,21 @@ serves them at <http://localhost:5173>.
   `GET /api/budget-month?month=` param the view already read: the hero,
   the envelopes, the funds card's context, both add-forms, and the
   activity feed all follow the viewed month, so how the envelopes stood
-  in any past month is one tap away — and last month's closing
-  Safe-to-spend, the old leftover-line question, is simply the previous
-  month's hero. The dark hero spans the full width under the pager —
-  it is the view's answer, not one card among three — and shows the
-  viewed month's headline from
+  in any past month is one tap away. The dark hero spans the full width
+  under the pager — it is the view's answer, not one card among three —
+  and shows the viewed month's headline from
   `GET /api/budget-month` (stored funding baseline − total spent) with the
-  "total cash − bills due − money in funds" formula pill. Below it the
+  "total cash − bills due − money in funds" formula pill. On the current
+  month only, a leftover line rides under the pill — "May left $1,000.00
+  · $600.00 assigned · $400.00 unassigned": the previous month's closing
+  safe-to-spend, read through a second `GET /api/budget-month?month=`,
+  against this month's `rollover_assigned` (rollover top-ups are dated
+  the day they are made, so they land in the new month's total, never
+  the old month's hero), ticking down to $0.00 unassigned as the
+  remainder is given a job and reading "over-assigned $X" rather than
+  hiding when more was assigned than the month left. The line is absent
+  while paged and when last month left nothing with nothing assigned.
+  Below it the
   view splits into three columns — envelopes and funds, the activity
   feed, the two add-forms — but only past 1560px, where each column
   clears 400px: the 248px sidebar and the shell's padding take 320px,

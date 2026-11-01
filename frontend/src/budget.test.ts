@@ -1,6 +1,6 @@
 // Month arithmetic for the month pager's buttons — nextMonth is the
-// forward mirror of previousMonth, pure string math either way — and the
-// create/edit form payload builders.
+// forward mirror of previousMonth, pure string math either way — the
+// leftover line's view text, and the create/edit form payload builders.
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -10,10 +10,11 @@ import {
   fundsMonthOptions,
   incomeInput,
   incomeUpdateInput,
+  leftoverLine,
   nextMonth,
   sourceOptionFor,
 } from './budget.ts'
-import { BUDGET_MONTH } from './test/fixtures.ts'
+import { BUDGET_MONTH, MAY_BUDGET_MONTH } from './test/fixtures.ts'
 
 describe('nextMonth', () => {
   it('advances within a year', () => {
@@ -26,6 +27,44 @@ describe('nextMonth', () => {
 
   it('rolls December into January', () => {
     expect(nextMonth('2025-12')).toBe('2026-01')
+  })
+})
+
+describe('leftoverLine', () => {
+  it('reads leftover, assigned, and unassigned', () => {
+    expect(leftoverLine(MAY_BUDGET_MONTH, 600)).toBe(
+      'May left $1,000.00 · $600.00 assigned · $400.00 unassigned',
+    )
+  })
+
+  it('ticks down to zero unassigned when fully assigned', () => {
+    expect(leftoverLine(MAY_BUDGET_MONTH, 1_000)).toBe(
+      'May left $1,000.00 · $1,000.00 assigned · $0.00 unassigned',
+    )
+  })
+
+  it('shows an over-assignment instead of hiding it', () => {
+    // More assigned than the month left means the difference came out of
+    // the current month's checking buffer — the line must say so.
+    expect(leftoverLine(MAY_BUDGET_MONTH, 1_050)).toBe(
+      'May left $1,000.00 · $1,050.00 assigned · over-assigned $50.00',
+    )
+  })
+
+  it('keeps showing when a late expense pushed the leftover negative', () => {
+    const overspent = { ...MAY_BUDGET_MONTH, safe_to_spend: -50 }
+    expect(leftoverLine(overspent, 100)).toBe(
+      'May left -$50.00 · $100.00 assigned · over-assigned $150.00',
+    )
+  })
+
+  it('hides when last month left nothing and nothing is assigned', () => {
+    expect(
+      leftoverLine({ ...MAY_BUDGET_MONTH, safe_to_spend: 0 }, 0),
+    ).toBeNull()
+    expect(
+      leftoverLine({ ...MAY_BUDGET_MONTH, safe_to_spend: -25 }, 0),
+    ).toBeNull()
   })
 })
 

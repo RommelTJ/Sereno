@@ -956,26 +956,97 @@ describe('Income months derived from the viewed month', () => {
   })
 })
 
-describe('Leftover line retirement', () => {
-  it('renders no leftover line and never asks for the previous month', async () => {
-    const fetchMock = stubApi({
+describe('Leftover line', () => {
+  const LINE = 'May left $1,000.00 · $600.00 assigned · $400.00 unassigned'
+
+  it("shows last month's leftover with assigned and unassigned in the hero", async () => {
+    stubApi({
       '/api/budget-month': BUDGET_MONTH,
       '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
       '/api/funds': FUNDS,
     })
     renderSafeToSpend()
 
-    await screen.findByText('$3,670.00')
-    // Month paging supersedes the line: last month's closing number is one
-    // tap back, in the hero itself.
+    const hero = await screen.findByTestId('sts-hero')
+    expect(await within(hero).findByText(LINE)).toBeInTheDocument()
+  })
+
+  it('shows an over-assignment instead of hiding it', async () => {
+    stubApi({
+      '/api/budget-month': { ...BUDGET_MONTH, rollover_assigned: 1_050 },
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    renderSafeToSpend()
+
     expect(
-      fetchMock.mock.calls.some(
-        ([input]) => input === '/api/budget-month?month=2026-05',
+      await screen.findByText(
+        'May left $1,000.00 · $1,050.00 assigned · over-assigned $50.00',
       ),
-    ).toBe(false)
+    ).toBeInTheDocument()
+  })
+
+  it('renders no line when last month left nothing and nothing is assigned', async () => {
+    stubApi({
+      '/api/budget-month': { ...BUDGET_MONTH, rollover_assigned: 0 },
+      '/api/budget-month?month=2026-05': {
+        ...MAY_BUDGET_MONTH,
+        safe_to_spend: 0,
+      },
+      '/api/funds': FUNDS,
+    })
+    renderSafeToSpend()
+
+    await screen.findByText('$3,670.00')
     await waitFor(() =>
       expect(screen.queryByTestId('leftover-line')).not.toBeInTheDocument(),
     )
+  })
+
+  it('hides while paged and never asks for the month before that one', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    renderSafeToSpend()
+    await screen.findByText(LINE)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+
+    // The line answers the current month's question — what to do with the
+    // remainder — so a past month's hero stands alone.
+    await screen.findByText('May envelopes')
+    expect(screen.queryByTestId('leftover-line')).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => input === '/api/budget-month?month=2026-04',
+      ),
+    ).toBe(false)
+  })
+
+  it('refetches last month after an item edit', async () => {
+    const fetchMock = stubApi({
+      '/api/budget-month': BUDGET_MONTH,
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+      'PUT /api/expenses/5': {},
+    })
+    renderSafeToSpend()
+    await screen.findByText(LINE)
+    const previousCalls = () =>
+      fetchMock.mock.calls.filter(
+        ([input]) => input === '/api/budget-month?month=2026-05',
+      ).length
+    expect(previousCalls()).toBe(1)
+
+    const feed = await screen.findByTestId('sts-activity')
+    fireEvent.click(within(feed).getAllByTestId('activity-row')[0])
+    const form = await screen.findByTestId('expense-edit-form')
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    // An edit can move an expense into last month, changing what it left.
+    await waitFor(() => expect(previousCalls()).toBe(2))
   })
 })
 
