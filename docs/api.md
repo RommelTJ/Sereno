@@ -219,10 +219,9 @@ The budget slice:
   `rollover_assigned` sums the month's `rollover` entries — last
   month's leftover being given a job. It never joins the safe-to-spend
   subtraction, and rollover entries stay out of the feed: their
-  visibility surfaces are the paged-back previous month's own hero
-  (its closing safe-to-spend is the leftover) and the fund's entry
-  history — the field rides in the response unread by the frontend
-  since the leftover line retired.
+  visibility surfaces are the current month's leftover line on
+  Safe-to-spend — the previous month's `safe_to_spend` minus this
+  total — and the fund log.
   Reading the budget month applies
   the monthly-plan catch-up itself, so the headline never misses a
   contribution the funds list hasn't been asked for yet.
