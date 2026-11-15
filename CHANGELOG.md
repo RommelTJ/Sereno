@@ -4,6 +4,12 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.22.3 — The "over is OK — trims safe-to-spend" hint is gone from
+the envelopes card on Safe-to-spend. It added visual noise to the
+screen and was no longer wanted; the card header now carries just the
+month's title. Frontend-only: no API, schema, or migration changes
+(issue #176).
+
 v3.22.2 — The leftover line is back on Safe-to-spend. Funding a goal
 "From last month's leftover" moved the money, but nothing showed the
 leftover shrinking: the rollover entry is dated the day of the top-up,
