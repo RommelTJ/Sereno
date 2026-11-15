@@ -58,9 +58,6 @@ function EnvelopesCard({
     <div className="rounded-card border border-card-border bg-card p-[22px]">
       <div className="mb-1.5 flex items-center justify-between">
         <p className="text-sm font-bold">{monthLabel(month)} envelopes</p>
-        <p className="text-[11.5px] text-muted-2">
-          over is OK — trims safe-to-spend
-        </p>
       </div>
       {envelopes.map((envelope) => (
         <EnvelopeRow
