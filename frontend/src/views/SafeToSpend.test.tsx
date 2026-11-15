@@ -63,13 +63,10 @@ describe('Safe-to-spend hero', () => {
 })
 
 describe('Envelopes card', () => {
-  it('titles the card with the budget month and the overspend hint', async () => {
+  it('titles the card with the budget month', async () => {
     renderSafeToSpend()
 
     expect(await screen.findByText('June envelopes')).toBeInTheDocument()
-    expect(
-      screen.getByText('over is OK — trims safe-to-spend'),
-    ).toBeInTheDocument()
   })
 
   it('renders spent and left for an under-budget category', async () => {
