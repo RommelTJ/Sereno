@@ -994,6 +994,22 @@ describe('Leftover line', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders no line once the leftover is fully assigned', async () => {
+    stubApi({
+      '/api/budget-month': { ...BUDGET_MONTH, rollover_assigned: 1_000 },
+      '/api/budget-month?month=2026-05': MAY_BUDGET_MONTH,
+      '/api/funds': FUNDS,
+    })
+    renderSafeToSpend()
+
+    // The pager re-enables only after last month's read settles, so the
+    // line's absence is the rule at work, not a read still in flight.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Previous month' })).toBeEnabled(),
+    )
+    expect(screen.queryByTestId('leftover-line')).not.toBeInTheDocument()
+  })
+
   it('renders no line when last month left nothing and nothing is assigned', async () => {
     stubApi({
       '/api/budget-month': { ...BUDGET_MONTH, rollover_assigned: 0 },

@@ -37,10 +37,16 @@ describe('leftoverLine', () => {
     )
   })
 
-  it('ticks down to zero unassigned when fully assigned', () => {
-    expect(leftoverLine(MAY_BUDGET_MONTH, 1_000)).toBe(
-      'May left $1,000.00 · $1,000.00 assigned · $0.00 unassigned',
-    )
+  it('hides once the leftover is fully assigned', () => {
+    // Nothing is left to give a job, so the line has nothing to prompt.
+    expect(leftoverLine(MAY_BUDGET_MONTH, 1_000)).toBeNull()
+  })
+
+  it('compares to the cent, so float noise cannot keep the line', () => {
+    // 0.1 + 0.2 overshoots 0.3 by a sliver of a cent — still fully assigned.
+    expect(
+      leftoverLine({ ...MAY_BUDGET_MONTH, safe_to_spend: 0.3 }, 0.1 + 0.2),
+    ).toBeNull()
   })
 
   it('shows an over-assignment instead of hiding it', () => {
