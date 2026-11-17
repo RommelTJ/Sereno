@@ -75,11 +75,14 @@ export function previousMonth(month: string): string {
 
 // The leftover line: "May left $1,000.00 · $600.00 assigned · $400.00
 // unassigned" — last month's safe_to_spend against the current month's
-// assigned rollover total, ticking down to $0.00 unassigned as the money
-// is given a job. More assigned than the month left reads "over-assigned
-// $X" rather than hiding: that amount came out of the current month's
-// checking buffer. A month that left nothing, with nothing assigned, has
-// nothing to say — the line is null.
+// assigned rollover total, ticking down as the money is given a job. More
+// assigned than the month left reads "over-assigned $X" rather than
+// hiding: that amount came out of the current month's checking buffer. A
+// month that left nothing, with nothing assigned, has nothing to say —
+// the line is null. So does a leftover fully assigned: once unassigned
+// reaches $0.00 no action remains. That is judged to the cent, because
+// the dollar values are float sums and their noise must not keep the
+// line alive.
 export function leftoverLine(
   previous: BudgetMonth,
   assigned: number,
@@ -87,6 +90,7 @@ export function leftoverLine(
   const leftover = previous.safe_to_spend
   if (leftover <= 0 && assigned === 0) return null
   const unassigned = leftover - assigned
+  if (Math.round(unassigned * 100) === 0) return null
   const remainder =
     unassigned >= 0
       ? `${formatUsd(unassigned)} unassigned`
