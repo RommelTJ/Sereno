@@ -107,10 +107,12 @@ serves them at <http://localhost:5173>.
   safe-to-spend, read through a second `GET /api/budget-month?month=`,
   against this month's `rollover_assigned` (rollover top-ups are dated
   the day they are made, so they land in the new month's total, never
-  the old month's hero), ticking down to $0.00 unassigned as the
-  remainder is given a job and reading "over-assigned $X" rather than
-  hiding when more was assigned than the month left. The line is absent
-  while paged and when last month left nothing with nothing assigned.
+  the old month's hero), ticking down as the remainder is given a job
+  and reading "over-assigned $X" rather than hiding when more was
+  assigned than the month left. The line is absent while paged, when
+  last month left nothing with nothing assigned, and once the leftover
+  is fully assigned — unassigned at $0.00, judged to the cent, leaves
+  nothing to act on.
   Below it the
   view splits into three columns — envelopes and funds, the activity
   feed, the two add-forms — but only past 1560px, where each column
