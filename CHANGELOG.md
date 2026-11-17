@@ -4,6 +4,19 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.24.0 — The leftover line on Safe-to-spend goes away once last
+month's money is fully assigned. The line exists to prompt giving the
+remainder a job, but after the last dollar was assigned it stayed on
+the hero for the rest of the month — "May left $1,000.00 · $1,000.00
+assigned · $0.00 unassigned" — with nothing left to act on; the
+rollover entries in the fund log already record the assignment. It now
+hides when unassigned reaches $0.00, judged to the cent so that
+floating-point noise in the dollar sums cannot keep it alive (a
+leftover of $0.30 assigned as $0.10 + $0.20 used to read
+"over-assigned $0.00"). An over-assignment of a cent or more still
+shows: that money came out of the current month's checking buffer.
+Frontend-only: no API, schema, or migration changes (issue #178).
+
 v3.23.0 — The envelopes card on Safe-to-spend now totals the month.
 Each bar showed one category's progress, but nothing said how the
 envelope plan as a whole was tracking. A footer under the bars reads
