@@ -133,7 +133,11 @@ serves them at <http://localhost:5173>.
   otherwise leaves a fixed sheet behind the keyboard. First the monthly
   envelopes card: one progress bar per category, "spent · left" while under
   budget, "$spent of $budgeted · $X over" in red once over — overspending
-  is allowed and simply trims the headline. Every envelope row is a tap
+  is allowed and simply trims the headline. A footer under the bars
+  totals the envelopes — "$X spent so far", the sum of their spending,
+  and "$Y projected", the sum of their plans. The projection is fixed:
+  an overspent envelope still counts at its plan. Both cover the
+  envelopes only and stand apart from the headline. Every envelope row is a tap
   target: tapping one filters the Activity feed to that envelope's own
   expenses — income, fund entries, and fund-funded lines belong to no
   envelope, so they drop out — with the

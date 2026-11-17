@@ -4,6 +4,17 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.23.0 — The envelopes card on Safe-to-spend now totals the month.
+Each bar showed one category's progress, but nothing said how the
+envelope plan as a whole was tracking. A footer under the bars reads
+"$997.00 spent so far · $1,100.00 projected": the first sums what the
+envelopes have spent, the second sums their plans. The projection is
+deliberately fixed — an overspent envelope still counts at its plan,
+so the figure is the month's envelope budget, not a forecast that
+creeps up with overspending. Both are envelope-only and separate from
+the headline, which depends on how much income funded the month.
+Frontend-only: no API, schema, or migration changes (issue #177).
+
 v3.22.3 — The "over is OK — trims safe-to-spend" hint is gone from
 the envelopes card on Safe-to-spend. It added visual noise to the
 screen and was no longer wanted; the card header now carries just the

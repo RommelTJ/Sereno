@@ -99,6 +99,17 @@ describe('Envelopes card', () => {
     expect(within(rows[3]).getByText('$0.00 · $0.00 left')).toBeInTheDocument()
     expect(within(rows[3]).getByTestId('envelope-bar').style.width).toBe('0%')
   })
+
+  it('sums spent so far and projects every envelope at its plan', async () => {
+    renderSafeToSpend()
+
+    await screen.findAllByTestId('envelope-row')
+    const subtotals = screen.getByTestId('envelope-subtotals')
+    expect(within(subtotals).getByText('$997.00 spent so far')).toBeInTheDocument()
+    // Entertainment is $46 over, but the projection is the fixed sum of
+    // the plans — the overspent envelope still counts at its $500.
+    expect(within(subtotals).getByText('$1,100.00 projected')).toBeInTheDocument()
+  })
 })
 
 describe('Funds card', () => {
