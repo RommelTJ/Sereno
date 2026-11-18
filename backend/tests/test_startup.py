@@ -40,6 +40,7 @@ def test_startup_applies_migrations(monkeypatch, tmp_path):
         "0019_category_is_mandatory.sql",
         "0020_state_tax.sql",
         "0021_fund_entry_links.sql",
+        "0022_category_modification.sql",
     ]
 
 

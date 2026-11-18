@@ -4,6 +4,30 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.0 — The envelopes card on Safe-to-spend lists the envelope
+changed most recently first. The card followed the settings order all
+month, so the envelope that was just changed could sit anywhere in the
+list; now adding, editing, or deleting an expense moves its envelope
+to the top, which keeps the envelopes in active use together and
+confirms where the change landed. The order follows when the change
+was made, not the transaction date, so a backdated expense jumps like
+any other; envelopes untouched in the month follow in their settings
+order, and a month with no changes yet reads exactly as before. A
+delete counts even when it empties the envelope, any saved edit counts
+even if only the note changed, and an expense moved between envelopes
+or months marks both, the destination on top. Only discretionary
+lines count, matching what the bars count as spent — a fund-funded
+expense moves nothing, and neither does renaming an envelope or
+changing its plan. `expense_line` could not supply the order — an
+edit leaves no timestamp and a delete leaves no row — so migration
+0022 adds `category_modification`, one row per envelope and budget
+month written by `POST`, `PUT`, and `DELETE /api/expenses`, backfilled
+from each envelope's newest discretionary expense. `GET
+/api/budget-month` reports it as `modified_seq` on each envelope, a
+counter rather than a timestamp so that two changes inside one second
+still rank. Only the card reorders: the API's `categories` list and
+the spending and edit forms keep the settings order (issue #179).
+
 v3.24.0 — The leftover line on Safe-to-spend goes away once last
 month's money is fully assigned. The line exists to prompt giving the
 remainder a job, but after the last dollar was assigned it stayed on

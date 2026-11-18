@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, describe, expect, it } from 'vitest'
+import type { BudgetMonth } from '../api.ts'
 import { todayIso } from '../ledger.ts'
 import { BUDGET_MONTH, FUNDS, MAY_BUDGET_MONTH } from '../test/fixtures.ts'
 import {
@@ -41,6 +42,24 @@ const renderSafeToSpend = () =>
 
 const expenseBody = (fetchMock: ReturnType<typeof stubApi>) =>
   postBody(fetchMock, '/api/expenses')
+
+// A month whose envelopes carry the given modified_seq by id — the rest
+// stay untouched.
+const withModified = (
+  budget: BudgetMonth,
+  seqs: Record<number, number>,
+): BudgetMonth => ({
+  ...budget,
+  categories: budget.categories.map((category) => ({
+    ...category,
+    modified_seq: seqs[category.id] ?? null,
+  })),
+})
+
+const envelopeLabels = () =>
+  screen
+    .getAllByTestId('envelope-row')
+    .map((row) => row.querySelector('span')?.textContent)
 
 beforeEach(() => {
   stubApi({ '/api/budget-month': BUDGET_MONTH, '/api/funds': FUNDS })
@@ -109,6 +128,64 @@ describe('Envelopes card', () => {
     // Entertainment is $46 over, but the projection is the fixed sum of
     // the plans — the overspent envelope still counts at its $500.
     expect(within(subtotals).getByText('$1,100.00 projected')).toBeInTheDocument()
+  })
+
+  it('lists the most recently modified envelope first', async () => {
+    stubApi({
+      '/api/budget-month': withModified(BUDGET_MONTH, { 2: 1, 3: 2 }),
+      '/api/funds': FUNDS,
+    })
+    renderSafeToSpend()
+
+    // Entertainment changed last, then Gas; the untouched two follow in
+    // their settings order.
+    await screen.findAllByTestId('envelope-row')
+    expect(envelopeLabels()).toEqual([
+      '🤪 Entertainment',
+      '🛢️ Gas',
+      '🛒 Groceries',
+      '✈️ Travel',
+    ])
+  })
+
+  it('keeps the settings order in the spending form', async () => {
+    stubApi({
+      '/api/budget-month': withModified(BUDGET_MONTH, { 2: 1, 3: 2 }),
+      '/api/funds': FUNDS,
+    })
+    renderSafeToSpend()
+
+    const form = await screen.findByTestId('spending-form')
+    const envelopes = within(form).getByRole('group', {
+      name: 'Budget envelopes',
+    })
+    expect(
+      within(envelopes)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['🛒 Groceries', '🛢️ Gas', '🤪 Entertainment', '✈️ Travel'])
+  })
+
+  it("orders a paged month by that month's own changes", async () => {
+    stubApi({
+      '/api/budget-month': withModified(BUDGET_MONTH, { 3: 2 }),
+      '/api/budget-month?month=2026-05': withModified(MAY_BUDGET_MONTH, {
+        4: 5,
+      }),
+      '/api/funds': FUNDS,
+    })
+    renderSafeToSpend()
+    await screen.findAllByTestId('envelope-row')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+
+    await screen.findByText('May envelopes')
+    expect(envelopeLabels()).toEqual([
+      '✈️ Travel',
+      '🛒 Groceries',
+      '🛢️ Gas',
+      '🤪 Entertainment',
+    ])
   })
 })
 

@@ -111,6 +111,19 @@ CREATE TABLE expense_line (
 );
 CREATE INDEX ix_expense_month ON expense_line(budget_month);
 
+-- The last expense change per envelope and budget month — the order of the
+-- Safe-to-spend envelopes card. expense_line can't say it: an edit leaves no
+-- timestamp and a delete leaves no row. Upserted whenever a discretionary
+-- line in the envelope is added, edited, or deleted. seq is the ordering
+-- authority (larger = more recent); modified_at says when.
+CREATE TABLE category_modification (
+    category_id  INTEGER NOT NULL REFERENCES category(id),
+    budget_month TEXT    NOT NULL,                       -- 'YYYY-MM'
+    seq          INTEGER NOT NULL,                       -- rises with every change
+    modified_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (category_id, budget_month)
+);
+
 -- Every inflow = one row (a credit): paychecks now, account withdrawals later.
 -- budget_month tags which month it funds. Split a quarterly/yearly withdrawal
 -- into N rows (one per month) for month-by-month budgeting.

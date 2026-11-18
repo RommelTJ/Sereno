@@ -153,12 +153,19 @@ class Income(BaseModel):
 
 
 class Envelope(BaseModel):
+    """modified_seq ranks the envelope's last expense change within the
+    month — a counter that rises with every add, edit, or delete of a
+    discretionary line, so larger is more recent; null means untouched
+    this month. The list itself stays in settings order: the reorder is
+    the client's envelopes card's alone."""
+
     id: int
     name: str
     emoji: str | None
     planned: float
     spent: float
     remaining: float
+    modified_seq: int | None
 
 
 class ActivityItem(BaseModel):
@@ -451,11 +458,30 @@ def _reverse_draw_down(
     )
 
 
+def _touch_envelope(db: sqlite3.Connection, category_id: int | None, budget_month: str) -> None:
+    """Marks an envelope modified in a budget month — the order the
+    envelopes card lists them in. Callers pass only discretionary lines:
+    a fund-funded one never moved the envelope's bar. seq takes the next
+    value of a counter shared by every envelope and month, so two changes
+    inside one second, or one request, still rank; an uncategorized line
+    belongs to no envelope and writes nothing."""
+    if category_id is None:
+        return
+    db.execute(
+        "INSERT INTO category_modification (category_id, budget_month, seq)"
+        " VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM category_modification))"
+        " ON CONFLICT (category_id, budget_month) DO UPDATE SET"
+        " seq = excluded.seq, modified_at = excluded.modified_at",
+        (category_id, budget_month),
+    )
+
+
 @router.post("/expenses", status_code=201)
 def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
     _require(db, "category", expense.category_id, "category")
     _require(db, "fund", expense.fund_id, "fund")
     _require(db, "account", expense.account_id, "account")
+    budget_month = expense.budget_month or expense.txn_date.strftime("%Y-%m")
     # The row goes in first so the draw can carry its id. An overdraw 422
     # raises before the commit, and the request's connection closes
     # uncommitted, so the insert never lands.
@@ -465,7 +491,7 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             expense.txn_date.isoformat(),
-            expense.budget_month or expense.txn_date.strftime("%Y-%m"),
+            budget_month,
             expense.category_id,
             to_cents(expense.amount),
             expense.is_fixed,
@@ -485,6 +511,8 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
             "expense exceeds fund balance",
             expense_id=cursor.lastrowid,
         )
+    if expense.funded_from == "discretionary":
+        _touch_envelope(db, expense.category_id, budget_month)
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, category_id, amount, is_fixed,"
@@ -506,7 +534,9 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
     overdraw guard re-applies either way, checked before anything is
     written, so a 422 changes nothing."""
     old = db.execute(
-        "SELECT funded_from, fund_id, amount FROM expense_line WHERE id = ?", (expense_id,)
+        "SELECT funded_from, fund_id, amount, category_id, budget_month"
+        " FROM expense_line WHERE id = ?",
+        (expense_id,),
     ).fetchone()
     if old is None:
         raise HTTPException(status_code=404, detail="expense not found")
@@ -516,6 +546,7 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
     old_fund = old["fund_id"] if old["funded_from"] == "fund" else None
     new_fund = expense.fund_id if expense.funded_from == "fund" else None
     amount = to_cents(expense.amount)
+    budget_month = expense.budget_month or expense.txn_date.strftime("%Y-%m")
     if old_fund is not None and old_fund == new_fund:
         delta = amount - old["amount"]
         if delta > _spendable(db, old_fund, date.today()):
@@ -535,7 +566,7 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
         " WHERE id = ?",
         (
             expense.txn_date.isoformat(),
-            expense.budget_month or expense.txn_date.strftime("%Y-%m"),
+            budget_month,
             expense.category_id,
             amount,
             expense.is_fixed,
@@ -547,6 +578,18 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
             expense_id,
         ),
     )
+    # Any saved edit modifies the envelope it sits in. A line that moved —
+    # to another envelope, another month, or onto a fund — changed the bar
+    # it left too; that one is marked first, so the destination, where the
+    # change landed, ranks above it.
+    left = (
+        (old["category_id"], old["budget_month"]) if old["funded_from"] == "discretionary" else None
+    )
+    joined = (expense.category_id, budget_month) if expense.funded_from == "discretionary" else None
+    if left is not None and left != joined:
+        _touch_envelope(db, *left)
+    if joined is not None:
+        _touch_envelope(db, *joined)
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, category_id, amount, is_fixed,"
@@ -563,12 +606,18 @@ def delete_expense(expense_id: int, db: Db) -> None:
     mistaken entry can simply go. A fund-funded row gets its draw-down
     fully reversed in the same transaction — see _reverse_draw_down."""
     row = db.execute(
-        "SELECT funded_from, fund_id, amount FROM expense_line WHERE id = ?", (expense_id,)
+        "SELECT funded_from, fund_id, amount, category_id, budget_month"
+        " FROM expense_line WHERE id = ?",
+        (expense_id,),
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="expense not found")
     if row["funded_from"] == "fund" and row["fund_id"] is not None:
         _reverse_draw_down(db, row["fund_id"], row["amount"], expense_id=expense_id)
+    # The row is about to stop existing, so the mark is the only trace
+    # that this envelope's bar just changed.
+    if row["funded_from"] == "discretionary":
+        _touch_envelope(db, row["category_id"], row["budget_month"])
     db.execute("DELETE FROM expense_line WHERE id = ?", (expense_id,))
     db.commit()
 
@@ -741,9 +790,11 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
             "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned,"
             " COALESCE((SELECT SUM(e.amount) FROM expense_line e"
             "           WHERE e.category_id = c.id AND e.budget_month = ?"
-            "           AND e.funded_from = 'discretionary'), 0) AS spent"
+            "           AND e.funded_from = 'discretionary'), 0) AS spent,"
+            " (SELECT m.seq FROM category_modification m"
+            "  WHERE m.category_id = c.id AND m.budget_month = ?) AS modified_seq"
             " FROM category c WHERE c.active = 1 ORDER BY c.sort_order, c.id",
-            (target, target),
+            (target, target, target),
         )
     ]
 

@@ -525,6 +525,7 @@ describe('Recent activity', () => {
           planned: 200,
           spent: 118.21,
           remaining: 81.79,
+          modified_seq: null,
         },
       ],
       activity: [
@@ -581,6 +582,7 @@ describe('Recent activity', () => {
           planned: 200,
           spent: 118.21,
           remaining: 81.79,
+          modified_seq: null,
         },
       ],
       activity: [

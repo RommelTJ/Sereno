@@ -105,6 +105,10 @@ export interface Category {
   planned: number
 }
 
+// modified_seq ranks the envelope's last expense change within the month
+// — a server counter that rises with every add, edit, or delete of a
+// discretionary line, so larger is more recent; null means untouched
+// this month. The list itself arrives in settings order.
 export interface Envelope {
   id: number
   name: string
@@ -112,6 +116,7 @@ export interface Envelope {
   planned: number
   spent: number
   remaining: number
+  modified_seq: number | null
 }
 
 // Rows carry every column their edit form pre-fills — the feed is the

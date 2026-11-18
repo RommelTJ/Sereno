@@ -47,6 +47,15 @@ def insert_plan(category_id, effective_month, planned):
     )
 
 
+def insert_modification(category_id, budget_month, seq):
+    return execute(
+        "INSERT INTO category_modification (category_id, budget_month, seq) VALUES (?, ?, ?)",
+        category_id,
+        budget_month,
+        seq,
+    )
+
+
 def insert_fund(name, kind="sinking", monthly_plan=None):
     return execute(
         "INSERT INTO fund (name, kind, monthly_plan) VALUES (?, ?, ?)",
@@ -316,6 +325,7 @@ class TestPostCategories:
                 "planned": 100,
                 "spent": 0,
                 "remaining": 100,
+                "modified_seq": None,
             }
         ]
 
@@ -1775,6 +1785,7 @@ class TestGetBudgetMonth:
                 "planned": 500,
                 "spent": 387,
                 "remaining": 113,
+                "modified_seq": 1,
             },
             {
                 "id": travel_id,
@@ -1783,6 +1794,7 @@ class TestGetBudgetMonth:
                 "planned": 100,
                 "spent": 0,
                 "remaining": 100,
+                "modified_seq": None,
             },
         ]
         assert body["baseline"] == 5200
@@ -1796,6 +1808,33 @@ class TestGetBudgetMonth:
         response = client.get("/api/budget-month", params={"month": "2026-06"})
         names = [envelope["name"] for envelope in response.json()["categories"]]
         assert names == ["Travel", "Groceries"]
+
+    def test_an_untouched_envelope_carries_a_null_modified_seq(self, client):
+        insert_category("Groceries")
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["categories"][0]["modified_seq"] is None
+
+    def test_an_envelope_carries_its_months_modified_seq(self, client):
+        # The stored value belongs to one budget month: June's change
+        # says nothing about how the envelope stood in May or July.
+        groceries_id = insert_category("Groceries")
+        gas_id = insert_category("Gas")
+        insert_modification(groceries_id, "2026-06", 4)
+        insert_modification(gas_id, "2026-07", 9)
+        june = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [envelope["modified_seq"] for envelope in june["categories"]] == [4, None]
+        july = client.get("/api/budget-month", params={"month": "2026-07"}).json()
+        assert [envelope["modified_seq"] for envelope in july["categories"]] == [None, 9]
+
+    def test_modified_envelopes_keep_the_category_sort_order(self, client):
+        # The reorder is the envelopes card's alone: the list itself stays
+        # in settings order, which the spending and edit forms still read.
+        groceries_id = insert_category("Groceries")
+        gas_id = insert_category("Gas")
+        insert_modification(groceries_id, "2026-06", 1)
+        insert_modification(gas_id, "2026-06", 2)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [envelope["name"] for envelope in body["categories"]] == ["Groceries", "Gas"]
 
     def test_over_budget_is_allowed_and_goes_negative(self, client):
         gas_id = insert_category("Gas")
@@ -2368,3 +2407,133 @@ class TestIncomeFundLinks:
         assert response.status_code == 422
         assert query("SELECT id FROM income_event") == []
         assert fetch_fund_links(cash_id) == [(0, None, None)]
+
+
+class TestEnvelopeModificationOrder:
+    """Issue #179: the envelopes card lists the most recently modified
+    envelope first. modified() reads the order the card derives — the
+    month's touched envelopes, newest change first; the untouched ones
+    follow in settings order and are left out here."""
+
+    @pytest.fixture
+    def envelopes(self, client):
+        return {name: insert_category(name) for name in ("Groceries", "Gas", "Gifts", "Vices")}
+
+    def add(self, client, category_id, txn_date="2026-06-20", **extra):
+        payload = {"txn_date": txn_date, "category_id": category_id, "amount": 10, **extra}
+        response = client.post("/api/expenses", json=payload)
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    def edit(self, client, expense_id, category_id, txn_date="2026-06-20", **extra):
+        payload = {"txn_date": txn_date, "category_id": category_id, "amount": 10, **extra}
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 200
+
+    def modified(self, client, month="2026-06"):
+        body = client.get("/api/budget-month", params={"month": month}).json()
+        touched = [e for e in body["categories"] if e["modified_seq"] is not None]
+        touched.sort(key=lambda envelope: envelope["modified_seq"], reverse=True)
+        return [envelope["name"] for envelope in touched]
+
+    def test_adding_an_expense_puts_its_envelope_on_top(self, client, envelopes):
+        self.add(client, envelopes["Gifts"])
+        assert self.modified(client) == ["Gifts"]
+        self.add(client, envelopes["Vices"])
+        assert self.modified(client) == ["Vices", "Gifts"]
+
+    def test_a_backdated_expense_still_jumps_to_the_top(self, client, envelopes):
+        # The order follows when the change was made, not the txn date.
+        self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.add(client, envelopes["Gas"], txn_date="2026-06-01")
+        assert self.modified(client) == ["Gas", "Vices", "Gifts"]
+
+    def test_a_second_add_returns_an_envelope_to_the_top(self, client, envelopes):
+        self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.add(client, envelopes["Gifts"])
+        assert self.modified(client) == ["Gifts", "Vices"]
+
+    def test_a_fund_funded_expense_modifies_no_envelope(self, client, envelopes):
+        # Fund-funded lines stay out of the envelope bars, so they stay
+        # out of the order too — even when they name a category.
+        fund_id = insert_fund("Car")
+        insert_fund_entry(fund_id, "2026-06-01", 500)
+        self.add(client, envelopes["Gifts"], funded_from="fund", fund_id=fund_id)
+        assert self.modified(client) == []
+
+    def test_an_uncategorized_expense_modifies_no_envelope(self, client, envelopes):
+        self.add(client, None)
+        assert self.modified(client) == []
+
+    def test_a_prepaid_expense_modifies_the_month_it_is_charged_to(self, client, envelopes):
+        self.add(client, envelopes["Gifts"], txn_date="2026-06-27", budget_month="2026-07")
+        assert self.modified(client, "2026-06") == []
+        assert self.modified(client, "2026-07") == ["Gifts"]
+
+    def test_a_note_only_edit_puts_its_envelope_on_top(self, client, envelopes):
+        # Any saved edit counts, even one that leaves the spend alone.
+        gift = self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.edit(client, gift, envelopes["Gifts"], note="Birthday")
+        assert self.modified(client) == ["Gifts", "Vices"]
+
+    def test_moving_an_expense_between_envelopes_modifies_both(self, client, envelopes):
+        # Both bars moved; the destination is where the change landed,
+        # so it ranks above the envelope the expense left.
+        gift = self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.add(client, envelopes["Gas"])
+        self.edit(client, gift, envelopes["Groceries"])
+        assert self.modified(client) == ["Groceries", "Gifts", "Gas", "Vices"]
+
+    def test_moving_an_expense_between_months_modifies_both(self, client, envelopes):
+        gift = self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.edit(client, gift, envelopes["Gifts"], budget_month="2026-07")
+        assert self.modified(client, "2026-06") == ["Gifts", "Vices"]
+        assert self.modified(client, "2026-07") == ["Gifts"]
+
+    def test_switching_to_fund_funded_modifies_the_envelope_it_left(self, client, envelopes):
+        # The envelope's spent amount drops, so its bar changed.
+        fund_id = insert_fund("Car")
+        insert_fund_entry(fund_id, "2026-06-01", 500)
+        gift = self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.edit(client, gift, envelopes["Gifts"], funded_from="fund", fund_id=fund_id)
+        assert self.modified(client) == ["Gifts", "Vices"]
+
+    def test_switching_from_fund_funded_modifies_the_envelope_it_joins(self, client, envelopes):
+        fund_id = insert_fund("Car")
+        insert_fund_entry(fund_id, "2026-06-01", 500)
+        gift = self.add(client, envelopes["Gifts"], funded_from="fund", fund_id=fund_id)
+        self.add(client, envelopes["Vices"])
+        self.edit(client, gift, envelopes["Gifts"])
+        assert self.modified(client) == ["Gifts", "Vices"]
+
+    def test_editing_a_fund_funded_expense_modifies_no_envelope(self, client, envelopes):
+        fund_id = insert_fund("Car")
+        insert_fund_entry(fund_id, "2026-06-01", 500)
+        gift = self.add(client, envelopes["Gifts"], funded_from="fund", fund_id=fund_id)
+        self.edit(
+            client, gift, envelopes["Gifts"], funded_from="fund", fund_id=fund_id, note="Tires"
+        )
+        assert self.modified(client) == []
+
+    def test_deleting_an_expense_puts_its_envelope_on_top(self, client, envelopes):
+        # A delete is a modification even when it leaves the envelope
+        # with no spend at all.
+        gift = self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        assert client.delete(f"/api/expenses/{gift}").status_code == 204
+        assert self.modified(client) == ["Gifts", "Vices"]
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        spent = {envelope["name"]: envelope["spent"] for envelope in body["categories"]}
+        assert spent["Gifts"] == 0
+
+    def test_deleting_a_fund_funded_expense_modifies_no_envelope(self, client, envelopes):
+        fund_id = insert_fund("Car")
+        insert_fund_entry(fund_id, "2026-06-01", 500)
+        gift = self.add(client, envelopes["Gifts"], funded_from="fund", fund_id=fund_id)
+        assert client.delete(f"/api/expenses/{gift}").status_code == 204
+        assert self.modified(client) == []

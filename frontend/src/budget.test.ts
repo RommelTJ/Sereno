@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  byRecentlyModified,
   editMonthOptions,
   expenseInput,
   expenseUpdateInput,
@@ -381,5 +382,46 @@ describe('incomeInput', () => {
     expect(
       incomeInput('5200', 'brokerage-withdrawal', '2026-06', '2026-06-02', '', ''),
     ).not.toHaveProperty('drawn_from_fund_id')
+  })
+})
+
+describe('byRecentlyModified', () => {
+  const [groceries, gas, entertainment, travel] = BUDGET_MONTH.categories
+  const names = (envelopes: typeof BUDGET_MONTH.categories) =>
+    envelopes.map((envelope) => envelope.name)
+
+  it('keeps the settings order while nothing has changed this month', () => {
+    expect(names(byRecentlyModified(BUDGET_MONTH.categories))).toEqual([
+      'Groceries',
+      'Gas',
+      'Entertainment',
+      'Travel',
+    ])
+  })
+
+  it('lists modified envelopes newest first, then the rest in settings order', () => {
+    const envelopes = [
+      groceries,
+      { ...gas, modified_seq: 3 },
+      entertainment,
+      { ...travel, modified_seq: 7 },
+    ]
+
+    expect(names(byRecentlyModified(envelopes))).toEqual([
+      'Travel',
+      'Gas',
+      'Groceries',
+      'Entertainment',
+    ])
+  })
+
+  it('leaves the list it was given alone', () => {
+    // The spending and edit forms read the same array and keep the
+    // settings order.
+    const envelopes = [groceries, { ...gas, modified_seq: 3 }]
+
+    byRecentlyModified(envelopes)
+
+    expect(names(envelopes)).toEqual(['Groceries', 'Gas'])
   })
 })

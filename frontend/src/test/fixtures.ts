@@ -107,8 +107,17 @@ export const BUDGET_MONTH: BudgetMonth = {
       planned: 500,
       spent: 387,
       remaining: 113,
+      modified_seq: null,
     },
-    { id: 2, name: 'Gas', emoji: '🛢️', planned: 100, spent: 64, remaining: 36 },
+    {
+      id: 2,
+      name: 'Gas',
+      emoji: '🛢️',
+      planned: 100,
+      spent: 64,
+      remaining: 36,
+      modified_seq: null,
+    },
     {
       id: 3,
       name: 'Entertainment',
@@ -116,8 +125,17 @@ export const BUDGET_MONTH: BudgetMonth = {
       planned: 500,
       spent: 546,
       remaining: -46,
+      modified_seq: null,
     },
-    { id: 4, name: 'Travel', emoji: '✈️', planned: 0, spent: 0, remaining: 0 },
+    {
+      id: 4,
+      name: 'Travel',
+      emoji: '✈️',
+      planned: 0,
+      spent: 0,
+      remaining: 0,
+      modified_seq: null,
+    },
   ],
   activity: [
     {
