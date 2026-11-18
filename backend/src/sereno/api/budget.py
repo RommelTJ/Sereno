@@ -606,12 +606,18 @@ def delete_expense(expense_id: int, db: Db) -> None:
     mistaken entry can simply go. A fund-funded row gets its draw-down
     fully reversed in the same transaction — see _reverse_draw_down."""
     row = db.execute(
-        "SELECT funded_from, fund_id, amount FROM expense_line WHERE id = ?", (expense_id,)
+        "SELECT funded_from, fund_id, amount, category_id, budget_month"
+        " FROM expense_line WHERE id = ?",
+        (expense_id,),
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="expense not found")
     if row["funded_from"] == "fund" and row["fund_id"] is not None:
         _reverse_draw_down(db, row["fund_id"], row["amount"], expense_id=expense_id)
+    # The row is about to stop existing, so the mark is the only trace
+    # that this envelope's bar just changed.
+    if row["funded_from"] == "discretionary":
+        _touch_envelope(db, row["category_id"], row["budget_month"])
     db.execute("DELETE FROM expense_line WHERE id = ?", (expense_id,))
     db.commit()
 
