@@ -534,7 +534,9 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
     overdraw guard re-applies either way, checked before anything is
     written, so a 422 changes nothing."""
     old = db.execute(
-        "SELECT funded_from, fund_id, amount FROM expense_line WHERE id = ?", (expense_id,)
+        "SELECT funded_from, fund_id, amount, category_id, budget_month"
+        " FROM expense_line WHERE id = ?",
+        (expense_id,),
     ).fetchone()
     if old is None:
         raise HTTPException(status_code=404, detail="expense not found")
@@ -544,6 +546,7 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
     old_fund = old["fund_id"] if old["funded_from"] == "fund" else None
     new_fund = expense.fund_id if expense.funded_from == "fund" else None
     amount = to_cents(expense.amount)
+    budget_month = expense.budget_month or expense.txn_date.strftime("%Y-%m")
     if old_fund is not None and old_fund == new_fund:
         delta = amount - old["amount"]
         if delta > _spendable(db, old_fund, date.today()):
@@ -563,7 +566,7 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
         " WHERE id = ?",
         (
             expense.txn_date.isoformat(),
-            expense.budget_month or expense.txn_date.strftime("%Y-%m"),
+            budget_month,
             expense.category_id,
             amount,
             expense.is_fixed,
@@ -575,6 +578,18 @@ def update_expense(expense_id: int, expense: ExpenseCreate, db: Db) -> Expense:
             expense_id,
         ),
     )
+    # Any saved edit modifies the envelope it sits in. A line that moved —
+    # to another envelope, another month, or onto a fund — changed the bar
+    # it left too; that one is marked first, so the destination, where the
+    # change landed, ranks above it.
+    left = (
+        (old["category_id"], old["budget_month"]) if old["funded_from"] == "discretionary" else None
+    )
+    joined = (expense.category_id, budget_month) if expense.funded_from == "discretionary" else None
+    if left is not None and left != joined:
+        _touch_envelope(db, *left)
+    if joined is not None:
+        _touch_envelope(db, *joined)
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, category_id, amount, is_fixed,"
