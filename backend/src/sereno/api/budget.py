@@ -153,12 +153,19 @@ class Income(BaseModel):
 
 
 class Envelope(BaseModel):
+    """modified_seq ranks the envelope's last expense change within the
+    month — a counter that rises with every add, edit, or delete of a
+    discretionary line, so larger is more recent; null means untouched
+    this month. The list itself stays in settings order: the reorder is
+    the client's envelopes card's alone."""
+
     id: int
     name: str
     emoji: str | None
     planned: float
     spent: float
     remaining: float
+    modified_seq: int | None
 
 
 class ActivityItem(BaseModel):
@@ -741,9 +748,11 @@ def budget_month(db: Db, month: Month = None) -> BudgetMonth:
             "           ORDER BY p.effective_month DESC, p.id DESC LIMIT 1), 0) AS planned,"
             " COALESCE((SELECT SUM(e.amount) FROM expense_line e"
             "           WHERE e.category_id = c.id AND e.budget_month = ?"
-            "           AND e.funded_from = 'discretionary'), 0) AS spent"
+            "           AND e.funded_from = 'discretionary'), 0) AS spent,"
+            " (SELECT m.seq FROM category_modification m"
+            "  WHERE m.category_id = c.id AND m.budget_month = ?) AS modified_seq"
             " FROM category c WHERE c.active = 1 ORDER BY c.sort_order, c.id",
-            (target, target),
+            (target, target, target),
         )
     ]
 
