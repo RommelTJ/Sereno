@@ -135,7 +135,16 @@ serves them at <http://localhost:5173>.
   otherwise leaves a fixed sheet behind the keyboard. First the monthly
   envelopes card: one progress bar per category, "spent · left" while under
   budget, "$spent of $budgeted · $X over" in red once over — overspending
-  is allowed and simply trims the headline. A footer under the bars
+  is allowed and simply trims the headline. The bars list the envelope
+  changed most recently first: adding, editing, or deleting an expense
+  in an envelope moves it to the top — by when the change was made, so
+  a backdated expense jumps like any other — and the envelopes untouched
+  this month follow in their settings order, which holds as is until
+  the month's first change. The order is the card's alone (the
+  `modified_seq` on each envelope from `GET /api/budget-month`): the
+  spending and edit forms keep the settings order, a fund-funded
+  expense moves nothing, and neither does renaming an envelope or
+  changing its plan. A footer under the bars
   totals the envelopes — "$X spent so far", the sum of their spending,
   and "$Y projected", the sum of their plans. The projection is fixed:
   an overspent envelope still counts at its plan. Both cover the
@@ -451,7 +460,9 @@ serves them at <http://localhost:5173>.
   carries a grip handle — drag one (mouse, touch, or keyboard: lift
   with Enter, move with the arrows) to reorder the card, persisted via
   the `order` endpoints, so the ledger columns, the balance form
-  picker, and the Safe-to-spend envelopes all follow the same order;
+  picker, and the Safe-to-spend envelopes all follow the same order —
+  on Safe-to-spend, after the envelopes changed this month, which lead
+  the card;
   assets and liabilities reorder independently within their own cards.
   Fund rows no longer appear
   on Settings — funds live on Funds & Goals, where their targets and

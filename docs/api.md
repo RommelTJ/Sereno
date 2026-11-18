@@ -130,7 +130,10 @@ The budget slice:
   and the known amount is a floor. `funded_from` is
   `discretionary` or `fund` (then `fund_id` is required, and `category_id`
   is normally omitted — the fund itself says what the spend was for, and
-  the envelope math never counts fund-funded lines). Fund spending
+  the envelope math never counts fund-funded lines). A discretionary
+  line marks its envelope modified for its budget month — the
+  `modified_seq` that `GET /api/budget-month` reports — in the same
+  transaction; fund-funded and uncategorized lines mark nothing. Fund spending
   draws the fund down in the same transaction: a `fund_entry` with
   `source = 'spend'`, the balance minus the amount, and a negative
   contribution is appended, dated the transaction — and an expense that
@@ -178,6 +181,14 @@ The budget slice:
   either way — a 422 writes nothing. `'spend'` entries stay out of the
   headline, the feed, and the budget-year transfers line, so a
   correction never moves safe-to-spend and nothing double-counts.
+  Both mark the envelope modified, on the same rule as the create —
+  only discretionary lines count. Any saved edit counts, a note-only
+  one included, and so does a delete that leaves the envelope with no
+  spend: the row is gone, so the mark in `category_modification` is the
+  only trace. An edit that moves a line — to another envelope, another
+  budget month, or onto a fund — marks the envelope it left as well,
+  first, so the destination ranks above it; a line switched from a fund
+  to discretionary marks the envelope it joins.
 - `PUT /api/income/{id}` / `DELETE /api/income/{id}` — the same for income
   events: a full replace (an omitted title or note really clears),
   `budget_month` defaulting from the txn date, and a hard delete — the
@@ -194,7 +205,15 @@ The budget slice:
   (`baseline − fund_contributions − total_spent`, where the baseline is the
   month's stored funding — never recomputed from live spend), and the
   activity list — expense lines, income events, and fund entries merged
-  newest first. A category-less fund-funded expense carries its fund's
+  newest first. Each envelope also carries `modified_seq`, ranking its
+  last expense change within the month: a counter that rises every time
+  a discretionary line in that envelope is added, edited, or deleted, so
+  larger is more recent and `null` means untouched this month. It
+  follows when the change was made, not the transaction date, and
+  belongs to one budget month — paging reads that month's own values.
+  The Safe-to-spend envelopes card sorts on it; the `categories` list
+  itself stays in settings order, which the spending and edit forms
+  still read. A category-less fund-funded expense carries its fund's
   name in the category slot — the fund itself says what the spend was
   for; rows carrying both keep the category name. A fund entry carries
   its fund's name and its source, and
