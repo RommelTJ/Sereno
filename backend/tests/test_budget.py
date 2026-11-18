@@ -1785,7 +1785,7 @@ class TestGetBudgetMonth:
                 "planned": 500,
                 "spent": 387,
                 "remaining": 113,
-                "modified_seq": None,
+                "modified_seq": 1,
             },
             {
                 "id": travel_id,
@@ -2407,3 +2407,62 @@ class TestIncomeFundLinks:
         assert response.status_code == 422
         assert query("SELECT id FROM income_event") == []
         assert fetch_fund_links(cash_id) == [(0, None, None)]
+
+
+class TestEnvelopeModificationOrder:
+    """Issue #179: the envelopes card lists the most recently modified
+    envelope first. modified() reads the order the card derives — the
+    month's touched envelopes, newest change first; the untouched ones
+    follow in settings order and are left out here."""
+
+    @pytest.fixture
+    def envelopes(self, client):
+        return {name: insert_category(name) for name in ("Groceries", "Gas", "Gifts", "Vices")}
+
+    def add(self, client, category_id, txn_date="2026-06-20", **extra):
+        payload = {"txn_date": txn_date, "category_id": category_id, "amount": 10, **extra}
+        response = client.post("/api/expenses", json=payload)
+        assert response.status_code == 201
+        return response.json()["id"]
+
+    def modified(self, client, month="2026-06"):
+        body = client.get("/api/budget-month", params={"month": month}).json()
+        touched = [e for e in body["categories"] if e["modified_seq"] is not None]
+        touched.sort(key=lambda envelope: envelope["modified_seq"], reverse=True)
+        return [envelope["name"] for envelope in touched]
+
+    def test_adding_an_expense_puts_its_envelope_on_top(self, client, envelopes):
+        self.add(client, envelopes["Gifts"])
+        assert self.modified(client) == ["Gifts"]
+        self.add(client, envelopes["Vices"])
+        assert self.modified(client) == ["Vices", "Gifts"]
+
+    def test_a_backdated_expense_still_jumps_to_the_top(self, client, envelopes):
+        # The order follows when the change was made, not the txn date.
+        self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.add(client, envelopes["Gas"], txn_date="2026-06-01")
+        assert self.modified(client) == ["Gas", "Vices", "Gifts"]
+
+    def test_a_second_add_returns_an_envelope_to_the_top(self, client, envelopes):
+        self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.add(client, envelopes["Gifts"])
+        assert self.modified(client) == ["Gifts", "Vices"]
+
+    def test_a_fund_funded_expense_modifies_no_envelope(self, client, envelopes):
+        # Fund-funded lines stay out of the envelope bars, so they stay
+        # out of the order too — even when they name a category.
+        fund_id = insert_fund("Car")
+        insert_fund_entry(fund_id, "2026-06-01", 500)
+        self.add(client, envelopes["Gifts"], funded_from="fund", fund_id=fund_id)
+        assert self.modified(client) == []
+
+    def test_an_uncategorized_expense_modifies_no_envelope(self, client, envelopes):
+        self.add(client, None)
+        assert self.modified(client) == []
+
+    def test_a_prepaid_expense_modifies_the_month_it_is_charged_to(self, client, envelopes):
+        self.add(client, envelopes["Gifts"], txn_date="2026-06-27", budget_month="2026-07")
+        assert self.modified(client, "2026-06") == []
+        assert self.modified(client, "2026-07") == ["Gifts"]
