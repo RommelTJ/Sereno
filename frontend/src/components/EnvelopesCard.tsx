@@ -1,5 +1,5 @@
 import type { Envelope } from '../api.ts'
-import { envelopeView, monthLabel } from '../budget.ts'
+import { byRecentlyModified, envelopeView, monthLabel } from '../budget.ts'
 import { formatUsd } from '../ledger.ts'
 
 // Each row is a tap target (the ActivityFeed tappable-row pattern, so it
@@ -55,6 +55,8 @@ function EnvelopesCard({
   selectedId: number | null
   onSelect: (envelope: Envelope) => void
 }) {
+  // The rows list the envelope changed most recently first (see
+  // byRecentlyModified); the subtotals don't care about order.
   // Envelope-only subtotals: projected is the fixed sum of the plans, so
   // an overspent envelope still counts at its planned amount.
   const spent = envelopes.reduce((sum, envelope) => sum + envelope.spent, 0)
@@ -67,7 +69,7 @@ function EnvelopesCard({
       <div className="mb-1.5 flex items-center justify-between">
         <p className="text-sm font-bold">{monthLabel(month)} envelopes</p>
       </div>
-      {envelopes.map((envelope) => (
+      {byRecentlyModified(envelopes).map((envelope) => (
         <EnvelopeRow
           key={envelope.id}
           envelope={envelope}

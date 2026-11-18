@@ -47,6 +47,20 @@ export function envelopeView(envelope: Envelope): EnvelopeView {
   }
 }
 
+// The envelopes card's order: the envelopes changed this month first,
+// most recent change on top, then the untouched ones as the server
+// listed them — the settings order. A new array, so the spending and
+// edit forms reading the same list keep the settings order.
+export function byRecentlyModified(envelopes: Envelope[]): Envelope[] {
+  const seq = (envelope: Envelope) => envelope.modified_seq ?? 0
+  return [
+    ...envelopes
+      .filter((envelope) => envelope.modified_seq !== null)
+      .sort((a, b) => seq(b) - seq(a)),
+    ...envelopes.filter((envelope) => envelope.modified_seq === null),
+  ]
+}
+
 // "2026-07" → "July"
 export function monthLabel(month: string): string {
   const [year, monthNumber] = month.split('-').map(Number)
