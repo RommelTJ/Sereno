@@ -458,11 +458,30 @@ def _reverse_draw_down(
     )
 
 
+def _touch_envelope(db: sqlite3.Connection, category_id: int | None, budget_month: str) -> None:
+    """Marks an envelope modified in a budget month — the order the
+    envelopes card lists them in. Callers pass only discretionary lines:
+    a fund-funded one never moved the envelope's bar. seq takes the next
+    value of a counter shared by every envelope and month, so two changes
+    inside one second, or one request, still rank; an uncategorized line
+    belongs to no envelope and writes nothing."""
+    if category_id is None:
+        return
+    db.execute(
+        "INSERT INTO category_modification (category_id, budget_month, seq)"
+        " VALUES (?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM category_modification))"
+        " ON CONFLICT (category_id, budget_month) DO UPDATE SET"
+        " seq = excluded.seq, modified_at = excluded.modified_at",
+        (category_id, budget_month),
+    )
+
+
 @router.post("/expenses", status_code=201)
 def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
     _require(db, "category", expense.category_id, "category")
     _require(db, "fund", expense.fund_id, "fund")
     _require(db, "account", expense.account_id, "account")
+    budget_month = expense.budget_month or expense.txn_date.strftime("%Y-%m")
     # The row goes in first so the draw can carry its id. An overdraw 422
     # raises before the commit, and the request's connection closes
     # uncommitted, so the insert never lands.
@@ -472,7 +491,7 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             expense.txn_date.isoformat(),
-            expense.budget_month or expense.txn_date.strftime("%Y-%m"),
+            budget_month,
             expense.category_id,
             to_cents(expense.amount),
             expense.is_fixed,
@@ -492,6 +511,8 @@ def create_expense(expense: ExpenseCreate, db: Db) -> Expense:
             "expense exceeds fund balance",
             expense_id=cursor.lastrowid,
         )
+    if expense.funded_from == "discretionary":
+        _touch_envelope(db, expense.category_id, budget_month)
     db.commit()
     row = db.execute(
         "SELECT id, txn_date, budget_month, category_id, amount, is_fixed,"
