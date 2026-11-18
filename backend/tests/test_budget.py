@@ -47,6 +47,15 @@ def insert_plan(category_id, effective_month, planned):
     )
 
 
+def insert_modification(category_id, budget_month, seq):
+    return execute(
+        "INSERT INTO category_modification (category_id, budget_month, seq) VALUES (?, ?, ?)",
+        category_id,
+        budget_month,
+        seq,
+    )
+
+
 def insert_fund(name, kind="sinking", monthly_plan=None):
     return execute(
         "INSERT INTO fund (name, kind, monthly_plan) VALUES (?, ?, ?)",
@@ -316,6 +325,7 @@ class TestPostCategories:
                 "planned": 100,
                 "spent": 0,
                 "remaining": 100,
+                "modified_seq": None,
             }
         ]
 
@@ -1775,6 +1785,7 @@ class TestGetBudgetMonth:
                 "planned": 500,
                 "spent": 387,
                 "remaining": 113,
+                "modified_seq": None,
             },
             {
                 "id": travel_id,
@@ -1783,6 +1794,7 @@ class TestGetBudgetMonth:
                 "planned": 100,
                 "spent": 0,
                 "remaining": 100,
+                "modified_seq": None,
             },
         ]
         assert body["baseline"] == 5200
@@ -1796,6 +1808,33 @@ class TestGetBudgetMonth:
         response = client.get("/api/budget-month", params={"month": "2026-06"})
         names = [envelope["name"] for envelope in response.json()["categories"]]
         assert names == ["Travel", "Groceries"]
+
+    def test_an_untouched_envelope_carries_a_null_modified_seq(self, client):
+        insert_category("Groceries")
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert body["categories"][0]["modified_seq"] is None
+
+    def test_an_envelope_carries_its_months_modified_seq(self, client):
+        # The stored value belongs to one budget month: June's change
+        # says nothing about how the envelope stood in May or July.
+        groceries_id = insert_category("Groceries")
+        gas_id = insert_category("Gas")
+        insert_modification(groceries_id, "2026-06", 4)
+        insert_modification(gas_id, "2026-07", 9)
+        june = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [envelope["modified_seq"] for envelope in june["categories"]] == [4, None]
+        july = client.get("/api/budget-month", params={"month": "2026-07"}).json()
+        assert [envelope["modified_seq"] for envelope in july["categories"]] == [None, 9]
+
+    def test_modified_envelopes_keep_the_category_sort_order(self, client):
+        # The reorder is the envelopes card's alone: the list itself stays
+        # in settings order, which the spending and edit forms still read.
+        groceries_id = insert_category("Groceries")
+        gas_id = insert_category("Gas")
+        insert_modification(groceries_id, "2026-06", 1)
+        insert_modification(gas_id, "2026-06", 2)
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        assert [envelope["name"] for envelope in body["categories"]] == ["Groceries", "Gas"]
 
     def test_over_budget_is_allowed_and_goes_negative(self, client):
         gas_id = insert_category("Gas")
