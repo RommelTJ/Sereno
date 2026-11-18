@@ -2519,3 +2519,21 @@ class TestEnvelopeModificationOrder:
             client, gift, envelopes["Gifts"], funded_from="fund", fund_id=fund_id, note="Tires"
         )
         assert self.modified(client) == []
+
+    def test_deleting_an_expense_puts_its_envelope_on_top(self, client, envelopes):
+        # A delete is a modification even when it leaves the envelope
+        # with no spend at all.
+        gift = self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        assert client.delete(f"/api/expenses/{gift}").status_code == 204
+        assert self.modified(client) == ["Gifts", "Vices"]
+        body = client.get("/api/budget-month", params={"month": "2026-06"}).json()
+        spent = {envelope["name"]: envelope["spent"] for envelope in body["categories"]}
+        assert spent["Gifts"] == 0
+
+    def test_deleting_a_fund_funded_expense_modifies_no_envelope(self, client, envelopes):
+        fund_id = insert_fund("Car")
+        insert_fund_entry(fund_id, "2026-06-01", 500)
+        gift = self.add(client, envelopes["Gifts"], funded_from="fund", fund_id=fund_id)
+        assert client.delete(f"/api/expenses/{gift}").status_code == 204
+        assert self.modified(client) == []
