@@ -494,3 +494,47 @@ def test_deleting_a_linked_row_keeps_the_entry_and_clears_the_link(conn):
     conn.execute("DELETE FROM income_event WHERE id = 8")
     rows = conn.execute("SELECT balance, expense_id, income_id FROM fund_entry ORDER BY id")
     assert [tuple(row) for row in rows] == [(100, None, None), (200, None, None)]
+
+
+def test_category_modification_backfills_from_discretionary_expenses(conn, tmp_path):
+    # A database migrated before 0022 existed has only created_at to go
+    # on, so each envelope's last modification per budget month starts as
+    # its newest discretionary expense — by when the row was entered, not
+    # its transaction date — numbered oldest to newest, a same-second tie
+    # falling to the later row. Fund-funded and uncategorized lines never
+    # moved an envelope bar, so they leave no row.
+    for sql_file in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        if sql_file.name < "0022":
+            (tmp_path / sql_file.name).write_text(sql_file.read_text())
+    migrate(conn, tmp_path)
+    conn.executemany(
+        "INSERT INTO category (id, name) VALUES (?, ?)",
+        [(1, "Groceries"), (2, "Gas"), (3, "Gifts"), (4, "Vices")],
+    )
+    conn.execute("INSERT INTO fund (id, name, kind) VALUES (1, 'Car', 'sinking')")
+    conn.executemany(
+        "INSERT INTO expense_line (id, txn_date, budget_month, category_id, amount,"
+        " funded_from, fund_id, created_at) VALUES (?, ?, ?, ?, 1000, ?, ?, ?)",
+        [
+            (1, "2026-09-03", "2026-09", 1, "discretionary", None, "2026-09-03 10:00:00"),
+            (2, "2026-09-10", "2026-09", 2, "discretionary", None, "2026-09-10 09:00:00"),
+            # Backdated: entered on the 20th for the 1st.
+            (3, "2026-09-01", "2026-09", 1, "discretionary", None, "2026-09-20 08:00:00"),
+            (4, "2026-09-21", "2026-09", 3, "fund", 1, "2026-09-21 08:00:00"),
+            (5, "2026-09-22", "2026-09", None, "discretionary", None, "2026-09-22 08:00:00"),
+            (6, "2026-10-02", "2026-10", 1, "discretionary", None, "2026-10-02 12:00:00"),
+            (7, "2026-10-02", "2026-10", 4, "discretionary", None, "2026-10-02 12:00:00"),
+        ],
+    )
+    migration = "0022_category_modification.sql"
+    (tmp_path / migration).write_text((MIGRATIONS_DIR / migration).read_text())
+    assert migrate(conn, tmp_path) == [migration]
+    rows = conn.execute(
+        "SELECT category_id, budget_month, seq, modified_at FROM category_modification ORDER BY seq"
+    ).fetchall()
+    assert rows == [
+        (2, "2026-09", 1, "2026-09-10 09:00:00"),
+        (1, "2026-09", 2, "2026-09-20 08:00:00"),
+        (1, "2026-10", 3, "2026-10-02 12:00:00"),
+        (4, "2026-10", 4, "2026-10-02 12:00:00"),
+    ]
