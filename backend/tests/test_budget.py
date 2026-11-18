@@ -2425,6 +2425,10 @@ class TestEnvelopeModificationOrder:
         assert response.status_code == 201
         return response.json()["id"]
 
+    def edit(self, client, expense_id, category_id, txn_date="2026-06-20", **extra):
+        payload = {"txn_date": txn_date, "category_id": category_id, "amount": 10, **extra}
+        assert client.put(f"/api/expenses/{expense_id}", json=payload).status_code == 200
+
     def modified(self, client, month="2026-06"):
         body = client.get("/api/budget-month", params={"month": month}).json()
         touched = [e for e in body["categories"] if e["modified_seq"] is not None]
@@ -2466,3 +2470,52 @@ class TestEnvelopeModificationOrder:
         self.add(client, envelopes["Gifts"], txn_date="2026-06-27", budget_month="2026-07")
         assert self.modified(client, "2026-06") == []
         assert self.modified(client, "2026-07") == ["Gifts"]
+
+    def test_a_note_only_edit_puts_its_envelope_on_top(self, client, envelopes):
+        # Any saved edit counts, even one that leaves the spend alone.
+        gift = self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.edit(client, gift, envelopes["Gifts"], note="Birthday")
+        assert self.modified(client) == ["Gifts", "Vices"]
+
+    def test_moving_an_expense_between_envelopes_modifies_both(self, client, envelopes):
+        # Both bars moved; the destination is where the change landed,
+        # so it ranks above the envelope the expense left.
+        gift = self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.add(client, envelopes["Gas"])
+        self.edit(client, gift, envelopes["Groceries"])
+        assert self.modified(client) == ["Groceries", "Gifts", "Gas", "Vices"]
+
+    def test_moving_an_expense_between_months_modifies_both(self, client, envelopes):
+        gift = self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.edit(client, gift, envelopes["Gifts"], budget_month="2026-07")
+        assert self.modified(client, "2026-06") == ["Gifts", "Vices"]
+        assert self.modified(client, "2026-07") == ["Gifts"]
+
+    def test_switching_to_fund_funded_modifies_the_envelope_it_left(self, client, envelopes):
+        # The envelope's spent amount drops, so its bar changed.
+        fund_id = insert_fund("Car")
+        insert_fund_entry(fund_id, "2026-06-01", 500)
+        gift = self.add(client, envelopes["Gifts"])
+        self.add(client, envelopes["Vices"])
+        self.edit(client, gift, envelopes["Gifts"], funded_from="fund", fund_id=fund_id)
+        assert self.modified(client) == ["Gifts", "Vices"]
+
+    def test_switching_from_fund_funded_modifies_the_envelope_it_joins(self, client, envelopes):
+        fund_id = insert_fund("Car")
+        insert_fund_entry(fund_id, "2026-06-01", 500)
+        gift = self.add(client, envelopes["Gifts"], funded_from="fund", fund_id=fund_id)
+        self.add(client, envelopes["Vices"])
+        self.edit(client, gift, envelopes["Gifts"])
+        assert self.modified(client) == ["Gifts", "Vices"]
+
+    def test_editing_a_fund_funded_expense_modifies_no_envelope(self, client, envelopes):
+        fund_id = insert_fund("Car")
+        insert_fund_entry(fund_id, "2026-06-01", 500)
+        gift = self.add(client, envelopes["Gifts"], funded_from="fund", fund_id=fund_id)
+        self.edit(
+            client, gift, envelopes["Gifts"], funded_from="fund", fund_id=fund_id, note="Tires"
+        )
+        assert self.modified(client) == []
