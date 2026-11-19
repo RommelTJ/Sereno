@@ -65,8 +65,7 @@ function LedgerTable({
   return (
     <section className="overflow-hidden rounded-card border border-card-border bg-card">
       <h2 className="border-b border-hairline px-5.5 py-4.5 text-sm font-bold">
-        Monthly balance entries{' '}
-        <span className="font-medium text-muted-2">· one row per month</span>
+        Monthly balance entries
       </h2>
       <div className="overflow-x-auto">
         <table className="num w-full border-collapse text-[12.5px] whitespace-nowrap">
