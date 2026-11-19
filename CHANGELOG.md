@@ -4,6 +4,12 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.3 — The "Each opens in a new tab · managed in Settings & data."
+note is gone from the Quick links card on Ledger entries. The note only
+added visual noise; the behaviour is unchanged — each link still opens
+in a new tab and the links are still managed in Settings & data.
+Frontend-only: no API, schema, or migration changes (issue #182).
+
 v3.25.2 — The "Latest entry in a month wins · earlier rows kept as
 history." note is gone from the Update this month's balances form on
 Ledger entries. The note only added visual noise; the behaviour is
