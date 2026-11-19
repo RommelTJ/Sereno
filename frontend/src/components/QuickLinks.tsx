@@ -13,9 +13,6 @@ function QuickLinks({ links }: { links: QuickLink[] }) {
       className="rounded-card border border-card-border bg-card p-5.5"
     >
       <h2 className="text-sm font-bold">Quick links</h2>
-      <p className="mt-0.5 text-[11.5px] text-muted-2">
-        Each opens in a new tab · managed in Settings &amp; data.
-      </p>
       <div className="mt-2">
         {links.map((link) => (
           <a
