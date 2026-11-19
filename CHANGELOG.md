@@ -4,6 +4,12 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.1 — The "· one row per month" suffix is gone from the Monthly
+balance entries title on Ledger entries. The table's layout already
+makes that clear, so the text only added visual noise; the card header
+now carries just the title. Frontend-only: no API, schema, or migration
+changes (issue #180).
+
 v3.25.0 — The envelopes card on Safe-to-spend lists the envelope
 changed most recently first. The card followed the settings order all
 month, so the envelope that was just changed could sit anywhere in the
