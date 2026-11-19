@@ -89,9 +89,6 @@ function BalanceForm({ accounts, months, onSave }: BalanceFormProps) {
   return (
     <section className="rounded-card border border-card-border bg-card p-5.5">
       <h2 className="text-sm font-bold">Update this month's balances</h2>
-      <p className="mt-0.5 text-[11.5px] text-muted-2">
-        Latest entry in a month wins · earlier rows kept as history.
-      </p>
 
       <div className="mt-4 flex flex-col gap-3">
         <label htmlFor="balance-account" className="block">
