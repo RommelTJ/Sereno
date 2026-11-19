@@ -4,6 +4,13 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.2 — The "Latest entry in a month wins · earlier rows kept as
+history." note is gone from the Update this month's balances form on
+Ledger entries. The note only added visual noise; the behaviour is
+unchanged — the latest entry in a month still wins and earlier rows
+are still kept as history. Frontend-only: no API, schema, or migration
+changes (issue #181).
+
 v3.25.1 — The "· one row per month" suffix is gone from the Monthly
 balance entries title on Ledger entries. The table's layout already
 makes that clear, so the text only added visual noise; the card header
