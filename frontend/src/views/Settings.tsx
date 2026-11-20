@@ -455,7 +455,7 @@ function AccountsCard({
   onReorder,
 }: {
   title: string
-  hint: string
+  hint?: string
   testId: string
   rowTestId: string
   idPrefix: string
@@ -2077,7 +2077,6 @@ function Settings() {
     <div data-testid="view-settings" className="flex max-w-[880px] flex-col gap-5">
       <AccountsCard
         title="Assets"
-        hint="· latest ledger value; later values go through the Ledger"
         testId="assets-card"
         rowTestId="settings-asset-row"
         idPrefix="asset"
