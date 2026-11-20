@@ -4,6 +4,12 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.6 — The "· money parked into and drawn from funds" suffix is gone
+from the Funds flow title on the Budget report. The text only added
+visual noise; the behaviour is unchanged — the table still shows each
+month's fund contributions, draws, and net. Frontend-only: no API,
+schema, or migration changes (issue #184).
+
 v3.25.5 — The "· blank months have no data" suffix is gone from the
 Plan vs. actual title on the Budget report. The text only added visual
 noise; the behaviour is unchanged — months with no data still render

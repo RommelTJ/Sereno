@@ -152,12 +152,7 @@ function BudgetReport() {
           read as a blown month. */}
       <section className="overflow-hidden rounded-card border border-card-border bg-card">
         <div className="border-b border-hairline px-5.5 py-4.5">
-          <h2 className="text-sm font-bold">
-            Funds flow{' '}
-            <span className="font-medium text-muted-2">
-              · money parked into and drawn from funds
-            </span>
-          </h2>
+          <h2 className="text-sm font-bold">Funds flow</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="num w-full border-collapse text-[12.5px] whitespace-nowrap">
