@@ -98,12 +98,7 @@ function BudgetReport() {
     <div data-testid="view-budget-report" className="flex flex-col gap-5">
       <section className="overflow-hidden rounded-card border border-card-border bg-card">
         <div className="flex items-center justify-between gap-3 border-b border-hairline px-5.5 py-4.5">
-          <h2 className="text-sm font-bold">
-            Plan vs. actual{' '}
-            <span className="font-medium text-muted-2">
-              · blank months have no data
-            </span>
-          </h2>
+          <h2 className="text-sm font-bold">Plan vs. actual</h2>
           <label className="flex items-center gap-2 text-[11px] font-semibold text-muted-2 uppercase">
             Year
             <select
