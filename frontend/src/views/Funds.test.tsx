@@ -96,14 +96,11 @@ const fillForm = async (
 }
 
 describe('Funds & goals card', () => {
-  it('shows the total parked and the auto-calculate hint', async () => {
+  it('shows the total parked', async () => {
     renderFunds()
 
     expect(await screen.findByText('Total parked')).toBeInTheDocument()
     expect(screen.getByText('$24,200.00')).toBeInTheDocument()
-    expect(
-      screen.getByText('notes auto-calculate from target, saved & date'),
-    ).toBeInTheDocument()
   })
 
   it('renders each fund with its meta, amount, bar and derived note', async () => {

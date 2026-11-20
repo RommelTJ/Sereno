@@ -418,17 +418,12 @@ function Funds() {
       <div data-testid="funds-column" className="lg:col-span-2">
         {funds && (
           <div className="rounded-card border border-card-border bg-card p-[22px]">
-            <div className="flex items-center justify-between">
-              <p className="text-[13px] text-muted-2">
-                Total parked{' '}
-                <span className="num text-xl font-extrabold text-ink">
-                  {formatUsd(totalParked(funds))}
-                </span>
-              </p>
-              <p className="text-[12.5px] text-muted-2">
-                notes auto-calculate from target, saved &amp; date
-              </p>
-            </div>
+            <p className="text-[13px] text-muted-2">
+              Total parked{' '}
+              <span className="num text-xl font-extrabold text-ink">
+                {formatUsd(totalParked(funds))}
+              </span>
+            </p>
             <NewFundForm onAdd={addFund} />
             <div className="mt-[18px] flex flex-col gap-5">
               {funds.map((fund) => (
