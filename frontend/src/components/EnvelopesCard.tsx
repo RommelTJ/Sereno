@@ -69,14 +69,18 @@ function EnvelopesCard({
       <div className="mb-1.5 flex items-center justify-between">
         <p className="text-sm font-bold">{monthLabel(month)} envelopes</p>
       </div>
-      {byRecentlyModified(envelopes).map((envelope) => (
-        <EnvelopeRow
-          key={envelope.id}
-          envelope={envelope}
-          selected={envelope.id === selectedId}
-          onSelect={onSelect}
-        />
-      ))}
+      {/* The rows get a container of their own so last:border-b-0 matches
+          the final row — the subtotals' border-t is then the one divider. */}
+      <div>
+        {byRecentlyModified(envelopes).map((envelope) => (
+          <EnvelopeRow
+            key={envelope.id}
+            envelope={envelope}
+            selected={envelope.id === selectedId}
+            onSelect={onSelect}
+          />
+        ))}
+      </div>
       <div
         data-testid="envelope-subtotals"
         className="mt-2 flex justify-between border-t border-hairline-2 pt-[11px] text-[13px]"

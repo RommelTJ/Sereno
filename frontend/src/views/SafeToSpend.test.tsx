@@ -130,6 +130,17 @@ describe('Envelopes card', () => {
     expect(within(subtotals).getByText('$1,100.00 projected')).toBeInTheDocument()
   })
 
+  it('draws a single rule between the last envelope and the subtotals', async () => {
+    renderSafeToSpend()
+
+    const rows = await screen.findAllByTestId('envelope-row')
+    // last:border-b-0 only drops the last row's rule while that row is
+    // the last child of its container — the subtotals' border-t is then
+    // the one divider.
+    expect(rows[rows.length - 1].matches(':last-child')).toBe(true)
+    expect(screen.getByTestId('envelope-subtotals')).toHaveClass('border-t')
+  })
+
   it('lists the most recently modified envelope first', async () => {
     stubApi({
       '/api/budget-month': withModified(BUDGET_MONTH, { 2: 1, 3: 2 }),

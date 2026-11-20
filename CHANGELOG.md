@@ -4,6 +4,13 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.4 — The envelopes card on Safe-to-spend draws a single rule
+above its subtotals row. The subtotals row was added after the envelope
+rows, so the last envelope kept its own bottom rule and two hairlines
+stacked 8px apart; the rows now sit in their own container and the
+subtotals' rule is the only divider. Frontend-only: no API, schema, or
+migration changes (issue #203).
+
 v3.25.3 — The "Each opens in a new tab · managed in Settings & data."
 note is gone from the Quick links card on Ledger entries. The note only
 added visual noise; the behaviour is unchanged — each link still opens
