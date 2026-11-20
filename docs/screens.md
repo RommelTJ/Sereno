@@ -246,9 +246,9 @@ serves them at <http://localhost:5173>.
   "· in progress" since it undercounts until it closes.
 - **Funds & goals** (<http://localhost:5173/funds>) — sinking funds and
   dated goals as one concept, in a single card: a header with the total
-  parked and the "notes auto-calculate" hint, the dashed **+ New fund or
-  goal** form (name, a curated emoji select, target, saved, target date —
-  blank = sinking fund — and $/month), then each fund with its emoji-led
+  parked, the dashed **+ New fund or goal** form (name, a curated emoji
+  select, target, saved, target date — blank = sinking fund — and
+  $/month), then each fund with its emoji-led
   name, meta line, `saved / target` amount, progress bar, the
   server-derived note from `GET /api/funds`, rendered verbatim, a Top up
   button that opens an inline $ amount input beside a source select —
