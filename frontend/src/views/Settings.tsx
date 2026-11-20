@@ -443,7 +443,6 @@ function AccountRowItem({
 
 function AccountsCard({
   title,
-  hint,
   testId,
   rowTestId,
   idPrefix,
@@ -455,7 +454,6 @@ function AccountsCard({
   onReorder,
 }: {
   title: string
-  hint?: string
   testId: string
   rowTestId: string
   idPrefix: string
@@ -490,7 +488,7 @@ function AccountsCard({
   }
 
   return (
-    <Card title={title} hint={hint} testId={testId}>
+    <Card title={title} testId={testId}>
       <div className="mt-2">
         {rows.length === 0 && (
           <p className="text-[12.5px] leading-8 text-muted-2">none yet</p>
