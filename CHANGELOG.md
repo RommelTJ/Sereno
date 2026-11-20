@@ -4,6 +4,12 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.10 — The "· planned $ / month, effective-dated" hint is gone from
+the Envelopes card title in Settings & data. The hint only added visual
+noise; the behaviour is unchanged — envelope plans are still planned
+dollars per month and still effective-dated. Frontend-only: no API,
+schema, or migration changes (issue #188).
+
 v3.25.9 — The "· stored positive, shown negative" hint is gone from the
 Liabilities card title in Settings & data. The hint only added visual
 noise; the behaviour is unchanged — liabilities are still stored
