@@ -2089,7 +2089,6 @@ function Settings() {
       />
       <AccountsCard
         title="Liabilities"
-        hint="· stored positive, shown negative"
         testId="liabilities-card"
         rowTestId="settings-liability-row"
         idPrefix="liability"
