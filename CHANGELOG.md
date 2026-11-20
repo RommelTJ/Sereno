@@ -4,6 +4,13 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.8 — The "· latest ledger value; later values go through the
+Ledger" hint is gone from the Assets card title in Settings & data. The
+hint only added visual noise; the behaviour is unchanged — the card
+still shows each account's latest ledger value, and later values still
+go through the Ledger. Frontend-only: no API, schema, or migration
+changes (issue #186).
+
 v3.25.7 — The "notes auto-calculate from target, saved & date" hint is
 gone from the header of the Funds & goals card. The hint only added
 visual noise; the behaviour is unchanged — fund notes still
