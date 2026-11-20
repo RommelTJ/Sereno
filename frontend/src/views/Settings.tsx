@@ -877,7 +877,6 @@ function EnvelopesCard({
   return (
     <Card
       title="Envelopes"
-      hint="· planned $ / month, effective-dated"
       testId="envelopes-card"
     >
       <div className="mt-2">
