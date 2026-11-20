@@ -4,6 +4,13 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.9 — The "· stored positive, shown negative" hint is gone from the
+Liabilities card title in Settings & data. The hint only added visual
+noise; the behaviour is unchanged — liabilities are still stored
+positive and shown negative. With no caller left, the accounts card's
+hint prop is removed. Frontend-only: no API, schema, or migration
+changes (issue #187).
+
 v3.25.8 — The "· latest ledger value; later values go through the
 Ledger" hint is gone from the Assets card title in Settings & data. The
 hint only added visual noise; the behaviour is unchanged — the card
