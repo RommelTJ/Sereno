@@ -657,7 +657,6 @@ function QuickLinksCard({
   return (
     <Card
       title="Quick links"
-      hint="· shown beside the Ledger's balance form"
       testId="quick-links-card"
     >
       <div className="mt-2">
