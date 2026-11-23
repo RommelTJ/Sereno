@@ -4,6 +4,12 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.12 — The "· editable, dated" hint is gone from the Social
+Security card title in Settings & data. The hint only added visual
+noise; the behaviour is unchanged — the estimates are still editable
+and dated. Frontend-only: no API, schema, or migration changes
+(issue #190).
+
 v3.25.11 — The "· shown beside the Ledger's balance form" hint is gone
 from the Quick links card title in Settings & data. The hint only added
 visual noise; the behaviour is unchanged — the links are still shown
