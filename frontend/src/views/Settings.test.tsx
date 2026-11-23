@@ -924,9 +924,6 @@ describe('Assumptions card', () => {
     expect(within(card).getByText('Inflation')).toBeInTheDocument()
     expect(within(card).getByText('3.0%')).toBeInTheDocument()
     expect(within(card).getByText('ETH growth')).toBeInTheDocument()
-    expect(
-      within(card).getByText('· refined from tracking'),
-    ).toBeInTheDocument()
     expect(within(card).getByText('Planned spend')).toBeInTheDocument()
     expect(within(card).getByText('$45,000.00 / yr')).toBeInTheDocument()
   })

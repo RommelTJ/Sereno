@@ -1065,12 +1065,10 @@ function AssumptionsCard({
           <ConfigLine
             label="ETH growth"
             value={formatPct(assumption?.eth_growth_pct)}
-            hint="· refined from tracking"
           />
           <ConfigLine
             label="Staking yield"
             value={formatPct(assumption?.staking_yield_pct)}
-            hint="· on the staked balance"
           />
           <ConfigLine
             label="Planned spend"
@@ -1085,7 +1083,6 @@ function AssumptionsCard({
                 ? formatRate(spendPlan.initial_rate)
                 : '—'
             }
-            hint="· at retirement"
           />
           <ConfigLine
             label="Guardrail band"
@@ -1094,7 +1091,6 @@ function AssumptionsCard({
           <ConfigLine
             label="Drawdown start"
             value={spendPlan?.drawdown_start ?? '—'}
-            hint="· stamps the anchor from actuals"
           />
         </div>
       )}
