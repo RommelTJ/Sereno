@@ -4,6 +4,14 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.13 — Four hints are gone from the Assumptions card's config lines
+in Settings & data: "· refined from tracking" (ETH growth), "· on the
+staked balance" (Staking yield), "· at retirement" (Initial rate), and
+"· stamps the anchor from actuals" (Drawdown start). The hints only
+added visual noise; the behaviour is unchanged — the labels, values,
+and the calculations behind them stay the same. Frontend-only: no API,
+schema, or migration changes (issue #191).
+
 v3.25.12 — The "· editable, dated" hint is gone from the Social
 Security card title in Settings & data. The hint only added visual
 noise; the behaviour is unchanged — the estimates are still editable
