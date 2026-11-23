@@ -1028,7 +1028,6 @@ describe('Social Security card', () => {
     render(<Settings />)
 
     const card = await screen.findByTestId('social-security-card')
-    expect(within(card).getByText('· editable, dated')).toBeInTheDocument()
     expect(within(card).getByText('You — from 67')).toBeInTheDocument()
     expect(within(card).getByText('$1,500.00/mo')).toBeInTheDocument()
     expect(within(card).getByText('Spouse — from 67')).toBeInTheDocument()

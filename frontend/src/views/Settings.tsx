@@ -1470,7 +1470,6 @@ function SocialSecurityCard({
   return (
     <Card
       title="Social Security"
-      hint="· editable, dated"
       testId="social-security-card"
       action={
         editing ? (
