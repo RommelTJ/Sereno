@@ -1331,7 +1331,6 @@ function SpendScheduleCard({
   return (
     <Card
       title="Spend schedule"
-      hint="· age bands in today's dollars — gaps follow the annual target"
       testId="spend-bands-card"
       action={
         editing ? (
