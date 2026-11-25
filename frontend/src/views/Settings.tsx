@@ -1141,7 +1141,6 @@ function MortgageCard({
   return (
     <Card
       title="Mortgage"
-      hint="· payoff is solved from the ledger"
       testId="mortgage-card"
       action={
         editing ? (
@@ -1213,7 +1212,6 @@ function MortgageCard({
             value={
               mortgage ? `${formatUsd(mortgage.monthly_escrow)} / mo` : '—'
             }
-            hint="· survives payoff"
           />
         </div>
       )}
