@@ -703,16 +703,13 @@ function QuickLinksCard({
 function ConfigLine({
   label,
   value,
-  hint,
 }: {
   label: string
   value: string
-  hint?: string
 }) {
   return (
     <p className="text-[12.5px] leading-8 text-muted">
       {label} <b className="num text-ink">{value}</b>
-      {hint && <span className="text-muted-2"> {hint}</span>}
     </p>
   )
 }
