@@ -4,6 +4,13 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.15 — The "· age bands in today's dollars — gaps follow the
+annual target" hint is gone from the Spend schedule card title in
+Settings & data. The hint only added visual noise; the behaviour is
+unchanged — the bands are still in today's dollars, and gaps still
+follow the annual target. Frontend-only: no API, schema, or migration
+changes (issue #193).
+
 v3.25.14 — Two hints are gone from the Mortgage card in Settings &
 data: "· payoff is solved from the ledger" (the card title) and
 "· survives payoff" (Escrow). The hints only added visual noise; the
