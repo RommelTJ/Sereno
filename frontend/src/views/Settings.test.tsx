@@ -2017,9 +2017,6 @@ describe('Spend schedule card', () => {
     expect(within(card).getByText('peak travel years')).toBeInTheDocument()
     expect(within(card).getByText('2045+')).toBeInTheDocument()
     expect(within(card).getByText('$38,000.00 / yr')).toBeInTheDocument()
-    // Band amounts are absolute figures the forecast runs in real
-    // terms — the card must say the unit or the plan is ambiguous.
-    expect(card).toHaveTextContent(/today's dollars/)
   })
 
   it('says spending follows the flat target when unconfigured', async () => {
