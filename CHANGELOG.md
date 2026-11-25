@@ -4,6 +4,13 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.14 — Two hints are gone from the Mortgage card in Settings &
+data: "· payoff is solved from the ledger" (the card title) and
+"· survives payoff" (Escrow). The hints only added visual noise; the
+behaviour is unchanged — the payoff is still solved from the ledger,
+and escrow still survives payoff. Frontend-only: no API, schema, or
+migration changes (issue #192).
+
 v3.25.13 — Four hints are gone from the Assumptions card's config lines
 in Settings & data: "· refined from tracking" (ETH growth), "· on the
 staked balance" (Staking yield), "· at retirement" (Initial rate), and

@@ -339,7 +339,7 @@ wheels = [
 
 [[package]]
 name = "sereno"
-version = "3.25.13"
+version = "3.25.14"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

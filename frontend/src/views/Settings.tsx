@@ -703,16 +703,13 @@ function QuickLinksCard({
 function ConfigLine({
   label,
   value,
-  hint,
 }: {
   label: string
   value: string
-  hint?: string
 }) {
   return (
     <p className="text-[12.5px] leading-8 text-muted">
       {label} <b className="num text-ink">{value}</b>
-      {hint && <span className="text-muted-2"> {hint}</span>}
     </p>
   )
 }
@@ -1141,7 +1138,6 @@ function MortgageCard({
   return (
     <Card
       title="Mortgage"
-      hint="· payoff is solved from the ledger"
       testId="mortgage-card"
       action={
         editing ? (
@@ -1213,7 +1209,6 @@ function MortgageCard({
             value={
               mortgage ? `${formatUsd(mortgage.monthly_escrow)} / mo` : '—'
             }
-            hint="· survives payoff"
           />
         </div>
       )}
