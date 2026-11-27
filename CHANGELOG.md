@@ -4,6 +4,13 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.25.16 — The "Data model · append-only" card is gone from the bottom
+of Settings & data. The card described implementation details rather
+than anything to do or configure on the screen, and it added visual
+noise; the behaviour is unchanged — the data model is still
+append-only, and `schema.sql` still lives in `docs/design`.
+Frontend-only: no API, schema, or migration changes (issue #194).
+
 v3.25.15 — The "· age bands in today's dollars — gaps follow the
 annual target" hint is gone from the Spend schedule card title in
 Settings & data. The hint only added visual noise; the behaviour is
