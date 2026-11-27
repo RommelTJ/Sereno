@@ -1143,19 +1143,6 @@ describe('Tax parameters card', () => {
   })
 })
 
-describe('Data model note', () => {
-  it('explains append-only and points at schema.sql', async () => {
-    render(<Settings />)
-
-    const note = await screen.findByTestId('data-note')
-    expect(
-      within(note).getByText('Data model · append-only'),
-    ).toBeInTheDocument()
-    expect(within(note).getByText(/Never UPDATE a balance/)).toBeInTheDocument()
-    expect(within(note).getByText('schema.sql')).toBeInTheDocument()
-  })
-})
-
 const postCalls = (fetchMock: ReturnType<typeof stubApi>, path: string) =>
   fetchMock.mock.calls.filter(
     ([input, init]) => input === path && init?.method === 'POST',

@@ -1816,25 +1816,6 @@ function TaxCard({
   )
 }
 
-function DataNote() {
-  return (
-    <div
-      data-testid="data-note"
-      className="rounded-card bg-sidebar p-[22px] text-sidebar-text"
-    >
-      <p className="text-[13px] font-bold text-white">
-        Data model · append-only
-      </p>
-      <p className="mt-2 text-xs leading-relaxed text-sidebar-muted">
-        Never UPDATE a balance — INSERT a dated row. Every fact is
-        effective-dated; reports use the latest row per month. The full{' '}
-        <b className="text-sidebar-text">schema.sql</b> lives in docs/design
-        for the LAN database &amp; AI agent.
-      </p>
-    </div>
-  )
-}
-
 function Settings() {
   const [data, setData] = useState<SettingsData | null>(null)
   const { refresh } = useNetWorth()
@@ -2123,7 +2104,6 @@ function Settings() {
         onRevise={reviseTaxParam}
         onAdd={addTaxParam}
       />
-      <DataNote />
     </div>
   )
 }
