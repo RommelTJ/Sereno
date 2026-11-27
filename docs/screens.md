@@ -470,7 +470,7 @@ serves them at <http://localhost:5173>.
   Assumptions summary
   (return, inflation, ETH growth, the staking yield, planned spend, the
   at-retirement initial withdrawal rate, and the guardrail band), the Social Security
-  panel (You/Spouse $/mo and start age), the latest year's tax
+  panel (You/Spouse $/mo and start age), and the latest year's tax
   parameters (LTCG ceilings, NIIT, standard deduction, ordinary
   brackets — or, where the year has none, an amber "no ordinary
   brackets" line saying the engines model 401(k) draws and staking
@@ -478,9 +478,7 @@ serves them at <http://localhost:5173>.
   in words, and for a California year its standard deduction,
   exemption credit, and state brackets, with the same amber "no
   state brackets" line when the schedule is missing; a no-income-tax
-  state shows only the treatment), and the dark append-only
-  data-model note pointing at
-  `docs/design/schema.sql`. The Envelopes card manages the spending
+  state shows only the treatment). The Envelopes card manages the spending
   categories: each envelope's emoji, name, and current planned amount
   with a per-row Edit covering those plus a Mandatory checkbox — spend
   that can't be cut vs discretionary, the axis the Budget report splits
