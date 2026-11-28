@@ -118,6 +118,18 @@ describe('Funds flow table', () => {
     const rows = await screen.findAllByTestId('funds-row')
     expect(within(rows[6]).getByText(/in progress/)).toBeInTheDocument()
   })
+
+  it('stripes every other row, blank months included', async () => {
+    stubApi({ '/api/budget-year': BUDGET_YEAR })
+    render(<BudgetReport />)
+
+    const rows = await screen.findAllByTestId('funds-row')
+    expect(rows.map((row) => row.classList.contains('bg-stripe'))).toEqual(
+      rows.map((_, index) => index % 2 === 1),
+    )
+    const table = rows[0].closest('table') as HTMLTableElement
+    expect(within(table).getAllByRole('row')[0]).not.toHaveClass('bg-stripe')
+  })
 })
 
 describe('Year picker', () => {
