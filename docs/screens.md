@@ -73,7 +73,12 @@ serves them at <http://localhost:5173>.
   page at a time: a sentinel row below the last month, watched with an
   `IntersectionObserver` against the viewport, so a touch flick pages the
   same as a wheel. A loading row shows while a page is in flight, and both
-  row and observer go away once the oldest month is on screen. Beside it, the "Update this month's balances" form: an account picker
+  row and observer go away once the oldest month is on screen. Every
+  other month row carries a faint stripe, so a figure can be followed
+  across the wide table without slipping to the row above or below: the
+  newest month keeps its highlight, the subtotal tint sits over striped
+  and plain rows alike, and the loading row is never part of the
+  pattern, so the stripes hold still as older months load in. Beside it, the "Update this month's balances" form: an account picker
   over the active accounts with a single value input prefilled from the
   newest month (the ETH account swaps to quantity + $/ETH inputs with a live
   quantity × price readout), a "Cost basis" input on the accounts taxed on
@@ -243,7 +248,9 @@ serves them at <http://localhost:5173>.
   lifestyle. Both tables come from one `GET /api/budget-year` response.
   Months outside the data render blank in both, never $0, so a partial
   year is visibly partial, and the in-progress month is marked
-  "· in progress" since it undercounts until it closes.
+  "· in progress" since it undercounts until it closes. Every other row
+  is striped in both tables, by position rather than by content, so a
+  blank month never breaks the pattern.
 - **Funds & goals** (<http://localhost:5173/funds>) — sinking funds and
   dated goals as one concept, in a single card: a header with the total
   parked, the dashed **+ New fund or goal** form (name, a curated emoji
