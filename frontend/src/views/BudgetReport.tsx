@@ -8,6 +8,7 @@ import {
   yearOptions,
 } from '../budgetReport.ts'
 import { formatUsd } from '../ledger.ts'
+import { stripeClass } from '../stripe.ts'
 
 const cell = 'px-3.5 py-[11px] text-right'
 
@@ -22,9 +23,12 @@ function MonthCell({ row }: { row: BudgetYearMonth }) {
   )
 }
 
-function ReportRow({ row }: { row: BudgetYearMonth }) {
+function ReportRow({ row, index }: { row: BudgetYearMonth; index: number }) {
   return (
-    <tr data-testid="report-row" className="border-b border-hairline-2">
+    <tr
+      data-testid="report-row"
+      className={`border-b border-hairline-2 ${stripeClass(index)}`}
+    >
       <MonthCell row={row} />
       <td className={`${cell} text-[#5b6058]`}>
         {row.planned != null && formatUsd(row.planned)}
@@ -140,8 +144,8 @@ function BudgetReport() {
               </tr>
             </thead>
             <tbody>
-              {report?.months.map((row) => (
-                <ReportRow key={row.month} row={row} />
+              {report?.months.map((row, index) => (
+                <ReportRow key={row.month} row={row} index={index} />
               ))}
             </tbody>
           </table>
