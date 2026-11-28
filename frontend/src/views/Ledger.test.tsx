@@ -136,6 +136,15 @@ describe('Ledger monthly balance table', () => {
     expect(rows[0]).toHaveClass('bg-[#f3f6f3]')
     expect(rows[1]).not.toHaveClass('bg-[#f3f6f3]')
   })
+
+  it('stripes every other month row, never the newest', async () => {
+    render(<Ledger />)
+
+    const rows = await screen.findAllByTestId('ledger-row')
+    expect(rows[1]).toHaveClass('bg-stripe')
+    expect(rows[0]).not.toHaveClass('bg-stripe')
+    expect(rows[0]).toHaveClass('bg-[#f3f6f3]')
+  })
 })
 
 // The delta beside each balance answers "is this going the right way".
@@ -713,6 +722,28 @@ describe('Older months', () => {
     const rows = screen.getAllByTestId('ledger-row')
     expect(rows[0]).toHaveClass('bg-[#f3f6f3]')
     expect(rows[2]).not.toHaveClass('bg-[#f3f6f3]')
+  })
+
+  it('keeps the stripes in place as older months load in', async () => {
+    stubApi(routes())
+    const observer = stubIntersectionObserver()
+    render(<Ledger />)
+    const striped = () =>
+      screen
+        .getAllByTestId('ledger-row')
+        .map((row) => row.classList.contains('bg-stripe'))
+
+    await screen.findAllByTestId('ledger-row')
+    expect(striped()).toEqual([false, true])
+    // The sentinel is a row too, but never part of the pattern.
+    expect(screen.getByTestId('ledger-sentinel')).not.toHaveClass('bg-stripe')
+
+    act(() => observer.trigger())
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('ledger-row')).toHaveLength(4),
+    )
+    expect(striped()).toEqual([false, true, false, true])
   })
 
   it('stops once the oldest month has been reached', async () => {
