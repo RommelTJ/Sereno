@@ -22,6 +22,9 @@
   --color-card-border: #e9e4da;
   --color-hairline: #f0ece3;
   --color-hairline-2: #f4f1e9;
+  /* The alternating body row in a data table: enough to follow a row
+     across a wide table, lighter than the #faf8f3 header above it. */
+  --color-stripe: #fbfaf6;
   --color-ink: #1f2421;
   --color-muted: #757a70;
   --color-muted-2: #9aa093;

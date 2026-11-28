@@ -1,10 +1,11 @@
 import { useCallback } from 'react'
 import type { LedgerColumn, LedgerRow } from '../ledger.ts'
 import { deltaClass, formatDelta, formatUsd } from '../ledger.ts'
+import { stripeClass } from '../stripe.ts'
 
 // The derived column reads as derived: a lighter header than the
 // accounts beside it and a tint that sits over whichever row it lands
-// in, highlighted newest month included.
+// in, highlighted newest month and striped rows included.
 const SUBTOTAL_TINT = 'bg-black/[0.02]'
 
 const columnKey = (column: LedgerColumn) =>
@@ -99,7 +100,7 @@ function LedgerTable({
                 className={
                   index === 0
                     ? 'border-b border-hairline bg-[#f3f6f3] font-semibold'
-                    : 'border-b border-hairline-2 text-[#5b6058]'
+                    : `border-b border-hairline-2 text-[#5b6058] ${stripeClass(index)}`
                 }
               >
                 <td className="px-3.5 py-[11px] text-left font-semibold">

@@ -4,6 +4,18 @@ Newest first. Each entry says what changed and why it was worth
 changing; the version it names is the one in the README header and
 in `GET /api/health`.
 
+v3.26.0 — Every data table is zebra-striped: the Ledger's monthly
+balance entries and the Budget report's Plan vs. actual and Funds flow
+tables give every other body row a faint background, one shared theme
+color, so a figure can be followed across a wide table without reading
+it off the row above or below. Rows are striped by position, so blank
+months in the Budget report never break the pattern; header rows are
+not striped. In the Ledger the newest month keeps its highlight, the
+Brokerage subtotal keeps its tint over striped and plain rows alike,
+and the loading row sits outside the pattern, so the stripes hold
+still as older months load in. Frontend-only: no API, schema, or
+migration changes (issue #195).
+
 v3.25.16 — The "Data model · append-only" card is gone from the bottom
 of Settings & data. The card described implementation details rather
 than anything to do or configure on the screen, and it added visual
